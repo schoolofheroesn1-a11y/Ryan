@@ -1,0 +1,6 @@
+{
+  "name": "Student Academic Progress Tracker & Analytics",
+  "description": "Real-time academic progress tracking, gradebook, attendance, and analytics dashboard for teachers and parents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
