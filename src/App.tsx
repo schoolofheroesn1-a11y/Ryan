@@ -2,11 +2,7 @@ import React, { useState } from 'react';
 import { AcademicProvider, useAcademic } from './context/AcademicContext';
 import { Navbar } from './components/Navbar';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
-import {
-  CambridgeSkillTable,
-  A2_KEY_READING,
-  A2_KEY_LISTENING,
-} from './components/teacher/CambridgeSkillTable';
+import { CambridgeSection } from './components/teacher/CambridgeSection';
 import { ParentDashboard } from './components/parent/ParentDashboard';
 import { LiveActivityFeed } from './components/common/LiveActivityFeed';
 import { ProgressReportModal } from './components/common/ProgressReportModal';
@@ -25,9 +21,8 @@ const DashboardContent: React.FC = () => {
         {role === 'teacher' ? (
           <>
             <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
-            <div className="mt-6 space-y-6">
-              <CambridgeSkillTable skill={A2_KEY_READING} studentName="Artem" />
-              <CambridgeSkillTable skill={A2_KEY_LISTENING} studentName="Artem" />
+            <div className="mt-6">
+              <CambridgeSection />
             </div>
           </>
         ) : (

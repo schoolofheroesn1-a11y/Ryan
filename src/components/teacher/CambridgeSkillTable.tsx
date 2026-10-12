@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { BookOpen, Headphones, Target, RotateCcw } from 'lucide-react';
 
 interface Part {
@@ -7,7 +7,13 @@ interface Part {
   task: string;
 }
 
-type Scores = (number | null)[];
+export type Scores = (number | null)[];
+
+export interface SkillResults {
+  /** Target Cambridge Scale score for the term (120 = A2 pass). */
+  goal: number;
+  tests: Scores[];
+}
 
 export interface SkillConfig {
   title: string;
@@ -15,10 +21,8 @@ export interface SkillConfig {
   parts: Part[];
   /** Raw score -> Cambridge English Scale anchors; values in between are interpolated. */
   scaleAnchors: [number, number][];
-  defaultTests: Scores[];
 }
 
-const emptyTest = (parts: Part[]): Scores => parts.map(() => null);
 
 const READING_PARTS: Part[] = [
   { label: 'Part 1', max: 6, task: 'Multiple-choice: short texts' },
@@ -48,13 +52,6 @@ export const A2_KEY_READING: SkillConfig = {
     [27, 140],
     [30, 150],
   ],
-  defaultTests: [
-    emptyTest(READING_PARTS),
-    emptyTest(READING_PARTS),
-    [2, 3, 1, 4, 1],
-    [2, 2, 2, 3, 2],
-    [1, 5, 0, 5, 0],
-  ],
 };
 
 export const A2_KEY_LISTENING: SkillConfig = {
@@ -68,14 +65,14 @@ export const A2_KEY_LISTENING: SkillConfig = {
     [23, 140],
     [25, 150],
   ],
-  defaultTests: [
-    emptyTest(LISTENING_PARTS),
-    emptyTest(LISTENING_PARTS),
-    [4, 0, 1, 1, 5],
-    [4, 0, 2, 2, 4],
-    [4, 0, 0, 4, 5],
-  ],
 };
+
+export const TESTS_PER_TERM = 5;
+
+export const emptyResults = (skill: SkillConfig): SkillResults => ({
+  goal: 120,
+  tests: Array.from({ length: TESTS_PER_TERM }, () => skill.parts.map(() => null)),
+});
 
 export function toScaleScore(raw: number, anchors: [number, number][]): number | null {
   if (raw < anchors[0][0]) return null; // below the reportable range (<82)
@@ -109,29 +106,29 @@ export function bandFor(scale: number | null): Band {
 
 interface CambridgeSkillTableProps {
   skill: SkillConfig;
-  studentName?: string;
-  /** Target Cambridge Scale score for the term (120 = A2 pass). */
-  initialGoal?: number;
-  initialTests?: Scores[];
+  studentName: string;
+  results: SkillResults;
+  onChange: (results: SkillResults) => void;
 }
 
 export const CambridgeSkillTable: React.FC<CambridgeSkillTableProps> = ({
   skill,
-  studentName = 'Student',
-  initialGoal = 120,
-  initialTests = skill.defaultTests,
+  studentName,
+  results,
+  onChange,
 }) => {
   const { parts, scaleAnchors, icon: Icon } = skill;
   const maxScore = parts.reduce((sum, p) => sum + p.max, 0);
-  const [tests, setTests] = useState<Scores[]>(initialTests);
-  const [goal, setGoal] = useState<number>(initialGoal);
+  const { tests, goal } = results;
+  const setGoal = (value: number) => onChange({ ...results, goal: value });
 
   const setScore = (testIdx: number, partIdx: number, value: string) => {
     const max = parts[partIdx].max;
     const parsed = value === '' ? null : Math.max(0, Math.min(max, Math.floor(Number(value) || 0)));
-    setTests((prev) =>
-      prev.map((t, i) => (i === testIdx ? t.map((s, j) => (j === partIdx ? parsed : s)) : t))
-    );
+    onChange({
+      ...results,
+      tests: tests.map((t, i) => (i === testIdx ? t.map((s, j) => (j === partIdx ? parsed : s)) : t)),
+    });
   };
 
   const rows = useMemo(
@@ -185,9 +182,13 @@ export const CambridgeSkillTable: React.FC<CambridgeSkillTableProps> = ({
             </select>
           </label>
           <button
-            onClick={() => setTests(initialTests)}
+            onClick={() => {
+              if (window.confirm(`Clear all ${skill.title} scores for ${studentName}?`)) {
+                onChange({ ...results, tests: emptyResults(skill).tests });
+              }
+            }}
             className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
-            title="Reset scores"
+            title="Clear scores"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
