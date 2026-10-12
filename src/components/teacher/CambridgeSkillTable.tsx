@@ -1,32 +1,87 @@
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Target, RotateCcw } from 'lucide-react';
+import { BookOpen, Headphones, Target, RotateCcw } from 'lucide-react';
 
-// Cambridge English A2 Key (KET) Reading — 5 parts, 30 marks in total.
-export const READING_PARTS = [
+interface Part {
+  label: string;
+  max: number;
+  task: string;
+}
+
+type Scores = (number | null)[];
+
+export interface SkillConfig {
+  title: string;
+  icon: React.ElementType;
+  parts: Part[];
+  /** Raw score -> Cambridge English Scale anchors; values in between are interpolated. */
+  scaleAnchors: [number, number][];
+  defaultTests: Scores[];
+}
+
+const emptyTest = (parts: Part[]): Scores => parts.map(() => null);
+
+const READING_PARTS: Part[] = [
   { label: 'Part 1', max: 6, task: 'Multiple-choice: short texts' },
   { label: 'Part 2', max: 7, task: 'Multiple matching' },
   { label: 'Part 3', max: 5, task: 'Multiple-choice: longer text' },
   { label: 'Part 4', max: 6, task: 'Multiple-choice cloze' },
   { label: 'Part 5', max: 6, task: 'Open cloze' },
-] as const;
-
-export const READING_MAX = READING_PARTS.reduce((sum, p) => sum + p.max, 0); // 30
-
-// Raw score -> Cambridge English Scale anchors for A2 Key Reading.
-// Values between anchors are interpolated linearly.
-const SCALE_ANCHORS: [number, number][] = [
-  [7, 82],
-  [13, 100],
-  [20, 120],
-  [27, 140],
-  [30, 150],
 ];
 
-export function toScaleScore(raw: number): number | null {
-  if (raw < SCALE_ANCHORS[0][0]) return null; // below the reportable range (<82)
-  for (let i = 1; i < SCALE_ANCHORS.length; i++) {
-    const [r0, s0] = SCALE_ANCHORS[i - 1];
-    const [r1, s1] = SCALE_ANCHORS[i];
+const LISTENING_PARTS: Part[] = [
+  { label: 'Part 1', max: 5, task: 'Multiple-choice: pictures' },
+  { label: 'Part 2', max: 5, task: 'Gap fill' },
+  { label: 'Part 3', max: 5, task: 'Multiple-choice: conversation' },
+  { label: 'Part 4', max: 5, task: 'Multiple-choice: short dialogues' },
+  { label: 'Part 5', max: 5, task: 'Matching' },
+];
+
+// Cambridge English A2 Key (KET).
+export const A2_KEY_READING: SkillConfig = {
+  title: 'Reading',
+  icon: BookOpen,
+  parts: READING_PARTS,
+  scaleAnchors: [
+    [7, 82],
+    [13, 100],
+    [20, 120],
+    [27, 140],
+    [30, 150],
+  ],
+  defaultTests: [
+    emptyTest(READING_PARTS),
+    emptyTest(READING_PARTS),
+    [2, 3, 1, 4, 1],
+    [2, 2, 2, 3, 2],
+    [1, 5, 0, 5, 0],
+  ],
+};
+
+export const A2_KEY_LISTENING: SkillConfig = {
+  title: 'Listening',
+  icon: Headphones,
+  parts: LISTENING_PARTS,
+  scaleAnchors: [
+    [5, 82],
+    [11, 100],
+    [17, 120],
+    [23, 140],
+    [25, 150],
+  ],
+  defaultTests: [
+    emptyTest(LISTENING_PARTS),
+    emptyTest(LISTENING_PARTS),
+    [4, 0, 1, 1, 5],
+    [4, 0, 2, 2, 4],
+    [4, 0, 0, 4, 5],
+  ],
+};
+
+export function toScaleScore(raw: number, anchors: [number, number][]): number | null {
+  if (raw < anchors[0][0]) return null; // below the reportable range (<82)
+  for (let i = 1; i < anchors.length; i++) {
+    const [r0, s0] = anchors[i - 1];
+    const [r1, s1] = anchors[i];
     if (raw <= r1) return Math.round(s0 + ((raw - r0) * (s1 - s0)) / (r1 - r0));
   }
   return 150;
@@ -52,35 +107,27 @@ export function bandFor(scale: number | null): Band {
   return BANDS.find((b) => (scale ?? 0) >= b.min) ?? BANDS[BANDS.length - 1];
 }
 
-type Scores = (number | null)[];
-
-interface CambridgeReadingTableProps {
+interface CambridgeSkillTableProps {
+  skill: SkillConfig;
   studentName?: string;
   /** Target Cambridge Scale score for the term (120 = A2 pass). */
   initialGoal?: number;
   initialTests?: Scores[];
 }
 
-const emptyTest = (): Scores => READING_PARTS.map(() => null);
-
-const DEFAULT_TESTS: Scores[] = [
-  emptyTest(),
-  emptyTest(),
-  [2, 3, 1, 4, 1],
-  [2, 2, 2, 3, 2],
-  [1, 5, 0, 5, 0],
-];
-
-export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
+export const CambridgeSkillTable: React.FC<CambridgeSkillTableProps> = ({
+  skill,
   studentName = 'Student',
   initialGoal = 120,
-  initialTests = DEFAULT_TESTS,
+  initialTests = skill.defaultTests,
 }) => {
+  const { parts, scaleAnchors, icon: Icon } = skill;
+  const maxScore = parts.reduce((sum, p) => sum + p.max, 0);
   const [tests, setTests] = useState<Scores[]>(initialTests);
   const [goal, setGoal] = useState<number>(initialGoal);
 
   const setScore = (testIdx: number, partIdx: number, value: string) => {
-    const max = READING_PARTS[partIdx].max;
+    const max = parts[partIdx].max;
     const parsed = value === '' ? null : Math.max(0, Math.min(max, Math.floor(Number(value) || 0)));
     setTests((prev) =>
       prev.map((t, i) => (i === testIdx ? t.map((s, j) => (j === partIdx ? parsed : s)) : t))
@@ -92,7 +139,7 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
       tests.map((scores) => {
         const taken = scores.some((s) => s !== null);
         const raw: number = scores.reduce((sum: number, s) => sum + (s ?? 0), 0);
-        const scale = taken ? toScaleScore(raw) : null;
+        const scale = taken ? toScaleScore(raw, scaleAnchors) : null;
         return { scores, taken, raw, scale, band: bandFor(scale) };
       }),
     [tests]
@@ -100,7 +147,7 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
 
   const taken = rows.filter((r) => r.taken);
   const best = taken.reduce<number | null>((b, r) => Math.max(b ?? 0, r.scale ?? 0), null);
-  const partAverages = READING_PARTS.map((p, j) => {
+  const partAverages = parts.map((p, j) => {
     if (!taken.length) return null;
     const avg = taken.reduce((sum, r) => sum + (r.scores[j] ?? 0), 0) / taken.length;
     return Math.round((avg / p.max) * 100);
@@ -112,12 +159,12 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 bg-slate-50">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-            <BookOpen className="w-5 h-5" />
+            <Icon className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="font-bold text-slate-900">Cambridge A2 Key — Reading</h2>
+            <h2 className="font-bold text-slate-900">Cambridge A2 Key — {skill.title}</h2>
             <p className="text-xs text-slate-500">
-              {studentName} · 5 parts · {READING_MAX} marks · CEFR A1–B1
+              {studentName} · 5 parts · {maxScore} marks · CEFR A1–B1
             </p>
           </div>
         </div>
@@ -153,7 +200,7 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
           <thead>
             <tr className="text-[11px] uppercase tracking-wide text-slate-500 bg-white">
               <th className="px-3 py-3 text-left font-semibold">Test</th>
-              {READING_PARTS.map((p) => (
+              {parts.map((p) => (
                 <th key={p.label} className="px-2 py-3 font-semibold" title={p.task}>
                   <div className="text-slate-700">{p.label}</div>
                   <div className="font-normal normal-case text-slate-400">max {p.max}</div>
@@ -161,7 +208,7 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
               ))}
               <th className="px-3 py-3 font-semibold bg-slate-50">
                 <div className="text-slate-700">Score</div>
-                <div className="font-normal normal-case text-slate-400">max {READING_MAX}</div>
+                <div className="font-normal normal-case text-slate-400">max {maxScore}</div>
               </th>
               <th className="px-3 py-3 font-semibold bg-slate-50">
                 <div className="text-slate-700">Cambridge</div>
@@ -180,7 +227,7 @@ export const CambridgeReadingTable: React.FC<CambridgeReadingTableProps> = ({
                   <td className="px-3 py-2 text-left font-semibold text-slate-700 whitespace-nowrap">
                     Test {i + 1}
                   </td>
-                  {READING_PARTS.map((p, j) => (
+                  {parts.map((p, j) => (
                     <td key={p.label} className="px-1 py-2">
                       <input
                         type="number"
