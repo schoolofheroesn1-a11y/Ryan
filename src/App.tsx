@@ -26,8 +26,8 @@ const DashboardContent: React.FC = () => {
           <>
             <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
             <div className="mt-6 space-y-6">
-              <CambridgeSkillTable skill={A2_KEY_READING} studentName={selectedStudent?.name} />
-              <CambridgeSkillTable skill={A2_KEY_LISTENING} studentName={selectedStudent?.name} />
+              <CambridgeSkillTable skill={A2_KEY_READING} studentName="Artem" />
+              <CambridgeSkillTable skill={A2_KEY_LISTENING} studentName="Artem" />
             </div>
           </>
         ) : (
