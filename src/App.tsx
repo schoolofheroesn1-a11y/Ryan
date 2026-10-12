@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AcademicProvider, useAcademic } from './context/AcademicContext';
 import { Navbar } from './components/Navbar';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
+import { CambridgeReadingTable } from './components/teacher/CambridgeReadingTable';
 import { ParentDashboard } from './components/parent/ParentDashboard';
 import { LiveActivityFeed } from './components/common/LiveActivityFeed';
 import { ProgressReportModal } from './components/common/ProgressReportModal';
@@ -18,7 +19,12 @@ const DashboardContent: React.FC = () => {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {role === 'teacher' ? (
-          <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
+          <>
+            <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
+            <div className="mt-6">
+              <CambridgeReadingTable studentName={selectedStudent?.name} />
+            </div>
+          </>
         ) : (
           <ParentDashboard onOpenReport={(student) => setReportStudent(student)} />
         )}
