@@ -1,0 +1,128 @@
+<style>
+/* Layout: one reading column — headline result, term-by-term matrix, then one score sheet per skill. */
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --head: #f3f6fa;
+  --ink: #17233a;
+  --muted: #5b6880;
+  --line: #dde3ec;
+  --accent: #2b59c3;
+  --accent-soft: #e6edfb;
+  --fail: #b4233c;   --fail-bg: #fbe9ec;
+  --a1: #9a5b00;     --a1-bg: #fdf1dc;
+  --a2: #1d7a5a;     --a2-bg: #e1f4ec;
+  --b1: #5b3fb0;     --b1-bg: #ece7fb;
+  --display: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --body: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; color-scheme: light; }
+.wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 24px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 800; line-height: 1.05; }
+h2 { font-size: 1.35rem; font-weight: 800; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+.eyebrow { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 18px; }
+.headline { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; }
+.result { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+.result .big { font-family: var(--display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--accent); }
+.result .meta { display: grid; gap: 4px; font-size: .85rem; }
+.goal-met { color: var(--a2); font-weight: 700; }
+.chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.chip.fail { color: var(--fail); background: var(--fail-bg); }
+.chip.a1 { color: var(--a1); background: var(--a1-bg); }
+.chip.a2 { color: var(--a2); background: var(--a2-bg); }
+.chip.b1 { color: var(--b1); background: var(--b1-bg); }
+.chip.none { color: var(--muted); background: transparent; border: 1px dashed var(--line); font-weight: 400; }
+section { display: grid; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--head); }
+th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+tr:last-child td { border-bottom: 0; }
+td.left, th.left { text-align: left; }
+td.term { font-weight: 700; }
+td.total { font-weight: 700; }
+td.scale { font-weight: 700; color: var(--accent); font-size: 1.05rem; }
+td.pending { color: var(--muted); font-style: italic; }
+td.sep, th.sep { border-left: 1px solid var(--line); }
+.matrix td .s { display: block; font-weight: 700; font-size: 1.05rem; }
+.matrix tr.overall td { background: var(--accent-soft); }
+.matrix tr.overall td.left { font-family: var(--display); font-weight: 800; }
+.skills { display: grid; gap: 22px; }
+.skill-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding: 14px 16px 10px; }
+.note { font-size: .82rem; color: var(--muted); }
+.bands { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Cambridge English A2 Key · Student progress</div>
+    <div class="headline">
+      <div style="display:grid;gap:6px">
+        <h1>Artem</h1>
+        <div class="muted">Term goal: <strong style="color:var(--ink)">KET 110+</strong> on the Cambridge English Scale</div>
+      </div>
+      <div class="result" id="latest">
+  <div class="big num">111</div>
+  <div class="meta">
+    <div><strong>Term 4</strong> overall</div>
+    <div><span class="chip a1">A1</span> <span class="chip none">Below A2</span></div>
+    <div class="goal-met">Goal of 110+ reached</div>
+  </div></div>
+    </div>
+  </header>
+  <section>
+    <h2>Results by term</h2>
+    <div class="panel scroll"><table class="matrix" id="matrix"><thead><tr><th class="left">Skill</th><th>Placement test</th><th>Term 1</th><th>Term 2</th><th>Term 3</th><th>Term 4</th></tr></thead><tbody><tr><td class="left">Reading</td><td class="pending">–</td><td class="pending">–</td><td><span class="s">94</span><span class="chip fail">Below A1</span></td><td><span class="s">94</span><span class="chip fail">Below A1</span></td><td><span class="s">94</span><span class="chip fail">Below A1</span></td></tr><tr><td class="left">Listening</td><td class="pending">–</td><td class="pending">–</td><td><span class="s">100</span><span class="chip a1">A1</span></td><td><span class="s">103</span><span class="chip a1">A1</span></td><td><span class="s">107</span><span class="chip a1">A1</span></td></tr><tr><td class="left">Writing</td><td class="pending">–</td><td class="pending">–</td><td><span class="s">113</span><span class="chip a1">A1</span></td><td><span class="s">113</span><span class="chip a1">A1</span></td><td><span class="s">123</span><span class="chip a2">A2</span></td></tr><tr><td class="left">Speaking</td><td><span class="s">96</span><span class="chip fail">Below A1</span></td><td class="pending">–</td><td><span class="s">108</span><span class="chip a1">A1</span></td><td><span class="s">118</span><span class="chip a1">A1</span></td><td><span class="s">118</span><span class="chip a1">A1</span></td></tr><tr class="overall"><td class="left">Overall</td><td class="pending">–</td><td class="pending">Pending</td><td><span class="s">104</span><span class="chip a1">A1</span></td><td><span class="s">107</span><span class="chip a1">A1</span></td><td><span class="s">111</span><span class="chip a1">A1</span></td></tr></tbody></table></div>
+    <div class="note">Overall score is the average of the four skills. The placement test only included Speaking, so it has no overall score.</div>
+  </section>
+  <section>
+    <h2>Score sheets</h2>
+    <div class="skills" id="skills"><div class="panel">
+    <div class="skill-head"><h3>Reading</h3><span class="note">5 parts · 30 marks</span></div>
+    <div class="scroll"><table><thead><tr><th class="left">Test</th><th class="">Part 1<small>max 6</small></th><th class="">Part 2<small>max 7</small></th><th class="">Part 3<small>max 5</small></th><th class="">Part 4<small>max 6</small></th><th class="">Part 5<small>max 6</small></th>
+    <th class="sep">Score<small>max 30</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr></thead><tbody><tr><td class="left term">Placement test</td><td colspan="5" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 1</td><td colspan="5" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 2</td><td class="">2</td><td class="">3</td><td class="">1</td><td class="">4</td><td class="">1</td>
+      <td class="total sep">11</td><td class="scale">94</td><td><span class="chip fail">Below A1</span></td><td>Failed</td></tr><tr><td class="left term">Term 3</td><td class="">2</td><td class="">2</td><td class="">2</td><td class="">3</td><td class="">2</td>
+      <td class="total sep">11</td><td class="scale">94</td><td><span class="chip fail">Below A1</span></td><td>Failed</td></tr><tr><td class="left term">Term 4</td><td class="">1</td><td class="">5</td><td class="">0</td><td class="">5</td><td class="">0</td>
+      <td class="total sep">11</td><td class="scale">94</td><td><span class="chip fail">Below A1</span></td><td>Failed</td></tr></tbody></table></div>
+  </div><div class="panel">
+    <div class="skill-head"><h3>Listening</h3><span class="note">5 parts · 25 marks</span></div>
+    <div class="scroll"><table><thead><tr><th class="left">Test</th><th class="">Part 1<small>max 5</small></th><th class="">Part 2<small>max 5</small></th><th class="">Part 3<small>max 5</small></th><th class="">Part 4<small>max 5</small></th><th class="">Part 5<small>max 5</small></th>
+    <th class="sep">Score<small>max 25</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr></thead><tbody><tr><td class="left term">Placement test</td><td colspan="5" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 1</td><td colspan="5" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 2</td><td class="">4</td><td class="">0</td><td class="">1</td><td class="">1</td><td class="">5</td>
+      <td class="total sep">11</td><td class="scale">100</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr><tr><td class="left term">Term 3</td><td class="">4</td><td class="">0</td><td class="">2</td><td class="">2</td><td class="">4</td>
+      <td class="total sep">12</td><td class="scale">103</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr><tr><td class="left term">Term 4</td><td class="">4</td><td class="">0</td><td class="">0</td><td class="">4</td><td class="">5</td>
+      <td class="total sep">13</td><td class="scale">107</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr></tbody></table></div>
+  </div><div class="panel">
+    <div class="skill-head"><h3>Writing</h3><span class="note">Org. = organisation, Lang. = language · 30 marks</span></div>
+    <div class="scroll"><table><thead><tr><th></th><th colspan="3" class="sep">Part 6</th><th colspan="3" class="sep">Part 7</th><th colspan="4" class="sep"></th></tr><tr><th class="left">Test</th><th class="sep">Content<small>max 5</small></th><th class="">Org.<small>max 5</small></th><th class="">Lang.<small>max 5</small></th><th class="sep">Content<small>max 5</small></th><th class="">Org.<small>max 5</small></th><th class="">Lang.<small>max 5</small></th>
+    <th class="sep">Score<small>max 30</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr></thead><tbody><tr><td class="left term">Placement test</td><td colspan="6" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 1</td><td colspan="6" class="pending">Not taken yet</td><td colspan="4" class="pending sep"></td></tr><tr><td class="left term">Term 2</td><td class="sep">3</td><td class="">3</td><td class="">3</td><td class="sep">3</td><td class="">2</td><td class="">2</td>
+      <td class="total sep">16</td><td class="scale">113</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr><tr><td class="left term">Term 3</td><td class="sep">3</td><td class="">3</td><td class="">3</td><td class="sep">3</td><td class="">2</td><td class="">2</td>
+      <td class="total sep">16</td><td class="scale">113</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr><tr><td class="left term">Term 4</td><td class="sep">3</td><td class="">5</td><td class="">3</td><td class="sep">3</td><td class="">3</td><td class="">2</td>
+      <td class="total sep">19</td><td class="scale">123</td><td><span class="chip a2">A2</span></td><td>C</td></tr></tbody></table></div>
+  </div><div class="panel">
+    <div class="skill-head"><h3>Speaking</h3><span class="note">Grammar &amp; vocabulary, pronunciation, interactive communication, global achievement · 45 marks</span></div>
+    <div class="scroll"><table><thead><tr><th class="left">Test</th><th class="">Gram. &amp; vocab.<small>max 5</small></th><th class="">Pronun.<small>max 5</small></th><th class="">Interaction<small>max 5</small></th><th class="">Global<small>max 5</small></th>
+    <th class="sep">Goal</th><th class="">Score<small>max 45</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr></thead><tbody><tr><td class="left term">Placement test</td><td class="">1.5</td><td class="">1.5</td><td class="">2</td><td class="">2</td>
+      <td class="sep">–</td><td class="total ">16</td><td class="scale">96</td><td><span class="chip fail">Below A1</span></td><td>Failed</td></tr><tr><td class="left term">Term 1</td><td colspan="4" class="pending">Not taken yet</td><td class="sep">20</td><td colspan="4" class="pending "></td></tr><tr><td class="left term">Term 2</td><td class="">2.5</td><td class="">2</td><td class="">2.5</td><td class="">2.5</td>
+      <td class="sep">25</td><td class="total ">26.5</td><td class="scale">108</td><td><span class="chip a1">A1</span></td><td>Below A2</td></tr><tr><td class="left term">Term 3</td><td class="">2.5</td><td class="">3</td><td class="">3</td><td class="">3</td>
+      <td class="sep">30</td><td class="total ">32</td><td class="scale">118</td><td><span class="chip a1">A1</span></td><td>C</td></tr><tr><td class="left term">Term 4</td><td class="">2.5</td><td class="">3</td><td class="">3</td><td class="">3</td>
+      <td class="sep">33</td><td class="total ">32</td><td class="scale">118</td><td><span class="chip a1">A1</span></td><td>C</td></tr></tbody></table></div>
+  </div></div>
+  </section>
+  <section>
+    <h3>Cambridge English Scale for A2 Key</h3>
+    <div class="bands">
+      <span class="chip b1">140–150 · B1 · Grade A</span>
+      <span class="chip a2">133–139 · A2 · Grade B</span>
+      <span class="chip a2">120–132 · A2 · Grade C</span>
+      <span class="chip a1">100–119 · A1</span>
+      <span class="chip fail">82–99 · Below A1</span>
+    </div>
+  </section>
+</div>
