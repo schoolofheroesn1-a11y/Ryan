@@ -1,0 +1,269 @@
+<title>Artem · A2 Key Progress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: one reading column — headline result, term-by-term matrix, trend chart, then one score sheet per skill. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #17233a;
+  --muted: #5b6880;
+  --line: #dde3ec;
+  --accent: #2b59c3;
+  --accent-soft: #e6edfb;
+  --fail: #b4233c;   --fail-bg: #fbe9ec;
+  --a1: #9a5b00;     --a1-bg: #fdf1dc;
+  --a2: #1d7a5a;     --a2-bg: #e1f4ec;
+  --b1: #5b3fb0;     --b1-bg: #ece7fb;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1522; --surface: #172033; --ink: #e7ecf5; --muted: #9aa7bf; --line: #2a3650;
+  --accent: #7ea2ff; --accent-soft: #1f2d4d;
+  --fail: #ff8a9c; --fail-bg: #3a1a24; --a1: #f2b85c; --a1-bg: #35280f;
+  --a2: #5fd3a6; --a2-bg: #12332a; --b1: #b6a2ff; --b1-bg: #2a2350;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f1522; --surface: #172033; --ink: #e7ecf5; --muted: #9aa7bf; --line: #2a3650;
+  --accent: #7ea2ff; --accent-soft: #1f2d4d;
+  --fail: #ff8a9c; --fail-bg: #3a1a24; --a1: #f2b85c; --a1-bg: #35280f;
+  --a2: #5fd3a6; --a2-bg: #12332a; --b1: #b6a2ff; --b1-bg: #2a2350;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 56px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 800; line-height: 1.05; }
+h2 { font-size: 1.35rem; font-weight: 800; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+.eyebrow { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+header { display: grid; gap: 18px; }
+.headline { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; }
+.result { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+.result .big { font-family: var(--display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--accent); }
+.result .meta { display: grid; gap: 4px; font-size: .85rem; }
+.goal-met { color: var(--a2); font-weight: 700; }
+
+.chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.chip.fail { color: var(--fail); background: var(--fail-bg); }
+.chip.a1 { color: var(--a1); background: var(--a1-bg); }
+.chip.a2 { color: var(--a2); background: var(--a2-bg); }
+.chip.b1 { color: var(--b1); background: var(--b1-bg); }
+.chip.none { color: var(--muted); background: transparent; border: 1px dashed var(--line); font-weight: 400; }
+
+section { display: grid; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--bg); }
+th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+tr:last-child td { border-bottom: 0; }
+td.left, th.left { text-align: left; }
+td.term { font-weight: 700; }
+td.total { font-weight: 700; }
+td.scale { font-weight: 700; color: var(--accent); font-size: 1.05rem; }
+td.pending { color: var(--muted); font-style: italic; }
+td.sep, th.sep { border-left: 1px solid var(--line); }
+.matrix td .s { display: block; font-weight: 700; font-size: 1.05rem; }
+.matrix tr.overall td { background: var(--accent-soft); }
+.matrix tr.overall td.left { font-family: var(--display); font-weight: 800; }
+
+.chart { padding: 12px 8px 4px; }
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0 16px 14px; font-size: .82rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--c); }
+
+.skills { display: grid; gap: 22px; }
+.skill-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding: 14px 16px 10px; }
+.note { font-size: .82rem; color: var(--muted); }
+.bands { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Cambridge English A2 Key · Student progress</div>
+    <div class="headline">
+      <div style="display:grid;gap:6px">
+        <h1>Artem</h1>
+        <div class="muted">Term goal: <strong style="color:var(--ink)">KET 110+</strong> on the Cambridge English Scale</div>
+      </div>
+      <div class="result" id="latest"></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Results by term</h2>
+    <div class="panel scroll"><table class="matrix" id="matrix"></table></div>
+    <div class="note">Overall score is the average of the four skills. The placement test only included Speaking, so it has no overall score.</div>
+  </section>
+
+  <section>
+    <h2>Progress</h2>
+    <div class="panel">
+      <div class="chart" id="chart"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Score sheets</h2>
+    <div class="skills" id="skills"></div>
+  </section>
+
+  <section>
+    <h3>Cambridge English Scale for A2 Key</h3>
+    <div class="bands">
+      <span class="chip b1">140–150 · B1 · Grade A</span>
+      <span class="chip a2">133–139 · A2 · Grade B</span>
+      <span class="chip a2">120–132 · A2 · Grade C</span>
+      <span class="chip a1">100–119 · A1</span>
+      <span class="chip fail">82–99 · Below A1</span>
+    </div>
+  </section>
+</div>
+
+<script>
+const TERMS = ["Placement test", "Term 1", "Term 2", "Term 3", "Term 4"];
+const T = (parts, total, scale, cefr, grade, goal) => ({ parts, total, scale, cefr, grade, goal });
+const NONE = null;
+
+// Copied from the "Artem" sheet.
+const SKILLS = [
+  {
+    name: "Reading", color: "#2b59c3", max: 30,
+    cols: [["Part 1", 6], ["Part 2", 7], ["Part 3", 5], ["Part 4", 6], ["Part 5", 6]],
+    terms: [NONE, NONE,
+      T([2,3,1,4,1], 11, 94, "Below A1", "Failed"),
+      T([2,2,2,3,2], 11, 94, "Below A1", "Failed"),
+      T([1,5,0,5,0], 11, 94, "Below A1", "Failed")],
+  },
+  {
+    name: "Listening", color: "#d0721c", max: 25,
+    cols: [["Part 1", 5], ["Part 2", 5], ["Part 3", 5], ["Part 4", 5], ["Part 5", 5]],
+    terms: [NONE, NONE,
+      T([4,0,1,1,5], 11, 100, "A1", "Below A2"),
+      T([4,0,2,2,4], 12, 103, "A1", "Below A2"),
+      T([4,0,0,4,5], 13, 107, "A1", "Below A2")],
+  },
+  {
+    name: "Writing", color: "#1d9a6c", max: 30, key: "Org. = organisation, Lang. = language",
+    groups: [["Part 6", 3], ["Part 7", 3]],
+    cols: [["Content", 5], ["Org.", 5], ["Lang.", 5], ["Content", 5], ["Org.", 5], ["Lang.", 5]],
+    terms: [NONE, NONE,
+      T([3,3,3,3,2,2], 16, 113, "A1", "Below A2"),
+      T([3,3,3,3,2,2], 16, 113, "A1", "Below A2"),
+      T([3,5,3,3,3,2], 19, 123, "A2", "C")],
+  },
+  {
+    name: "Speaking", color: "#8a4fd6", max: 45, hasGoal: true, key: "Grammar & vocabulary, pronunciation, interactive communication, global achievement",
+    cols: [["Gram. & vocab.", 5], ["Pronun.", 5], ["Interaction", 5], ["Global", 5]],
+    terms: [
+      T([1.5,1.5,2,2], 16, 96, "Below A1", "Failed"),
+      { goal: 20 },
+      T([2.5,2,2.5,2.5], 26.5, 108, "A1", "Below A2", 25),
+      T([2.5,3,3,3], 32, 118, "A1", "C", 30),
+      T([2.5,3,3,3], 32, 118, "A1", "C", 33)],
+  },
+];
+const OVERALL = [
+  null,
+  { pending: true },
+  { scale: 104, cefr: "A1", grade: "Below A2" },
+  { scale: 107, cefr: "A1", grade: "Below A2" },
+  { scale: 111, cefr: "A1", grade: "Below A2" },
+];
+const GOAL = 110;
+
+const level = (cefr) => ({ "B1": "b1", "A2": "a2", "A1": "a1" }[cefr] || "fail");
+const chip = (text, cls) => `<span class="chip ${cls}">${text}</span>`;
+const fmt = (n) => Number.isInteger(n) ? n : n.toFixed(1);
+const taken = (t) => t && t.scale != null;
+
+// Latest overall result
+const latestIdx = OVERALL.map((o, i) => (o && o.scale ? i : -1)).filter(i => i >= 0).pop();
+const latest = OVERALL[latestIdx];
+document.getElementById("latest").innerHTML = `
+  <div class="big num">${latest.scale}</div>
+  <div class="meta">
+    <div><strong>${TERMS[latestIdx]}</strong> overall</div>
+    <div>${chip(latest.cefr, level(latest.cefr))} ${chip(latest.grade, "none")}</div>
+    <div class="${latest.scale >= GOAL ? "goal-met" : "muted"}">${latest.scale >= GOAL ? "Goal of " + GOAL + "+ reached" : (GOAL - latest.scale) + " below goal of " + GOAL}</div>
+  </div>`;
+
+// Term matrix
+const head = `<tr><th class="left">Skill</th>${TERMS.map(t => `<th>${t}</th>`).join("")}</tr>`;
+const cell = (t) => taken(t)
+  ? `<td><span class="s">${t.scale}</span>${chip(t.cefr, level(t.cefr))}</td>`
+  : `<td class="pending">${t && t.pending ? "Pending" : "–"}</td>`;
+const rows = SKILLS.map(s => `<tr><td class="left">${s.name}</td>${s.terms.map(cell).join("")}</tr>`).join("");
+const overall = `<tr class="overall"><td class="left">Overall</td>${OVERALL.map(cell).join("")}</tr>`;
+document.getElementById("matrix").innerHTML = `<thead>${head}</thead><tbody>${rows}${overall}</tbody>`;
+
+// Chart
+(function () {
+  const W = 880, H = 320, L = 44, R = 20, Tp = 16, B = 40;
+  const yMin = 90, yMax = 130;
+  const x = (i) => L + (i * (W - L - R)) / (TERMS.length - 1);
+  const y = (v) => Tp + ((yMax - v) * (H - Tp - B)) / (yMax - yMin);
+  const css = (v) => `var(${v})`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cambridge Scale score by term for each skill">`;
+  // CEFR bands
+  svg += `<rect x="${L}" y="${y(130)}" width="${W-L-R}" height="${y(120)-y(130)}" fill="${css("--a2-bg")}"/>`;
+  svg += `<rect x="${L}" y="${y(120)}" width="${W-L-R}" height="${y(100)-y(120)}" fill="${css("--a1-bg")}"/>`;
+  svg += `<rect x="${L}" y="${y(100)}" width="${W-L-R}" height="${y(90)-y(100)}" fill="${css("--fail-bg")}"/>`;
+  [["A2", 125, "--a2"], ["A1", 110, "--a1"], ["Below A1", 95, "--fail"]].forEach(([t, v, c]) => {
+    svg += `<text x="${W-R-6}" y="${y(v)+4}" text-anchor="end" font-size="11" font-weight="700" fill="${css(c)}" opacity=".8">${t}</text>`;
+  });
+  for (let v = yMin; v <= yMax; v += 10) {
+    svg += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--line")}" stroke-width="1"/>`;
+    svg += `<text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="${css("--muted")}">${v}</text>`;
+  }
+  TERMS.forEach((t, i) => {
+    svg += `<text x="${x(i)}" y="${H-12}" text-anchor="middle" font-size="12" fill="${css("--muted")}">${t}</text>`;
+  });
+  // Goal line
+  svg += `<line x1="${L}" x2="${W-R}" y1="${y(GOAL)}" y2="${y(GOAL)}" stroke="${css("--ink")}" stroke-dasharray="6 5" stroke-width="1.5"/>`;
+  svg += `<text x="${L+6}" y="${y(GOAL)-6}" font-size="12" font-weight="700" fill="${css("--ink")}">Goal ${GOAL}</text>`;
+  const series = SKILLS.map(s => ({ name: s.name, color: s.color, width: 2, pts: s.terms.map(t => taken(t) ? t.scale : null) }));
+  series.push({ name: "Overall", color: "var(--ink)", width: 4, pts: OVERALL.map(o => o && o.scale ? o.scale : null) });
+  series.forEach(s => {
+    const pts = s.pts.map((v, i) => v == null ? null : [x(i), y(Math.max(yMin, v))]).filter(Boolean);
+    if (pts.length > 1) svg += `<polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="${s.color}" stroke-width="${s.width}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    pts.forEach(p => svg += `<circle cx="${p[0]}" cy="${p[1]}" r="${s.width + 2}" fill="${s.color}" stroke="${css("--surface")}" stroke-width="2"/>`);
+  });
+  const last = series[series.length - 1];
+  svg += `<text x="${x(4)-10}" y="${y(last.pts[4])-12}" text-anchor="end" font-size="13" font-weight="700" fill="${css("--ink")}">${last.pts[4]}</text>`;
+  svg += `</svg>`;
+  document.getElementById("chart").innerHTML = svg;
+  document.getElementById("legend").innerHTML = series.map(s => `<span style="--c:${s.color}">${s.name}</span>`).join("");
+})();
+
+// Score sheets
+document.getElementById("skills").innerHTML = SKILLS.map(s => {
+  const groupRow = s.groups
+    ? `<tr><th></th>${s.groups.map(([g, n], i) => `<th colspan="${n}" class="sep">${g}</th>`).join("")}<th colspan="${s.hasGoal ? 5 : 4}" class="sep"></th></tr>`
+    : "";
+  const head = `<tr><th class="left">Test</th>${s.cols.map(([c, m], i) => `<th class="${s.groups && (i === 0 || i === 3) ? "sep" : ""}">${c}<small>max ${m}</small></th>`).join("")}
+    ${s.hasGoal ? `<th class="sep">Goal</th>` : ""}<th class="${s.hasGoal ? "" : "sep"}">Score<small>max ${s.max}</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr>`;
+  const body = s.terms.map((t, i) => {
+    const goal = s.hasGoal ? `<td class="sep">${t && t.goal ? t.goal : "–"}</td>` : "";
+    if (!taken(t)) {
+      return `<tr><td class="left term">${TERMS[i]}</td><td colspan="${s.cols.length}" class="pending">Not taken yet</td>${goal}<td colspan="4" class="pending ${s.hasGoal ? "" : "sep"}"></td></tr>`;
+    }
+    return `<tr><td class="left term">${TERMS[i]}</td>${t.parts.map((p, j) => `<td class="${s.groups && (j === 0 || j === 3) ? "sep" : ""}">${fmt(p)}</td>`).join("")}
+      ${goal}<td class="total ${s.hasGoal ? "" : "sep"}">${fmt(t.total)}</td><td class="scale">${t.scale}</td><td>${chip(t.cefr, level(t.cefr))}</td><td>${t.grade}</td></tr>`;
+  }).join("");
+  return `<div class="panel">
+    <div class="skill-head"><h3>${s.name}</h3><span class="note">${s.key || s.cols.length + " parts"} · ${s.max} marks</span></div>
+    <div class="scroll"><table><thead>${groupRow}${head}</thead><tbody>${body}</tbody></table></div>
+  </div>`;
+}).join("");
+</script>
