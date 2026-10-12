@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Artem · A2 Key Progress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: one reading column — headline result, term-by-term matrix, then one score sheet per skill. */
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --head: #f3f6fa;
+  --ink: #17233a;
+  --muted: #5b6880;
+  --line: #dde3ec;
+  --accent: #2b59c3;
+  --accent-soft: #e6edfb;
+  --fail: #b4233c;   --fail-bg: #fbe9ec;
+  --a1: #9a5b00;     --a1-bg: #fdf1dc;
+  --a2: #1d7a5a;     --a2-bg: #e1f4ec;
+  --b1: #5b3fb0;     --b1-bg: #ece7fb;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; color-scheme: light; }
+.wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 24px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 800; line-height: 1.05; }
+h2 { font-size: 1.35rem; font-weight: 800; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+.eyebrow { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+header { display: grid; gap: 18px; }
+.headline { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; }
+.result { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+.result .big { font-family: var(--display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--accent); }
+.result .meta { display: grid; gap: 4px; font-size: .85rem; }
+.goal-met { color: var(--a2); font-weight: 700; }
+
+.chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.chip.fail { color: var(--fail); background: var(--fail-bg); }
+.chip.a1 { color: var(--a1); background: var(--a1-bg); }
+.chip.a2 { color: var(--a2); background: var(--a2-bg); }
+.chip.b1 { color: var(--b1); background: var(--b1-bg); }
+.chip.none { color: var(--muted); background: transparent; border: 1px dashed var(--line); font-weight: 400; }
+
+section { display: grid; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--head); }
+th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+tr:last-child td { border-bottom: 0; }
+td.left, th.left { text-align: left; }
+td.term { font-weight: 700; }
+td.total { font-weight: 700; }
+td.scale { font-weight: 700; color: var(--accent); font-size: 1.05rem; }
+td.pending { color: var(--muted); font-style: italic; }
+td.sep, th.sep { border-left: 1px solid var(--line); }
+.matrix td .s { display: block; font-weight: 700; font-size: 1.05rem; }
+.matrix tr.overall td { background: var(--accent-soft); }
+.matrix tr.overall td.left { font-family: var(--display); font-weight: 800; }
+
+.skills { display: grid; gap: 22px; }
+.skill-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding: 14px 16px 10px; }
+.note { font-size: .82rem; color: var(--muted); }
+.bands { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Cambridge English A2 Key · Student progress</div>
+    <div class="headline">
+      <div style="display:grid;gap:6px">
+        <h1>Artem</h1>
+        <div class="muted">Term goal: <strong style="color:var(--ink)">KET 110+</strong> on the Cambridge English Scale</div>
+      </div>
+      <div class="result" id="latest"></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Results by term</h2>
+    <div class="panel scroll"><table class="matrix" id="matrix"></table></div>
+    <div class="note">Overall score is the average of the four skills. The placement test only included Speaking, so it has no overall score.</div>
+  </section>
+
+  <section>
+    <h2>Score sheets</h2>
+    <div class="skills" id="skills"></div>
+  </section>
+
+  <section>
+    <h3>Cambridge English Scale for A2 Key</h3>
+    <div class="bands">
+      <span class="chip b1">140–150 · B1 · Grade A</span>
+      <span class="chip a2">133–139 · A2 · Grade B</span>
+      <span class="chip a2">120–132 · A2 · Grade C</span>
+      <span class="chip a1">100–119 · A1</span>
+      <span class="chip fail">82–99 · Below A1</span>
+    </div>
+  </section>
+</div>
+
+<script>
+const TERMS = ["Placement test", "Term 1", "Term 2", "Term 3", "Term 4"];
+const T = (parts, total, scale, cefr, grade, goal) => ({ parts, total, scale, cefr, grade, goal });
+const NONE = null;
+
+// Copied from the "Artem" sheet.
+const SKILLS = [
+  {
+    name: "Reading", max: 30,
+    cols: [["Part 1", 6], ["Part 2", 7], ["Part 3", 5], ["Part 4", 6], ["Part 5", 6]],
+    terms: [NONE, NONE,
+      T([2,3,1,4,1], 11, 94, "Below A1", "Failed"),
+      T([2,2,2,3,2], 11, 94, "Below A1", "Failed"),
+      T([1,5,0,5,0], 11, 94, "Below A1", "Failed")],
+  },
+  {
+    name: "Listening", max: 25,
+    cols: [["Part 1", 5], ["Part 2", 5], ["Part 3", 5], ["Part 4", 5], ["Part 5", 5]],
+    terms: [NONE, NONE,
+      T([4,0,1,1,5], 11, 100, "A1", "Below A2"),
+      T([4,0,2,2,4], 12, 103, "A1", "Below A2"),
+      T([4,0,0,4,5], 13, 107, "A1", "Below A2")],
+  },
+  {
+    name: "Writing", max: 30, key: "Org. = organisation, Lang. = language",
+    groups: [["Part 6", 3], ["Part 7", 3]],
+    cols: [["Content", 5], ["Org.", 5], ["Lang.", 5], ["Content", 5], ["Org.", 5], ["Lang.", 5]],
+    terms: [NONE, NONE,
+      T([3,3,3,3,2,2], 16, 113, "A1", "Below A2"),
+      T([3,3,3,3,2,2], 16, 113, "A1", "Below A2"),
+      T([3,5,3,3,3,2], 19, 123, "A2", "C")],
+  },
+  {
+    name: "Speaking", max: 45, hasGoal: true, key: "Grammar & vocabulary, pronunciation, interactive communication, global achievement",
+    cols: [["Gram. & vocab.", 5], ["Pronun.", 5], ["Interaction", 5], ["Global", 5]],
+    terms: [
+      T([1.5,1.5,2,2], 16, 96, "Below A1", "Failed"),
+      { goal: 20 },
+      T([2.5,2,2.5,2.5], 26.5, 108, "A1", "Below A2", 25),
+      T([2.5,3,3,3], 32, 118, "A1", "C", 30),
+      T([2.5,3,3,3], 32, 118, "A1", "C", 33)],
+  },
+];
+const OVERALL = [
+  null,
+  { pending: true },
+  { scale: 104, cefr: "A1", grade: "Below A2" },
+  { scale: 107, cefr: "A1", grade: "Below A2" },
+  { scale: 111, cefr: "A1", grade: "Below A2" },
+];
+const GOAL = 110;
+
+const level = (cefr) => ({ "B1": "b1", "A2": "a2", "A1": "a1" }[cefr] || "fail");
+const chip = (text, cls) => `<span class="chip ${cls}">${text}</span>`;
+const fmt = (n) => Number.isInteger(n) ? n : n.toFixed(1);
+const taken = (t) => t && t.scale != null;
+
+// Latest overall result
+const latestIdx = OVERALL.map((o, i) => (o && o.scale ? i : -1)).filter(i => i >= 0).pop();
+const latest = OVERALL[latestIdx];
+document.getElementById("latest").innerHTML = `
+  <div class="big num">${latest.scale}</div>
+  <div class="meta">
+    <div><strong>${TERMS[latestIdx]}</strong> overall</div>
+    <div>${chip(latest.cefr, level(latest.cefr))} ${chip(latest.grade, "none")}</div>
+    <div class="${latest.scale >= GOAL ? "goal-met" : "muted"}">${latest.scale >= GOAL ? "Goal of " + GOAL + "+ reached" : (GOAL - latest.scale) + " below goal of " + GOAL}</div>
+  </div>`;
+
+// Term matrix
+const head = `<tr><th class="left">Skill</th>${TERMS.map(t => `<th>${t}</th>`).join("")}</tr>`;
+const cell = (t) => taken(t)
+  ? `<td><span class="s">${t.scale}</span>${chip(t.cefr, level(t.cefr))}</td>`
+  : `<td class="pending">${t && t.pending ? "Pending" : "–"}</td>`;
+const rows = SKILLS.map(s => `<tr><td class="left">${s.name}</td>${s.terms.map(cell).join("")}</tr>`).join("");
+const overall = `<tr class="overall"><td class="left">Overall</td>${OVERALL.map(cell).join("")}</tr>`;
+document.getElementById("matrix").innerHTML = `<thead>${head}</thead><tbody>${rows}${overall}</tbody>`;
+
+// Score sheets
+document.getElementById("skills").innerHTML = SKILLS.map(s => {
+  const groupRow = s.groups
+    ? `<tr><th></th>${s.groups.map(([g, n], i) => `<th colspan="${n}" class="sep">${g}</th>`).join("")}<th colspan="${s.hasGoal ? 5 : 4}" class="sep"></th></tr>`
+    : "";
+  const head = `<tr><th class="left">Test</th>${s.cols.map(([c, m], i) => `<th class="${s.groups && (i === 0 || i === 3) ? "sep" : ""}">${c}<small>max ${m}</small></th>`).join("")}
+    ${s.hasGoal ? `<th class="sep">Goal</th>` : ""}<th class="${s.hasGoal ? "" : "sep"}">Score<small>max ${s.max}</small></th><th>Scale</th><th>CEFR</th><th>Grade</th></tr>`;
+  const body = s.terms.map((t, i) => {
+    const goal = s.hasGoal ? `<td class="sep">${t && t.goal ? t.goal : "–"}</td>` : "";
+    if (!taken(t)) {
+      return `<tr><td class="left term">${TERMS[i]}</td><td colspan="${s.cols.length}" class="pending">Not taken yet</td>${goal}<td colspan="4" class="pending ${s.hasGoal ? "" : "sep"}"></td></tr>`;
+    }
+    return `<tr><td class="left term">${TERMS[i]}</td>${t.parts.map((p, j) => `<td class="${s.groups && (j === 0 || j === 3) ? "sep" : ""}">${fmt(p)}</td>`).join("")}
+      ${goal}<td class="total ${s.hasGoal ? "" : "sep"}">${fmt(t.total)}</td><td class="scale">${t.scale}</td><td>${chip(t.cefr, level(t.cefr))}</td><td>${t.grade}</td></tr>`;
+  }).join("");
+  return `<div class="panel">
+    <div class="skill-head"><h3>${s.name}</h3><span class="note">${s.key || s.cols.length + " parts"} · ${s.max} marks</span></div>
+    <div class="scroll"><table><thead>${groupRow}${head}</thead><tbody>${body}</tbody></table></div>
+  </div>`;
+}).join("");
+</script>
+</body>
+</html>
