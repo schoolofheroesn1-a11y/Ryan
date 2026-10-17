@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* Дизайн-токены. Один акцентный цвет, статусные цвета только для статусов проверки и ошибок. */
+@theme {
+  --color-paper: #f7f6f2;
+  --color-surface: #ffffff;
+  --color-ink: #16181d;
+  --color-ink-soft: #3a3f47;
+  --color-muted: #5f6570;
+  --color-line: #e3e1da;
+  --color-line-strong: #cfccc2;
+  --color-accent: #2445c4;
+  --color-accent-hover: #1b369e;
+  --color-accent-soft: #e9eefc;
+  --color-ok: #1d6b45;
+  --color-ok-soft: #e4f2ea;
+  --color-info: #2c5a8a;
+  --color-info-soft: #e5eef7;
+  --color-warn: #8a5a00;
+  --color-warn-soft: #fbf0d5;
+  --color-danger: #a8251b;
+  --color-danger-soft: #fbe9e7;
+  --color-neutral-soft: #eeede8;
+
+  --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif-display), Georgia, serif;
+
+  --radius-card: 14px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "kern";
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: var(--color-accent-soft);
+  }
+}
+
+@utility container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+
+@utility btn {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+@utility btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover;
+  }
+
+@utility btn-secondary {
+    @apply btn border border-line-strong bg-surface text-ink hover:border-ink-soft;
+  }
+
+@utility btn-ghost {
+    @apply btn text-ink-soft hover:bg-neutral-soft;
+  }
+
+@utility btn-danger {
+    @apply btn border border-danger/30 bg-surface text-danger hover:bg-danger-soft;
+  }
+
+@utility btn-sm {
+    @apply min-h-8 px-3 py-1 text-[13px];
+  }
+
+@utility input {
+    @apply block w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 aria-[invalid=true]:border-danger;
+  }
+
+@utility label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+
+@utility hint {
+    @apply mt-1 text-[13px] text-muted;
+  }
+
+@utility field-error {
+    @apply mt-1 text-[13px] text-danger;
+  }
+
+@utility card {
+    @apply rounded-[var(--radius-card)] border border-line bg-surface;
+  }
+
+@utility chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-[13px] text-ink-soft;
+  }
+
+@utility link {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+
+@utility eyebrow {
+    @apply text-[12px] font-semibold uppercase tracking-[0.08em] text-muted;
+  }
+
+
+@utility prose-lab {
+    @apply text-[16px] leading-relaxed text-ink-soft;
+    & p + p {
+      @apply mt-3;
+    }
+  }

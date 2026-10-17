@@ -1,0 +1,414 @@
+// Схема данных «Лаборатории педагогических технологий».
+// Перечисления используются для фиксированных справочников, значения которых
+// влияют на бизнес-логику (роли, статусы, типы материалов). Справочники,
+// которыми управляют редакторы (предметы, задачи, технологии, теги), — таблицы.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  EDITOR
+  ADMIN
+}
+
+enum MaterialType {
+  CASE // практический кейс
+  TIP // педагогическая фишка
+  TOOL_REVIEW // обзор инструмента
+  COMPARISON // сравнительное исследование (сводка)
+  READY_MATERIAL // готовый учебный материал
+  INTERACTIVE // интерактив или мини-приложение
+  METHOD // методика или технология обучения
+  TEMPLATE // инструкция и шаблон
+}
+
+enum PublicationStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+  REJECTED
+  UNPUBLISHED
+}
+
+enum VerificationStatus {
+  NOT_TESTED
+  AUTHOR_TESTED
+  MULTI_TEACHER
+  INDEPENDENT
+  NEEDS_RECHECK
+}
+
+enum CostLevel {
+  FREE
+  FREEMIUM
+  PAID
+}
+
+enum SkillLevel {
+  BASIC
+  MEDIUM
+  ADVANCED
+}
+
+enum DeliveryFormat {
+  OFFLINE
+  ONLINE
+  BLENDED
+}
+
+enum CategoryKind {
+  SUBJECT
+  TASK
+  TECHNOLOGY
+}
+
+enum ResearchKind {
+  TECHNICAL // тестирование технических возможностей
+  TEACHER_REVIEW // оценка педагогами
+  STUDENT_OUTCOMES // измерение результатов учеников
+}
+
+enum CriterionDimension {
+  TECHNICAL // техническая работоспособность и качество результата
+  INTERFACE // удобство и интерфейс
+  PEDAGOGICAL // педагогическая ценность
+  RESOURCES // стоимость, время, доступность
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReportReason {
+  ERROR
+  OUTDATED
+  MISMATCH
+  COPYRIGHT
+  INAPPROPRIATE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  specialization String?
+  bio            String?
+  links          String[] @default([])
+  role           Role     @default(USER)
+  isBlocked      Boolean  @default(false)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions         Session[]
+  materials        Material[]
+  research         Research[]
+  bookmarks        Bookmark[]
+  reviews          Review[]
+  reports          Report[]          @relation("reporter")
+  resolvedReports  Report[]          @relation("resolver")
+  moderationEvents ModerationEvent[]
+  auditLogs        AuditLog[]
+  attachments      Attachment[]
+}
+
+model Session {
+  id        String   @id // sha256 от токена; сам токен хранится только в cookie
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id        String             @id @default(cuid())
+  kind      CategoryKind
+  slug      String
+  name      String
+  order     Int                @default(0)
+  materials MaterialCategory[]
+
+  @@unique([kind, slug])
+}
+
+model Tag {
+  id        String        @id @default(cuid())
+  slug      String        @unique
+  name      String
+  materials MaterialTag[]
+}
+
+model Material {
+  id                 String             @id @default(cuid())
+  slug               String             @unique
+  type               MaterialType
+  status             PublicationStatus  @default(DRAFT)
+  verificationStatus VerificationStatus @default(NOT_TESTED)
+
+  title          String
+  summary        String
+  problem        String           @default("") // какую педагогическую задачу решает
+  audience       String           @default("") // для кого подходит
+  gradeFrom      Int?
+  gradeTo        Int?
+  resources      String           @default("") // инструменты и ресурсы
+  steps          String[]         @default([])
+  example        String           @default("")
+  prepTimeMin    Int?
+  lessonTimeMin  Int?
+  cost           CostLevel        @default(FREE)
+  costNote       String           @default("")
+  digitalSkill   SkillLevel       @default(BASIC)
+  formats        DeliveryFormat[] @default([])
+  limitations    String           @default("")
+  expectedResult String           @default("")
+  adaptation     String           @default("")
+  testReport     String           @default("") // как автор проверял решение на практике
+  prompts        String[]         @default([])
+  externalUrl    String?
+  sources        String           @default("")
+  license        String           @default("")
+
+  isDemo       Boolean                  @default(false)
+  searchText   String                   @default("")
+  // Вычисляемая колонка tsvector (см. миграцию init), только для чтения.
+  searchVector Unsupported("tsvector")?
+  authorId     String
+  author       User                     @relation(fields: [authorId], references: [id])
+  researchId   String?
+  research     Research?                @relation(fields: [researchId], references: [id], onDelete: SetNull)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  publishedAt  DateTime?
+
+  categories       MaterialCategory[]
+  tags             MaterialTag[]
+  attachments      Attachment[]
+  bookmarks        Bookmark[]
+  reviews          Review[]
+  reports          Report[]
+  moderationEvents ModerationEvent[]
+
+  @@index([status, publishedAt])
+  @@index([authorId])
+}
+
+model MaterialCategory {
+  materialId String
+  categoryId String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, categoryId])
+  @@index([categoryId])
+}
+
+model MaterialTag {
+  materialId String
+  tagId      String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, tagId])
+  @@index([tagId])
+}
+
+model Research {
+  id                 String             @id @default(cuid())
+  slug               String             @unique
+  title              String
+  summary            String
+  kind               ResearchKind       @default(TECHNICAL)
+  status             PublicationStatus  @default(DRAFT)
+  verificationStatus VerificationStatus @default(NOT_TESTED)
+  question           String
+  hypothesis         String             @default("")
+  conductedFrom      DateTime?
+  conductedTo        DateTime?
+  conditions         String             @default("")
+  limitations        String             @default("")
+  inputTasks         String             @default("") // одинаковые исходные задания
+  rawResults         String             @default("")
+  errorsFound        String             @default("")
+  resourceCosts      String             @default("")
+  manualRework       String             @default("")
+  pedagogicalCheck   String             @default("")
+  conclusions        String             @default("")
+  recommendations    String             @default("")
+  reproduction       String             @default("")
+  criteriaLockedAt   DateTime? // критерии и веса фиксируются до внесения результатов
+  isDemo             Boolean            @default(false)
+  authorId           String
+  author             User               @relation(fields: [authorId], references: [id])
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  publishedAt        DateTime?
+
+  tools            ResearchTool[]
+  criteria         ResearchCriterion[]
+  results          ResearchResult[]
+  issues           ResearchIssue[]
+  materials        Material[]
+  moderationEvents ModerationEvent[]
+}
+
+model ResearchTool {
+  id           String           @id @default(cuid())
+  researchId   String
+  research     Research         @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  name         String
+  version      String // версия или дата обращения к сервису
+  vendor       String           @default("")
+  pricing      String           @default("")
+  availability String           @default("") // доступность в российских условиях
+  order        Int              @default(0)
+  results      ResearchResult[]
+  issues       ResearchIssue[]
+}
+
+model ResearchCriterion {
+  id          String             @id @default(cuid())
+  researchId  String
+  research    Research           @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  name        String
+  description String             @default("")
+  dimension   CriterionDimension
+  weight      Int // относительный вес внутри измерения, 1–10
+  scaleMax    Int                @default(5)
+  order       Int                @default(0)
+  results     ResearchResult[]
+}
+
+model ResearchResult {
+  id          String            @id @default(cuid())
+  researchId  String
+  research    Research          @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  toolId      String
+  tool        ResearchTool      @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  criterionId String
+  criterion   ResearchCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  score       Int? // null — не оценивалось
+  note        String            @default("")
+
+  @@unique([toolId, criterionId])
+}
+
+model ResearchIssue {
+  id          String       @id @default(cuid())
+  researchId  String
+  research    Research     @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  toolId      String
+  tool        ResearchTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  description String
+  isCritical  Boolean      @default(false)
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  materialId String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  uploaderId String
+  uploader   User     @relation(fields: [uploaderId], references: [id])
+  fileName   String
+  storageKey String   @unique
+  mimeType   String
+  size       Int
+  createdAt  DateTime @default(now())
+}
+
+model Bookmark {
+  userId     String
+  materialId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([userId, materialId])
+}
+
+model Review {
+  id                String       @id @default(cuid())
+  materialId        String
+  material          Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  authorId          String
+  author            User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body              String
+  appliedInPractice Boolean      @default(false)
+  context           String       @default("") // где и как применяли
+  status            ReviewStatus @default(PENDING)
+  createdAt         DateTime     @default(now())
+  moderatedAt       DateTime?
+
+  @@unique([materialId, authorId])
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  materialId   String?
+  material     Material?    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  researchSlug String?
+  reporterId   String?
+  reporter     User?        @relation("reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  reason       ReportReason
+  body         String
+  status       ReportStatus @default(OPEN)
+  resolution   String       @default("")
+  resolvedById String?
+  resolvedBy   User?        @relation("resolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  resolvedAt   DateTime?
+
+  @@index([status])
+}
+
+// История статусов публикаций: видна автору и редакции.
+model ModerationEvent {
+  id               String              @id @default(cuid())
+  materialId       String?
+  material         Material?           @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  researchId       String?
+  research         Research?           @relation(fields: [researchId], references: [id], onDelete: Cascade)
+  actorId          String
+  actor            User                @relation(fields: [actorId], references: [id])
+  fromStatus       PublicationStatus?
+  toStatus         PublicationStatus?
+  fromVerification VerificationStatus?
+  toVerification   VerificationStatus?
+  comment          String              @default("")
+  createdAt        DateTime            @default(now())
+
+  @@index([materialId])
+}
+
+// Журнал административных действий.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String
+  targetType String
+  targetId   String
+  details    String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

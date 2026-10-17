@@ -1,0 +1,24 @@
+"use client";
+
+import { useActionState } from "react";
+import { updateProfileAction } from "@/app/actions/profile";
+import { initialActionState } from "@/lib/action-state";
+import { FormMessage } from "../ui/form-message";
+import { SubmitButton } from "../ui/submit-button";
+import { TextArea, TextField } from "./field";
+
+export function ProfileForm({ initial }: { initial: { name: string; specialization: string; bio: string; links: string } }) {
+  const [state, action] = useActionState(updateProfileAction, initialActionState);
+  const v = { ...initial, ...(state.values as Record<string, string> | undefined) };
+  const e = state.errors ?? {};
+  return (
+    <form action={action} className="flex max-w-2xl flex-col gap-4" noValidate>
+      <FormMessage ok={state.ok} message={state.message} />
+      <TextField label="Имя или псевдоним" name="name" required defaultValue={v.name} error={e.name} />
+      <TextField label="Специализация" name="specialization" defaultValue={v.specialization} error={e.specialization} hint="Например: учитель биологии, 5–9 классы. Указывайте только то, что готовы подтвердить." />
+      <TextArea label="О себе" name="bio" rows={4} defaultValue={v.bio} error={e.bio} />
+      <TextArea label="Ссылки на профессиональные ресурсы" name="links" rows={3} defaultValue={v.links} error={e.links} hint="По одной ссылке в строке, до 5. Необязательно." />
+      <div><SubmitButton>Сохранить профиль</SubmitButton></div>
+    </form>
+  );
+}
