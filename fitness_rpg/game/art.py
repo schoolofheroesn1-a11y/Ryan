@@ -1,0 +1,430 @@
+"""Процедурный пиксель-арт: спрайты из символьных карт и фон главного экрана.
+
+Каждый спрайт описан строками, где один символ = один пиксель, а палитра
+переводит символ в цвет. '.' — прозрачный пиксель. Так арт легко править
+прямо в коде, а tools/generate_art.py выгружает его в PNG.
+"""
+import math
+import random
+
+import pygame
+
+# --- Палитра (тёмное фэнтези: холодная сталь, ржавчина, кровь, пепел) ---
+PALETTE = {
+    "k": (16, 12, 22),     # контур
+    "d": (52, 56, 70),     # тёмная сталь
+    "s": (98, 106, 122),   # сталь
+    "l": (158, 166, 180),  # светлая сталь
+    "w": (222, 226, 232),  # блик / клинок
+    "r": (70, 18, 22),     # тёмный плащ
+    "R": (128, 32, 36),    # плащ
+    "b": (66, 46, 34),     # кожа / рукоять
+    "B": (112, 80, 54),    # светлая кожа
+    "g": (176, 140, 60),   # золото
+    "o": (122, 112, 92),   # тёмная кость
+    "O": (196, 186, 156),  # кость
+    "W": (236, 230, 206),  # светлая кость
+    "e": (255, 60, 40),    # глаза скелета
+    "E": (255, 190, 120),  # свечение глаз
+    "m": (92, 52, 34),     # ржавчина
+    "M": (150, 92, 54),    # светлая ржавчина
+    "n": (40, 32, 48),     # истлевшая ткань
+    "N": (70, 56, 80),     # ткань светлее
+}
+
+# --- Главный герой: Негасимый рыцарь (смотрит вправо) ---
+HERO_IDLE = [
+    "..........kkkkkk........",
+    ".........kllllssk.......",
+    "........klwwllsssk......",
+    "........klwlllsssk......",
+    "........kllllssssk......",
+    "........kkkkkkkkkk......",
+    "........kslskkkkdk......",
+    "........klllssssdk......",
+    "........kdsssssddk......",
+    ".......kkkkddddkkkk.....",
+    "......krkllllsssdddk....",
+    ".....krRkwlllsssddsdk...",
+    ".....krRklllgggssdsldk..",
+    ".....krRkkllsssskdslldk.",
+    ".....krRkdklsssskdkslk..",
+    ".....krRkdkkkkkkkdkbbk..",
+    ".....krRkdkbbgbbkdkBBk..",
+    ".....krRkkkkkkkkkkkbbk..",
+    ".....krRkddsskdddsk.wk..",
+    ".....krRRkdssk.kdsk.wk..",
+    ".....krRRkdssk.kdsk.wk..",
+    "......krRkdslk.kdsk.wk..",
+    "......krRkdssk.kdsk.wk..",
+    "......krRkkkkk.kkkk.wk..",
+    ".......krkdssk.kdsk.wk..",
+    ".......krkdssk.kdsk.wk..",
+    "........kkdssk.kdsk.lk..",
+    ".........kdssk.kdsk..k..",
+    "........kkkkkk.kkkkk....",
+    "........kbbbbk.kbbbbk...",
+    "........kkkkkk.kkkkkk...",
+    "........................",
+]
+
+HERO_ATTACK = [
+    "..........kkkkkk................",
+    ".........kllllssk...............",
+    "........klwwllsssk..............",
+    "........klwlllsssk..............",
+    "........kllllssssk..............",
+    "........kkkkkkkkkk..............",
+    "........kslskkkkdk..............",
+    "........klllssssdk..............",
+    "........kdsssssddk..............",
+    ".......kkkkddddkkkk.............",
+    "......krkllllsssdddk............",
+    ".....krRkwlllsssddsddkk.........",
+    ".....krRklllgggsssslllbkkkkkkkkk",
+    ".....krRkkllssssssslllBwwwwwwwwk",
+    ".....krRkdklsssskkkkkkbkkkkkkkkk",
+    ".....krRkdkkkkkkkk..............",
+    ".....krRkdkbbgbbk...............",
+    ".....krRkkkkkkkkk...............",
+    ".....krRkddsskdddsk.............",
+    ".....krRRkdssk..kdsk............",
+    ".....krRRkdssk...kdsk...........",
+    "......krRkdslk....kdsk..........",
+    "......krRkdssk....kdsk..........",
+    "......krRkkkkk....kkkk..........",
+    ".......krkdssk....kdsk..........",
+    ".......krkdssk....kdsk..........",
+    "........kkdssk....kdsk..........",
+    ".........kdssk....kdsk..........",
+    "........kkkkkk....kkkkk.........",
+    "........kbbbbk....kbbbbk........",
+    "........kkkkkk....kkkkkk........",
+    "................................",
+]
+
+# --- Монстр: Скелет-страж с ржавым мечом (смотрит влево) ---
+SKELETON_IDLE = [
+    "........................",
+    "..........kkkkk.........",
+    ".........kWWWOOk........",
+    "........kWWWOOOok.......",
+    "........kWWOOOOok.......",
+    "........kkkOkkkok.......",
+    "........kekkOkeok.......",
+    "........kkkOOkkok.......",
+    ".........kOkOkOk........",
+    ".........kkOkOkk........",
+    "..........kkkkk.........",
+    "...........kok..........",
+    ".........kkkOkkkk.......",
+    "........kOOkOkOOOk......",
+    ".......kOkkOOOkkOok.....",
+    ".......kOkOkkkOkkOk.....",
+    "......kOkkOOOOOkkOk.....",
+    "......kOk.kOkOk.kok.....",
+    ".kbk..kok.kOOOk.kok.....",
+    ".kbk.kOk...kOk...kOk....",
+    ".kbk.kWk.knnnnnk.kWk....",
+    "kMMMkkWWkknNNNnnk.k.....",
+    "kwlmk.kkknnNnNnnk.......",
+    "kwlmk...knnnknnnk.......",
+    "kwlmk...kOk...kOk.......",
+    "kwlmk...kOk...kOk.......",
+    "kwlmk...kok...kok.......",
+    "kwlmk...kOk...kOk.......",
+    "kwlmk...kOk...kOk.......",
+    ".klk....kOk...kOk.......",
+    "..k....kWWk..kWWk.......",
+    ".......kkkk..kkkk.......",
+]
+
+SKELETON_ATTACK = [
+    "................................",
+    "..................kkkkk.........",
+    ".................kWWWOOk........",
+    "................kWWWOOOok.......",
+    "................kWWOOOOok.......",
+    "................kkkOkkkok.......",
+    "................kekkOkeok.......",
+    "................kkkOOkkok.......",
+    ".................kOkOkOk........",
+    ".................kkOkOkk........",
+    "..................kkkkk.........",
+    "...................kok..........",
+    "...............kkkkkOkkkk.......",
+    "kkkkkkkkkkkkkkkWOkkOkOOOk.......",
+    "kwwwlllllllMMbkWkOOOOkkOok......",
+    "kkkkkkkkkkkkkkkkkkOkkOkkOk......",
+    "..............kOkkOOOOOkkOk.....",
+    "..............kOk.kOkOk.kok.....",
+    "...............k..kOOOk.kok.....",
+    "...................kOk...kOk....",
+    ".................knnnnnk.kWk....",
+    "................knNNNnnk..k.....",
+    "................knnNnNnnk.......",
+    "...............knnnk.knnnk......",
+    "..............kOk.....kOk.......",
+    ".............kOk.......kOk......",
+    ".............kok.......kok......",
+    "............kOk.........kOk.....",
+    "............kOk.........kOk.....",
+    "............kOk.........kOk.....",
+    "...........kWWk.........kWWk....",
+    "...........kkkk.........kkkk....",
+]
+
+# --- Костёр (спрайт с 3 кадрами огня поверх общего основания) ---
+BONFIRE_BASE = [
+    "........kk......",
+    "........ll......",
+    ".......kwlk.....",
+    "........sl......",
+    "........sl......",
+    "........sl......",
+    "....kkk.sl.kkk..",
+    "...kBBbkslkbBBk.",
+    "..kbbBBBkkBBbbk.",
+    ".kooOookkkkoOOok",
+    "kkkkkkkkkkkkkkkk",
+]
+
+
+def sprite_from_map(rows, palette=PALETTE):
+    """Превращает символьную карту в pygame.Surface с прозрачностью."""
+    width = max(len(r) for r in rows)
+    surf = pygame.Surface((width, len(rows)), pygame.SRCALPHA)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row.ljust(width, ".")):
+            if ch != ".":
+                surf.set_at((x, y), palette[ch])
+    return surf
+
+
+def tinted(surf, color, strength=1.0):
+    """Копия спрайта, окрашенная в цвет (вспышка урона / свечение)."""
+    out = surf.copy()
+    w, h = out.get_size()
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = out.get_at((x, y))
+            if a:
+                out.set_at((x, y), (
+                    int(r + (color[0] - r) * strength),
+                    int(g + (color[1] - g) * strength),
+                    int(b + (color[2] - b) * strength),
+                    a,
+                ))
+    return out
+
+
+def shifted_breath(surf, rows_from_top=14):
+    """Кадр «дыхания»: верхняя часть тела опускается на 1 пиксель."""
+    w, h = surf.get_size()
+    out = pygame.Surface((w, h), pygame.SRCALPHA)
+    out.blit(surf, (0, 1), pygame.Rect(0, 0, w, rows_from_top))
+    out.blit(surf, (0, rows_from_top), pygame.Rect(0, rows_from_top, w, h - rows_from_top))
+    return out
+
+
+def crouched(surf):
+    """Кадр уклонения (присед): спрайт сплющен по вертикали."""
+    w, h = surf.get_size()
+    small = pygame.transform.scale(surf, (w, int(h * 0.7)))
+    out = pygame.Surface((w, h), pygame.SRCALPHA)
+    out.blit(small, (0, h - small.get_height()))
+    return out
+
+
+def flame(frame, w=16, h=14):
+    """Пламя костра — анимированный кадр, рисуется по пикселям."""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    rnd = random.Random(frame * 7919)
+    colors = [(255, 240, 170), (255, 190, 70), (240, 110, 30), (170, 50, 20)]
+    cx = w / 2
+    for y in range(h):
+        t = y / (h - 1)  # 0 сверху, 1 снизу
+        half = 1 + t * (w * 0.32) + math.sin(frame * 1.7 + y) * 0.8
+        for x in range(w):
+            d = abs(x + 0.5 - cx) / max(half, 0.1)
+            if d < 1 and rnd.random() > 0.08 + (1 - t) * 0.35:
+                idx = min(3, int(d * 2.2 + (1 - t) * 1.6))
+                surf.set_at((x, y), colors[idx])
+    return surf
+
+
+def make_bonfire_frames(n=4):
+    base = sprite_from_map(BONFIRE_BASE)
+    frames = []
+    for i in range(n):
+        surf = pygame.Surface((16, 22), pygame.SRCALPHA)
+        surf.blit(flame(i), (0, 0))
+        surf.blit(base, (0, 11))
+        frames.append(surf)
+    return frames
+
+
+def _lerp(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def make_title_background(w=320, h=180, seed=13):
+    """Главный экран: багровое небо, луна, горы, руины замка и кладбище."""
+    rnd = random.Random(seed)
+    surf = pygame.Surface((w, h))
+
+    # Небо с ступенчатым (пиксельным) градиентом
+    top, mid, low = (10, 8, 20), (44, 18, 34), (110, 40, 36)
+    bands = 18
+    for i in range(bands):
+        t = i / (bands - 1)
+        col = _lerp(top, mid, t * 2) if t < 0.5 else _lerp(mid, low, (t - 0.5) * 2)
+        y0 = int(i * h * 0.72 / bands)
+        pygame.draw.rect(surf, col, (0, y0, w, int(h * 0.72 / bands) + 1))
+    pygame.draw.rect(surf, low, (0, int(h * 0.72), w, h))
+
+    # Звёзды
+    for _ in range(70):
+        x, y = rnd.randrange(w), rnd.randrange(int(h * 0.45))
+        surf.set_at((x, y), rnd.choice([(200, 190, 210), (120, 110, 140), (240, 230, 200)]))
+
+    # Затмённая луна с ореолом
+    mx, my = 236, 42
+    for r, col in ((26, (70, 30, 40)), (22, (110, 50, 46)), (18, (230, 200, 160))):
+        pygame.draw.circle(surf, col, (mx, my), r)
+    pygame.draw.circle(surf, (190, 150, 120), (mx - 5, my + 3), 4)
+    pygame.draw.circle(surf, (200, 165, 130), (mx + 6, my - 6), 3)
+    pygame.draw.circle(surf, (24, 12, 22), (mx + 7, my - 1), 14)  # тёмный диск затмения
+    for _ in range(40):  # «корона» затмения
+        a = rnd.random() * math.tau
+        rr = 15 + rnd.random() * 4
+        surf.set_at((int(mx + 7 + math.cos(a) * rr), int(my - 1 + math.sin(a) * rr)), (255, 120, 60))
+
+    # Дальние горы
+    def ridge(base_y, amp, col, step, jag):
+        pts = [(0, h)]
+        y = base_y
+        for x in range(0, w + step, step):
+            y = max(base_y - amp, min(base_y + amp // 2, y + rnd.randint(-jag, jag)))
+            pts.append((x, y))
+        pts.append((w, h))
+        pygame.draw.polygon(surf, col, pts)
+
+    ridge(110, 22, (46, 22, 38), 6, 6)
+    ridge(128, 16, (30, 16, 30), 5, 4)
+
+    # Руины замка (силуэт)
+    castle = (14, 10, 20)
+    pygame.draw.rect(surf, castle, (40, 92, 70, 60))
+    for tx, tw, th in ((34, 16, 70), (72, 12, 88), (100, 18, 64)):
+        pygame.draw.rect(surf, castle, (tx, 150 - th, tw, th))
+        for bx in range(tx, tx + tw, 4):  # зубцы
+            pygame.draw.rect(surf, castle, (bx, 150 - th - 3, 2, 3))
+    pygame.draw.polygon(surf, castle, [(72, 62), (78, 46), (84, 62)])  # шпиль
+    for wx, wy in ((40, 100), (76, 74), (106, 104), (56, 112), (88, 118)):  # окна
+        pygame.draw.rect(surf, (255, 150, 60), (wx, wy, 2, 3))
+    # обвалившийся край
+    for i in range(10):
+        pygame.draw.rect(surf, castle, (110 + i * 3, 120 + i * 3 + rnd.randint(0, 2), 3, 40))
+
+    # Земля и кладбище
+    ground = 150
+    pygame.draw.rect(surf, (20, 14, 22), (0, ground, w, h - ground))
+    for x in range(0, w, 2):
+        if rnd.random() < 0.5:
+            pygame.draw.rect(surf, (32, 24, 30), (x, ground - rnd.randint(0, 2), 2, 3))
+    for gx in (150, 172, 196, 262, 290):
+        gh = rnd.randint(8, 13)
+        pygame.draw.rect(surf, (12, 8, 16), (gx, ground - gh, 7, gh))
+        pygame.draw.rect(surf, (12, 8, 16), (gx + 1, ground - gh - 1, 5, 1))
+    for cx in (214, 304):  # кресты
+        pygame.draw.rect(surf, (12, 8, 16), (cx, ground - 16, 2, 16))
+        pygame.draw.rect(surf, (12, 8, 16), (cx - 3, ground - 12, 8, 2))
+    # мёртвое дерево
+    pygame.draw.line(surf, (12, 8, 16), (8, ground), (14, 100), 3)
+    for (x1, y1, x2, y2) in ((13, 112, 2, 98), (14, 104, 26, 90), (20, 96, 30, 94), (6, 102, 0, 96)):
+        pygame.draw.line(surf, (12, 8, 16), (x1, y1), (x2, y2), 1)
+
+    # Туман: полупрозрачные пиксельные полосы
+    fog = pygame.Surface((w, h), pygame.SRCALPHA)
+    for _ in range(26):
+        fx, fy = rnd.randrange(-20, w), rnd.randrange(ground - 14, ground + 6)
+        pygame.draw.rect(fog, (140, 110, 130, 34), (fx, fy, rnd.randint(30, 70), 2))
+    surf.blit(fog, (0, 0))
+    return surf
+
+
+def make_arena_background(w=320, h=180, seed=7):
+    """Фон боя: склеп с колоннами и факелами."""
+    rnd = random.Random(seed)
+    surf = pygame.Surface((w, h))
+    for i in range(12):
+        col = _lerp((8, 6, 14), (34, 24, 36), i / 11)
+        pygame.draw.rect(surf, col, (0, i * 12, w, 12))
+    # кладка стены
+    for y in range(0, 140, 8):
+        off = 0 if (y // 8) % 2 == 0 else 8
+        for x in range(-off, w, 16):
+            shade = rnd.randint(26, 40)
+            pygame.draw.rect(surf, (shade, shade - 6, shade + 4), (x + 1, y + 1, 14, 6))
+    # колонны
+    for cx in (30, 150, 270):
+        pygame.draw.rect(surf, (18, 14, 24), (cx, 20, 22, 120))
+        pygame.draw.rect(surf, (44, 38, 52), (cx + 3, 20, 4, 120))
+        pygame.draw.rect(surf, (12, 10, 18), (cx - 3, 16, 28, 6))
+        pygame.draw.rect(surf, (12, 10, 18), (cx - 3, 134, 28, 6))
+    # пол
+    pygame.draw.rect(surf, (22, 16, 24), (0, 140, w, 40))
+    for x in range(0, w, 20):
+        pygame.draw.line(surf, (12, 8, 16), (x, 140), (x - 10, 180))
+    pygame.draw.line(surf, (60, 46, 56), (0, 140), (w, 140))
+    # черепа и кости на полу
+    for _ in range(14):
+        bx, by = rnd.randrange(w), rnd.randrange(146, 176)
+        pygame.draw.rect(surf, (90, 84, 70), (bx, by, rnd.choice((2, 3, 4)), 1))
+    # виньетка
+    vig = pygame.Surface((w, h), pygame.SRCALPHA)
+    for i in range(16):
+        pygame.draw.rect(vig, (0, 0, 0, 14), (i * 3, i * 2, w - i * 6, h - i * 4), 3)
+    surf.blit(vig, (0, 0))
+    return surf
+
+
+def make_torch_frames(n=4):
+    frames = []
+    for i in range(n):
+        surf = pygame.Surface((8, 18), pygame.SRCALPHA)
+        fl = pygame.transform.scale(flame(i + 10, 8, 8), (8, 9))
+        surf.blit(fl, (0, 0))
+        pygame.draw.rect(surf, (66, 46, 34), (3, 9, 2, 9))
+        pygame.draw.rect(surf, (16, 12, 22), (2, 9, 4, 2))
+        frames.append(surf)
+    return frames
+
+
+class Art:
+    """Набор всех спрайтов игры, создаётся один раз после pygame.init()."""
+
+    def __init__(self):
+        hero = sprite_from_map(HERO_IDLE)
+        hero_atk = sprite_from_map(HERO_ATTACK)
+        skel = sprite_from_map(SKELETON_IDLE)
+        skel_atk = sprite_from_map(SKELETON_ATTACK)
+        self.hero = {
+            "idle": [hero, shifted_breath(hero)],
+            "attack": [hero_atk],
+            "dodge": [crouched(hero)],
+            "hurt": [tinted(hero, (255, 80, 60), 0.7)],
+            "heal": [tinted(hero, (255, 200, 90), 0.45)],
+        }
+        self.skeleton = {
+            "idle": [skel, shifted_breath(skel, 12)],
+            "windup": [tinted(skel, (255, 90, 50), 0.35), skel],
+            "attack": [skel_atk],
+            "hurt": [tinted(skel, (255, 255, 255), 0.8)],
+            "dead": [crouched(tinted(skel, (60, 50, 50), 0.5))],
+        }
+        self.bonfire = make_bonfire_frames()
+        self.torch = make_torch_frames()
+        self.title_bg = make_title_background()
+        self.arena_bg = make_arena_background()
