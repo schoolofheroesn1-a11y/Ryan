@@ -102,7 +102,7 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
           </div>
         </div>
       )}
-      <header className="margin-rule border-b border-line bg-surface/85">
+      <header className="border-b-[3px] border-ink bg-surface">
         <div className="container-page py-9 sm:py-12">
           <nav aria-label="Навигационная цепочка" className="mb-4 text-[13px] text-muted">
             <Link href="/library" className="hover:text-ink">Библиотека</Link> <span aria-hidden>/</span>{" "}

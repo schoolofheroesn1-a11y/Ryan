@@ -19,7 +19,7 @@ export function HeaderSearch() {
   return (
     <form action="/library" method="get" role="search" className="relative hidden w-full max-w-[240px] xl:block">
       <label htmlFor="header-q" className="sr-only">Поиск по библиотеке</label>
-      <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+      <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink" />
       <input
         ref={ref}
         id="header-q"
@@ -27,9 +27,9 @@ export function HeaderSearch() {
         name="q"
         placeholder="Найти решение…"
         maxLength={200}
-        className="h-10 w-full rounded-[10px] border border-line bg-paper pl-9 pr-9 text-[14px] text-ink placeholder:text-muted focus:border-accent focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/15"
+        className="input h-10 pl-9 pr-9 text-[13px]"
       />
-      <kbd aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-line-strong bg-surface px-1.5 text-[11px] text-muted">/</kbd>
+      <kbd aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 border-2 border-ink bg-marker px-1.5 text-[11px] font-bold">/</kbd>
     </form>
   );
 }

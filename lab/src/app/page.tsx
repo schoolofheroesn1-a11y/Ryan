@@ -94,10 +94,10 @@ export default async function HomePage() {
   return (
     <>
       {/* Первый экран: поиск и «паспорт решения» — так выглядит любой материал библиотеки */}
-      <section className="margin-rule overflow-hidden border-b border-line bg-surface/85">
+      <section className="border-b-[3px] border-ink bg-page">
         <div className="container-page grid items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.15fr_0.85fr] lg:py-20">
           <div className="min-w-0">
-            <p className="inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent-soft px-3 py-1 text-[12.5px] font-medium text-accent">
+            <p className="tag-label inline-flex items-center gap-2">
               <FlaskConical aria-hidden className="h-3.5 w-3.5" /> Открытая библиотека и испытательная площадка для учителей
             </p>
             <h1 className="mt-6 font-display text-[30px] font-semibold leading-[1.12] tracking-tight sm:text-[44px] lg:text-[50px]">
@@ -122,10 +122,10 @@ export default async function HomePage() {
 
           {specimen && (
             <div className="relative mx-auto w-full max-w-md lg:mx-0">
-              <p aria-hidden className="pointer-events-none absolute -top-9 right-2 hidden rotate-[-4deg] font-hand text-[24px] leading-none text-danger sm:block">
+              <p aria-hidden className="pointer-events-none absolute -top-9 right-2 hidden font-mono text-[12px] font-bold uppercase tracking-[0.08em] leading-none text-danger sm:block">
                 так описан каждый материал ↓
               </p>
-              <Link href={`/m/${specimen.slug}`} className="card-raised group block rotate-[1.2deg] p-6 transition-transform duration-300 hover:rotate-0 hover:shadow-[var(--shadow-lift)]">
+              <Link href={`/m/${specimen.slug}`} className="group block border-[3px] border-ink bg-surface p-6 shadow-[9px_9px_0_0_var(--color-cyan)] transition-[transform,box-shadow] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[12px_12px_0_0_var(--color-cyan)]">
                 <div className="flex items-center justify-between gap-2">
                   <span className="eyebrow">Паспорт решения</span>
                   <TypeLabel type={specimen.type} />
@@ -160,7 +160,7 @@ export default async function HomePage() {
                   </span>
                 </div>
               </Link>
-              <p aria-hidden className="pointer-events-none mt-3 hidden rotate-[-2deg] pl-6 font-hand text-[22px] leading-none text-ok sm:block">
+              <p aria-hidden className="pointer-events-none mt-3 hidden pl-6 font-mono text-[12px] font-bold uppercase tracking-[0.08em] leading-none text-ok sm:block">
                 статус — по критериям, а не «на глаз»
               </p>
             </div>
@@ -171,7 +171,7 @@ export default async function HomePage() {
       <section className="container-page mt-14" aria-labelledby="by-task">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="eyebrow text-accent">С чего начать</p>
+            <p className="tag-label">С чего начать</p>
             <h2 id="by-task" className="mt-2 font-display text-[22px] font-semibold tracking-tight sm:text-[26px]">Какую задачу вы решаете?</h2>
           </div>
           <Link href="/library" className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline">
@@ -183,7 +183,7 @@ export default async function HomePage() {
             const Icon = taskIcons[t.slug] ?? Lightbulb;
             return (
               <li key={t.id}>
-                <Link href={`/library?task=${t.slug}`} className="card group flex h-full items-start gap-3 p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[var(--shadow-card)] lg:flex-col">
+                <Link href={`/library?task=${t.slug}`} className="card group flex h-full items-start gap-3 p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-marker hover:shadow-[var(--shadow-card)] lg:flex-col">
                   <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent transition-colors group-hover:bg-accent group-hover:text-white">
                     <Icon className="h-5 w-5" />
                   </span>
@@ -203,7 +203,7 @@ export default async function HomePage() {
       <section className="container-page mt-16" aria-labelledby="practice">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="eyebrow text-accent">На ближайший урок</p>
+            <p className="tag-label">На ближайший урок</p>
             <h2 id="practice" className="mt-2 font-display text-[22px] font-semibold tracking-tight sm:text-[26px]">Свежие фишки и кейсы</h2>
           </div>
           <Link href="/practice" className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline">
@@ -222,7 +222,7 @@ export default async function HomePage() {
       <section className="container-page mt-16" aria-labelledby="research">
         <div className="grid gap-6 lg:grid-cols-[0.8fr_2fr]">
           <div>
-            <p className="eyebrow text-accent">Лаборатория испытаний</p>
+            <p className="tag-label">Лаборатория испытаний</p>
             <h2 id="research" className="mt-2 font-display text-[22px] font-semibold tracking-tight sm:text-[26px]">Что показали испытания</h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-soft">
               Сравниваем инструменты на одинаковых заданиях по заранее зафиксированным критериям. Критические ошибки показываем первой строкой.
@@ -260,10 +260,10 @@ export default async function HomePage() {
       </section>
 
       <section className="container-page mt-16" aria-labelledby="ladder">
-        <div className="card-raised overflow-hidden">
+        <div className="overflow-hidden border-[3px] border-ink bg-surface shadow-[9px_9px_0_0_var(--color-cyan)]">
           <div className="grid gap-10 p-6 sm:p-10 lg:grid-cols-[1fr_1.3fr]">
             <div>
-              <p className="eyebrow text-accent">Лестница доверия</p>
+              <p className="tag-label">Лестница доверия</p>
               <h2 id="ladder" className="mt-2 font-display text-[22px] font-semibold tracking-tight sm:text-[26px]">Статус проверки нужно заслужить</h2>
               <p className="mt-4 text-[15.5px] leading-relaxed text-ink-soft">
                 Каждая ступень — это конкретные условия, которые проверяет сервер. Редакция не может поднять статус «на глаз», а критерии испытаний
@@ -304,7 +304,7 @@ export default async function HomePage() {
       <section className="container-page mt-16" aria-labelledby="verified">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="eyebrow text-accent">Проверено на практике</p>
+            <p className="tag-label">Проверено на практике</p>
             <h2 id="verified" className="mt-2 font-display text-[22px] font-semibold tracking-tight sm:text-[26px]">Проверенные решения</h2>
           </div>
           <Link href="/library?verification=AUTHOR_TESTED&verification=MULTI_TEACHER&verification=INDEPENDENT" className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline">
@@ -321,7 +321,7 @@ export default async function HomePage() {
               Пока ни одно решение не поднялось выше первой ступени: библиотека только запускается, а статусы мы не выдаём авансом.
               Ваш отзыв о применении на практике может стать первым шагом.
             </p>
-            <p className="shrink-0 rotate-[-3deg] font-hand text-[26px] leading-none text-ok">ждём ваш опыт!</p>
+            <p className="shrink-0 font-mono text-[12px] font-bold uppercase tracking-[0.08em] leading-none text-ok">ждём ваш опыт!</p>
           </div>
         )}
       </section>
@@ -344,7 +344,7 @@ export default async function HomePage() {
           <Link href="/submit" className="btn mt-6 bg-marker font-semibold text-ink shadow-[0_2px_0_#c9b400] hover:-translate-y-px">
             Предложить материал <ArrowRight aria-hidden className="h-4 w-4" />
           </Link>
-          <p aria-hidden className="absolute bottom-5 right-6 hidden rotate-[-6deg] font-hand text-[28px] text-marker/90 md:block">ваш кейс здесь</p>
+          <p aria-hidden className="absolute bottom-5 right-6 hidden font-mono text-[12px] font-bold uppercase tracking-[0.08em] text-marker/90 md:block">ваш кейс здесь</p>
         </div>
         <div className="card-raised p-7 sm:p-10">
           <h2 className="font-display text-[20px] font-semibold tracking-tight">Присоединяйтесь</h2>

@@ -21,14 +21,14 @@ export function NavLinks({ variant }: { variant: "desktop" | "mobile" }) {
             key={n.href}
             href={n.href}
             aria-current={active ? "page" : undefined}
-            className={`relative whitespace-nowrap rounded-lg px-3 py-2 text-[14.5px] transition-colors ${
-              active ? "font-medium text-ink after:absolute after:inset-x-3 after:-bottom-[13px] after:h-[3px] after:rounded-full after:bg-accent" : "text-ink-soft hover:bg-accent-soft hover:text-accent"
+            className={`whitespace-nowrap px-3 py-2.5 font-mono text-[12.5px] font-bold uppercase tracking-[0.08em] text-ink transition-colors ${
+              active ? "underline decoration-[3px] underline-offset-[6px]" : "hover:bg-ink hover:text-marker"
             }`}
           >
             {n.label}
           </Link>
         ) : (
-          <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined} className={`rounded-lg px-3 py-2.5 ${active ? "bg-accent-soft font-medium text-accent" : "hover:bg-neutral-soft"}`}>
+          <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined} className={`px-3 py-2.5 font-mono text-[13px] font-bold uppercase tracking-[0.06em] ${active ? "bg-marker" : "hover:bg-marker"}`}>
             {n.label}
           </Link>
         );

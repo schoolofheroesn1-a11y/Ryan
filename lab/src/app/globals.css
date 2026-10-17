@@ -1,42 +1,55 @@
 @import "tailwindcss";
 
 /*
- * Визуальная система «Тетрадь лаборатории».
- * Фон — тетрадная клетка, цвета — школьные ручки: синяя (основной), красная (ошибки,
- * ограничения), зелёная (подтверждённая проверка) и жёлтый маркер для главного.
+ * Визуальная система «Полевой журнал лаборатории» — необрутализм.
+ * Жёлтая сигнальная полоса, толстые чёрные рамки, жёсткие смещённые тени
+ * (чёрная — для элементов управления, бирюзовая — для главных панелей),
+ * моноширинный текст протокола и крупные заголовки капсом.
+ * Розовый — цвет подсказок и ссылок, статусные цвета — только для статусов.
  */
 @theme {
-  --color-paper: #f4f6fb;
-  --color-surface: #ffffff;
-  --color-ink: #1a1d3a;
-  --color-ink-soft: #3b4064;
-  --color-muted: #676c8c;
-  --color-line: #dde3ef;
-  --color-line-strong: #c4ccdf;
-  --color-grid: rgb(70 110 190 / 0.10);
+  --color-page: #ffffff;
+  --color-paper: #fff4c2;
+  --color-surface: #fffbea;
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #1f1f1f;
+  --color-muted: #4d4d4d;
+  --color-line: #0a0a0a;
+  --color-line-strong: #0a0a0a;
 
-  --color-accent: #3a34c8;
-  --color-accent-hover: #2b25a6;
-  --color-accent-soft: #ecebfd;
+  --color-accent: #e0157a;
+  --color-accent-hover: #b40f61;
+  --color-accent-soft: #ffe14d;
+  --color-cyan: #00e0ff;
 
-  --color-ok: #17804a;
-  --color-ok-soft: #e3f4ea;
-  --color-info: #2f5d9a;
-  --color-info-soft: #e5eef9;
-  --color-warn: #8f5b00;
-  --color-warn-soft: #fdf1d3;
-  --color-danger: #c8322a;
-  --color-danger-soft: #fdeceb;
-  --color-neutral-soft: #eceef5;
-  --color-marker: #ffe76a;
+  --color-ok: #007a3d;
+  --color-ok-soft: #c9f5da;
+  --color-info: #0047b3;
+  --color-info-soft: #d4e6ff;
+  --color-warn: #8a5300;
+  --color-warn-soft: #ffe3a3;
+  --color-danger: #d4141b;
+  --color-danger-soft: #ffd6d6;
+  --color-neutral-soft: #f1ead0;
+  --color-marker: #ffd600;
 
-  --font-sans: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-unbounded), var(--font-onest), ui-sans-serif, sans-serif;
-  --font-hand: var(--font-caveat), "Comic Sans MS", cursive;
+  --font-sans: var(--font-mono-body), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-mono: var(--font-mono-body), ui-monospace, Menlo, monospace;
+  --font-display: var(--font-onest), "Arial Black", ui-sans-serif, sans-serif;
+  --font-hand: var(--font-mono-body), ui-monospace, monospace;
 
-  --radius-card: 16px;
-  --shadow-card: 0 1px 0 rgb(26 29 58 / 0.04), 0 8px 24px -12px rgb(26 29 58 / 0.18);
-  --shadow-lift: 0 2px 0 rgb(26 29 58 / 0.05), 0 18px 36px -16px rgb(58 52 200 / 0.35);
+  /* Углы прямые везде */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-card: 0px;
+
+  --shadow-card: 6px 6px 0 0 var(--color-ink);
+  --shadow-lift: 9px 9px 0 0 var(--color-cyan);
 }
 
 @layer base {
@@ -56,14 +69,10 @@
     }
   }
   body {
-    background-color: var(--color-paper);
-    background-image:
-      linear-gradient(var(--color-grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
-    background-size: 22px 22px;
+    background-color: var(--color-page);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-feature-settings: "kern";
+    font-size: 15px;
   }
   h1,
   h2,
@@ -73,9 +82,8 @@
     hyphens: auto;
   }
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 6px;
   }
   ::selection {
     background: var(--color-marker);
@@ -87,80 +95,85 @@
   @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
 }
 
+/* Кнопки: рамка, жёсткая тень, «нажатие» сдвигом */
 @utility btn {
-  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[10px] px-4 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex min-h-10 items-center justify-center gap-2 border-[2.5px] border-ink px-4 py-2 font-mono text-[13px] font-bold uppercase tracking-[0.06em] shadow-[4px_4px_0_0_var(--color-ink)] transition-[transform,box-shadow,background-color,color] duration-100 hover:-translate-x-px hover:-translate-y-px hover:shadow-[5px_5px_0_0_var(--color-ink)] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:opacity-60;
 }
 @utility btn-primary {
-  @apply btn bg-accent text-white shadow-[0_2px_0_#1f1a8a] hover:-translate-y-px hover:bg-accent-hover active:translate-y-0 active:shadow-none;
+  @apply btn bg-ink text-white hover:bg-ink;
 }
 @utility btn-secondary {
-  @apply btn border border-line-strong bg-surface text-ink hover:border-accent hover:text-accent;
+  @apply btn bg-white text-ink hover:bg-marker;
 }
 @utility btn-ghost {
-  @apply btn text-ink-soft hover:bg-accent-soft hover:text-accent;
+  @apply btn border-transparent bg-transparent text-ink shadow-none hover:border-ink hover:bg-marker hover:shadow-[3px_3px_0_0_var(--color-ink)];
 }
 @utility btn-danger {
-  @apply btn border border-danger/30 bg-surface text-danger hover:bg-danger-soft;
+  @apply btn bg-white text-danger hover:bg-danger-soft;
 }
 @utility btn-sm {
-  @apply min-h-8 rounded-lg px-3 py-1 text-[13px];
+  @apply min-h-8 px-3 py-1 text-[11.5px] shadow-[3px_3px_0_0_var(--color-ink)];
 }
 
 @utility input {
-  @apply block w-full rounded-[10px] border border-line-strong bg-surface px-3 py-2 text-[15px] text-ink transition-shadow placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 aria-[invalid=true]:border-danger;
+  @apply block w-full border-[2.5px] border-ink bg-white px-3 py-2 font-mono text-[15px] text-ink transition-shadow placeholder:text-muted focus:shadow-[4px_4px_0_0_var(--color-cyan)] focus:outline-none aria-[invalid=true]:border-danger aria-[invalid=true]:shadow-[4px_4px_0_0_var(--color-danger)];
 }
 @utility label {
-  @apply mb-1.5 block text-sm font-medium text-ink;
+  @apply mb-1.5 block font-mono text-[12.5px] font-bold uppercase tracking-[0.06em] text-ink;
 }
 @utility hint {
-  @apply mt-1 text-[13px] text-muted;
+  @apply mt-1 text-[12.5px] text-muted;
 }
 @utility field-error {
-  @apply mt-1 text-[13px] text-danger;
+  @apply mt-1 text-[13px] font-bold text-danger;
 }
 @utility card {
-  @apply rounded-[var(--radius-card)] border border-line bg-surface;
+  @apply border-[2.5px] border-ink bg-surface;
 }
 @utility card-raised {
-  @apply rounded-[var(--radius-card)] border border-line bg-surface shadow-[var(--shadow-card)];
+  @apply border-[3px] border-ink bg-surface shadow-[6px_6px_0_0_var(--color-ink)];
 }
 @utility chip {
-  @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[13px] text-ink-soft transition-colors;
+  @apply inline-flex items-center gap-1.5 border-2 border-ink bg-white px-2.5 py-1 font-mono text-[12px] font-bold uppercase tracking-[0.04em] text-ink transition-colors;
 }
 @utility link {
-  @apply text-accent underline decoration-accent/30 underline-offset-[3px] hover:decoration-accent;
+  @apply font-bold text-accent underline decoration-2 underline-offset-[3px] hover:bg-marker hover:text-ink;
 }
 @utility eyebrow {
-  @apply text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted;
+  @apply font-mono text-[11.5px] font-bold uppercase tracking-[0.14em] text-muted;
+}
+/* Чёрная плашка-метка над разделом */
+@utility tag-label {
+  @apply inline-block bg-ink px-2.5 py-1 font-display text-[13px] font-extrabold uppercase tracking-[0.02em] text-white;
 }
 
-/* Жёлтый маркер: выделение ключевого слова, как в тетради */
+/* Маркер: жёлтая заливка под ключевыми словами */
 @utility marker {
-  background-image: linear-gradient(100deg, transparent 0.2em, var(--color-marker) 0.25em, var(--color-marker) calc(100% - 0.3em), transparent calc(100% - 0.2em));
-  background-size: 100% 0.62em;
-  background-position: 0 88%;
-  background-repeat: no-repeat;
-  padding-inline: 0.08em;
+  background: var(--color-marker);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding-inline: 0.15em;
 }
 
-/* Красная линия полей — левая граница «страницы» */
+/* В этой системе линия полей не используется */
 @utility margin-rule {
   position: relative;
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: max(6px, calc((100vw - 72rem) / 2 - 18px));
-    width: 1.5px;
-    background: rgb(200 50 42 / 0.45);
-    pointer-events: none;
-  }
 }
 
 @utility prose-lab {
-  @apply text-[16px] leading-[1.7] text-ink-soft;
+  @apply font-mono text-[15px] leading-[1.75] text-ink-soft;
   & p + p {
     @apply mt-3;
   }
+}
+
+/* Заголовки — крупный гротеск капсом (вне слоёв, чтобы перекрывать начертания из утилит) */
+.font-display {
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+/* Никаких «таблеток»: всё прямоугольное */
+.rounded-full {
+  border-radius: 0;
 }

@@ -11,20 +11,21 @@ import { Suspense } from "react";
 export async function SiteHeader() {
   const user = await getCurrentUser();
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur-md">
-      <div className="container-page flex h-[64px] items-center gap-4">
-        <Link href="/" className="group flex shrink-0 items-center gap-2.5" aria-label="Лаборатория педагогических технологий — на главную">
-          <span aria-hidden className="grid h-9 w-9 place-items-center rounded-[10px] bg-accent text-white shadow-[0_2px_0_#1f1a8a] transition-transform group-hover:-rotate-6">
-            <FlaskConical className="h-[18px] w-[18px]" strokeWidth={2.2} />
+    <header className="sticky top-0 z-30 border-b-[3px] border-ink bg-marker">
+      <div className="container-page flex h-[78px] items-center gap-4">
+        <Link
+          href="/"
+          className="group flex shrink-0 items-center gap-3 border-[3px] border-ink bg-marker px-2.5 py-1.5 shadow-[5px_5px_0_0_var(--color-ink)] transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-[6px_6px_0_0_var(--color-ink)] active:translate-x-1 active:translate-y-1 active:shadow-none"
+          aria-label="Лаборатория педагогических технологий — на главную"
+        >
+          <span aria-hidden className="grid h-9 w-9 place-items-center bg-ink text-marker">
+            <FlaskConical className="h-5 w-5" strokeWidth={2.4} />
           </span>
           <span className="leading-none">
-            <span className="block font-display text-[14px] font-semibold tracking-tight">Лаборатория</span>
-            <span className="mt-1 block text-[11px] text-muted">педагогических технологий</span>
+            <span className="block font-display text-[17px] tracking-tight sm:text-[19px]">Лаборатория</span>
+            <span className="mt-1 block font-mono text-[10px] font-bold uppercase tracking-[0.12em]">педагогических технологий</span>
           </span>
         </Link>
-        <nav aria-label="Основная навигация" className="ml-2 hidden items-center gap-0.5 xl:flex">
-          <NavLinks variant="desktop" />
-        </nav>
         <div className="ml-auto hidden items-center gap-2 xl:flex">
           <HeaderSearch />
           <Link href="/submit" className="btn-secondary btn-sm whitespace-nowrap">
@@ -42,11 +43,11 @@ export async function SiteHeader() {
                 </summary>
               }
             >
-              <div className="absolute right-0 top-11 w-56 rounded-xl border border-line bg-surface p-1.5 text-[14px] shadow-[var(--shadow-lift)]">
+              <div className="absolute right-0 top-11 w-56 border-[3px] border-ink bg-white p-1.5 font-mono text-[13px] font-bold uppercase shadow-[6px_6px_0_0_var(--color-ink)]">
                 <p className="truncate px-3 py-2 text-[12.5px] text-muted">{user.name}</p>
-                <Link href="/me" className="block rounded-lg px-3 py-2 hover:bg-accent-soft hover:text-accent">Личный кабинет</Link>
-                <Link href="/me?tab=publications" className="block rounded-lg px-3 py-2 hover:bg-accent-soft hover:text-accent">Мои публикации</Link>
-                {isStaff(user) && <Link href="/admin" className="block rounded-lg px-3 py-2 hover:bg-accent-soft hover:text-accent">Редакция</Link>}
+                <Link href="/me" className="block rounded-lg px-3 py-2 hover:bg-marker">Личный кабинет</Link>
+                <Link href="/me?tab=publications" className="block rounded-lg px-3 py-2 hover:bg-marker">Мои публикации</Link>
+                {isStaff(user) && <Link href="/admin" className="block rounded-lg px-3 py-2 hover:bg-marker">Редакция</Link>}
                 <form action={logoutAction}>
                   <button className="w-full rounded-lg px-3 py-2 text-left text-danger hover:bg-danger-soft" type="submit">Выйти</button>
                 </form>
@@ -67,7 +68,7 @@ export async function SiteHeader() {
             </summary>
           }
         >
-          <div className="absolute right-0 top-12 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-lift)]">
+          <div className="absolute right-0 top-12 w-[min(18rem,calc(100vw-2rem))] border-[3px] border-ink bg-white p-2 shadow-[6px_6px_0_0_var(--color-ink)]">
             <form action="/library" method="get" role="search" className="p-1 pb-2">
               <label htmlFor="mobile-q" className="sr-only">Поиск</label>
               <input id="mobile-q" type="search" name="q" placeholder="Найти решение…" className="input h-10 text-[14px]" />
@@ -103,6 +104,12 @@ export async function SiteHeader() {
           </div>
         </AutoCloseDetails>
         </Suspense>
+      </div>
+      <div className="hidden border-t-[3px] border-ink lg:block">
+        <nav aria-label="Основная навигация" className="container-page flex items-center gap-1 py-1">
+          <NavLinks variant="desktop" />
+          <span className="ml-auto hidden font-mono text-[11px] font-bold uppercase tracking-[0.1em] xl:inline">Проверяем · Сравниваем · Публикуем</span>
+        </nav>
       </div>
     </header>
   );

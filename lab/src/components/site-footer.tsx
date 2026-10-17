@@ -3,7 +3,7 @@ import { FlaskConical } from "lucide-react";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-24 bg-ink text-[#c9cce4]">
+    <footer className="mt-24 border-t-[3px] border-ink bg-ink text-[#e8e8e8]">
       <div className="container-page grid gap-10 py-12 text-[14px] sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
         <div>
           <p className="flex items-center gap-2 font-display text-[15px] font-semibold text-white">
@@ -12,7 +12,7 @@ export function SiteFooter() {
           <p className="mt-3 max-w-sm leading-relaxed">
             Независимая исследовательская площадка: проверяем, какую педагогическую задачу решает технология, насколько хорошо и какой ценой.
           </p>
-          <p className="mt-4 font-hand text-[22px] leading-none text-marker">сначала проверяем — потом советуем</p>
+          <p className="mt-4 font-mono text-[12px] font-bold uppercase tracking-[0.08em] leading-none text-marker">сначала проверяем — потом советуем</p>
         </div>
         <nav aria-label="Разделы" className="flex flex-col gap-2.5">
           <p className="eyebrow text-[#8d92b8]">Разделы</p>
