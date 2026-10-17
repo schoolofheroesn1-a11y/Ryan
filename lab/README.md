@@ -86,6 +86,10 @@ npm run test:e2e      # Playwright на production-сборке; база E2E_DA
 
 ## Развёртывание
 
+**Самый простой путь — свой сервер с Docker: пошаговая инструкция для неспециалиста в [`deploy/README.md`](deploy/README.md).** Комплект `docker-compose.yml` поднимает сайт, PostgreSQL и Caddy (автоматический HTTPS), применяет миграции и создаёт администратора при первом запуске; `deploy/backup.sh` делает резервные копии.
+
+Без Docker:
+
 Подходит любой хостинг Node.js с PostgreSQL (VPS, Docker, PaaS).
 
 1. Создайте базу PostgreSQL и задайте переменные окружения из `.env.example`: `DATABASE_URL`, `APP_URL` (публичный https-адрес), `UPLOAD_DIR` (постоянный том), `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (длинный случайный пароль), `SEED_DEMO=false` для чистого запуска.
