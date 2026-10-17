@@ -146,6 +146,16 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
 
       <div className="container-page grid gap-10 py-8 lg:grid-cols-[1fr_300px]">
         <div className="flex min-w-0 flex-col gap-5">
+          <details className="card-raised p-4 lg:hidden">
+            <summary className="cursor-pointer list-none font-medium">Содержание страницы</summary>
+            <ol className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[14px] text-ink-soft [&_a]:block [&_a]:py-1">
+              {[
+                ["problem", "Задача"], ["audience", "Для кого"], ["resources", "Что понадобится"], ["steps", "Инструкция"],
+                ...(m.prompts.length ? [["prompts", "Промпты"]] : []), ["example", "Пример"], ["costs", "Время и стоимость"],
+                ["limitations", "Ограничения"], ["result", "Результат"], ["sources", "Источники"], ["verification", "Статус проверки"], ["reviews", "Отзывы"],
+              ].map(([id, label]) => <li key={id}><a href={`#${id}`} className="hover:text-accent">{label}</a></li>)}
+            </ol>
+          </details>
           <Section id="problem" title="Какую задачу решает">
             <Text value={m.problem} />
             {tasks.length > 0 && (
@@ -168,7 +178,7 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
           <Section id="steps" title="Пошаговая инструкция">
             {m.steps.length ? (
               <>
-                <StepsChecklist id={m.id} steps={m.steps} />
+                <StepsChecklist id={`${m.id}-${m.updatedAt.getTime()}`} steps={m.steps} />
                 <div className="mt-4"><CopyButton text={instructions} label="Копировать шаги" /></div>
               </>
             ) : (
@@ -294,7 +304,7 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Содержание страницы">
-          <nav className="card-raised p-5 text-[14px]">
+          <nav className="card-raised hidden p-5 text-[14px] lg:block">
             <p className="eyebrow mb-3">На странице</p>
             <ol className="flex flex-col gap-0.5 text-ink-soft [&_a]:block [&_a]:rounded-md [&_a]:px-2 [&_a]:py-1 [&_a:hover]:bg-accent-soft">
               {[

@@ -50,13 +50,14 @@ export function ReviewForm({ materialId }: { materialId: string }) {
   );
 }
 
-export function ReportForm({ materialId }: { materialId: string }) {
+export function ReportForm({ materialId, researchSlug }: { materialId?: string; researchSlug?: string }) {
   const [state, action] = useActionState(createReportAction, initialActionState);
   if (state.ok) return <FormMessage ok message={state.message} />;
   const v = state.values ?? {};
   return (
     <form action={action} className="flex flex-col gap-3" noValidate>
-      <input type="hidden" name="materialId" value={materialId} />
+      {materialId && <input type="hidden" name="materialId" value={materialId} />}
+      {researchSlug && <input type="hidden" name="researchSlug" value={researchSlug} />}
       <FormMessage message={state.message} />
       <div>
         <label htmlFor="report-reason" className="label">Что не так</label>

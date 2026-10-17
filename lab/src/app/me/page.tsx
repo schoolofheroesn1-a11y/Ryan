@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ProfileForm } from "@/components/forms/profile-form";
+import { PasswordForm, ProfileForm } from "@/components/forms/profile-form";
 import { MaterialCard } from "@/components/material-card";
 import { DeleteDraftButton } from "@/components/delete-draft-button";
 import { PublicationBadge, VerificationBadge } from "@/components/ui/badges";
@@ -59,14 +59,29 @@ export default async function MePage({ searchParams }: PageProps<"/me">) {
 }
 
 async function Favorites({ userId }: { userId: string }) {
-  const bookmarks = await prisma.bookmark.findMany({
-    where: { userId, material: { status: "PUBLISHED" } },
-    orderBy: { createdAt: "desc" },
-    include: { material: { include: { ...cardInclude, categories: { include: { category: true } } } } },
-  });
+  const [bookmarks, hidden] = await Promise.all([
+    prisma.bookmark.findMany({
+      where: { userId, material: { status: "PUBLISHED" } },
+      orderBy: { createdAt: "desc" },
+      include: { material: { include: { ...cardInclude, categories: { include: { category: true } } } } },
+    }),
+    prisma.bookmark.findMany({ where: { userId, material: { status: { not: "PUBLISHED" } } }, include: { material: { select: { title: true } } } }),
+  ]);
+  const hiddenNote = hidden.length > 0 && (
+    <p className="mb-4 rounded-lg border border-warn/25 bg-warn-soft px-3 py-2 text-[14px] text-warn">
+      Из избранного временно скрыто: {hidden.map((h) => `«${h.material.title}»`).join(", ")} — материал снят с публикации или на повторной
+      проверке. Он снова появится здесь после публикации.
+    </p>
+  );
+  if (!bookmarks.length && hiddenNote) return hiddenNote;
   if (!bookmarks.length)
     return <EmptyState title="В избранном пока ничего нет" action={<Link href="/library" className="btn-secondary">Открыть библиотеку</Link>}>Нажмите «В избранное» на странице материала, чтобы сохранить его здесь.</EmptyState>;
-  return <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{bookmarks.map((b) => <MaterialCard key={b.materialId} m={b.material} />)}</div>;
+  return (
+    <>
+      {hiddenNote}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{bookmarks.map((b) => <MaterialCard key={b.materialId} m={b.material} />)}</div>
+    </>
+  );
 }
 
 async function Publications({ userId }: { userId: string }) {
@@ -153,6 +168,8 @@ async function Settings({ userId }: { userId: string }) {
     <>
       <p className="mb-4 text-[14px] text-muted">Почта для входа: {u.email}</p>
       <ProfileForm initial={{ name: u.name, specialization: u.specialization ?? "", bio: u.bio ?? "", links: u.links.join("\n") }} />
+      <hr className="my-10 max-w-2xl border-line" />
+      <PasswordForm />
     </>
   );
 }

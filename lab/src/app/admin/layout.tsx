@@ -22,8 +22,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     ...(isAdmin(user) ? ([["/admin/users", "Пользователи и роли"], ["/admin/log", "Журнал действий"]] as [string, string][]) : []),
   ];
   return (
-    <div className="container-page grid gap-8 py-8 lg:grid-cols-[220px_1fr]">
-      <aside>
+    <div className="container-page grid grid-cols-1 gap-8 py-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <aside className="min-w-0">
         <p className="eyebrow mb-3">Редакция</p>
         <nav aria-label="Разделы редакции" className="flex gap-1 overflow-x-auto lg:flex-col">
           {links.map(([href, label, count]) => (

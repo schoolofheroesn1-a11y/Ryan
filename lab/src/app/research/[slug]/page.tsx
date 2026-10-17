@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ResearchTable } from "@/components/research-table";
+import { ReportForm } from "@/components/material-interactions";
 import { DemoBadge, PublicationBadge, TypeLabel } from "@/components/ui/badges";
 import { CopyButton } from "@/components/ui/copy-button";
 import { ShareButton } from "@/components/ui/share-button";
@@ -122,6 +123,28 @@ export default async function ResearchPage({ params }: PageProps<"/research/[slu
         <Block title="Выводы" value={r.conclusions} />
         <Block title="Рекомендации" value={r.recommendations} />
         <Block id="reproduction" title="Как воспроизвести испытание" value={r.reproduction} />
+
+        {r.moderationEvents.length > 0 && (
+          <section className="border-t border-line pt-6">
+            <h2 className="mb-3 text-[19px] font-semibold">История публикации</h2>
+            <ol className="flex flex-col gap-1.5 text-[14.5px] text-ink-soft">
+              {r.moderationEvents.map((e) => (
+                <li key={e.id}>
+                  <span className="text-muted">{formatDate(e.createdAt)}:</span> {e.toStatus === "PUBLISHED" ? "опубликовано" : e.toStatus === "UNPUBLISHED" ? "снято с публикации для исправлений" : "изменён статус"}
+                  {e.comment && <> — {e.comment}</>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {r.status === "PUBLISHED" && (
+          <section className="card-raised p-5 sm:p-7" aria-labelledby="report-h">
+            <h2 id="report-h" className="font-semibold">Нашли ошибку в испытании?</h2>
+            <p className="mb-3 mt-1 text-[13.5px] text-muted">Сообщение увидит только редакция. По подтверждённому сообщению испытание снимается с публикации для исправления.</p>
+            {user ? <ReportForm researchSlug={r.slug} /> : <p className="text-[14px] text-muted"><Link href={`/login?next=/research/${r.slug}`} className="link">Войдите</Link>, чтобы отправить сообщение.</p>}
+          </section>
+        )}
 
         {r.materials.length > 0 && (
           <section className="border-t border-line pt-6">

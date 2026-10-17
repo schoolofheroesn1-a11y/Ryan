@@ -44,7 +44,8 @@ export async function createReviewAction(_: ActionState, form: FormData): Promis
 export async function createReportAction(_: ActionState, form: FormData): Promise<ActionState> {
   const state = await toActionState(async () => {
     await createReport(await getCurrentUser(), {
-      materialId: String(form.get("materialId") ?? ""),
+      materialId: String(form.get("materialId") ?? "") || undefined,
+      researchSlug: String(form.get("researchSlug") ?? "") || undefined,
       raw: { reason: String(form.get("reason") ?? ""), body: String(form.get("body") ?? "") },
     });
     return { ok: true, message: "Сообщение отправлено редакции. Спасибо, что помогаете поддерживать качество." };

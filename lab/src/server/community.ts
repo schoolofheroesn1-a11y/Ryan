@@ -59,18 +59,27 @@ export async function moderateReview(actorInput: Actor | null, args: { id: strin
   return updated;
 }
 
-export async function createReport(actorInput: Actor | null, args: { materialId: string; raw: unknown }) {
+export async function createReport(actorInput: Actor | null, args: { materialId?: string; researchSlug?: string; raw: unknown }) {
   const actor = requireActor(actorInput);
   const parsed = reportSchema.safeParse(args.raw);
   if (!parsed.success) throw new ValidationError("Проверьте поля сообщения", zodFieldErrors(parsed.error));
-  const material = await prisma.material.findUnique({ where: { id: args.materialId }, select: { id: true, status: true, authorId: true } });
-  if (!material || !canViewMaterial(actor, material)) throw new NotFoundError("Материал не найден");
+  let materialId: string | null = null;
+  let researchSlug: string | null = null;
+  if (args.researchSlug) {
+    const research = await prisma.research.findUnique({ where: { slug: args.researchSlug }, select: { slug: true, status: true } });
+    if (!research || research.status !== "PUBLISHED") throw new NotFoundError("Исследование не найдено");
+    researchSlug = research.slug;
+  } else {
+    const material = await prisma.material.findUnique({ where: { id: args.materialId ?? "" }, select: { id: true, status: true, authorId: true } });
+    if (!material || !canViewMaterial(actor, material)) throw new NotFoundError("Материал не найден");
+    materialId = material.id;
+  }
   const recent = await prisma.report.count({
     where: { reporterId: actor.id, createdAt: { gte: new Date(Date.now() - 3600_000) } },
   });
   if (recent >= 10) throw new ValidationError("Слишком много сообщений за час. Попробуйте позже.");
   return prisma.report.create({
-    data: { materialId: material.id, reporterId: actor.id, reason: parsed.data.reason, body: parsed.data.body },
+    data: { materialId, researchSlug, reporterId: actor.id, reason: parsed.data.reason, body: parsed.data.body },
   });
 }
 

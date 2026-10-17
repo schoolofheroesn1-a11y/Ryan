@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveMaterialAction } from "@/app/actions/materials";
 import { initialActionState } from "@/lib/action-state";
+import { ATTACHMENT_MAX_BYTES, validateAttachment } from "@/lib/validation";
 import { costLabels, formatLabels, licenseOptions, materialTypeLabels, materialTypeOrder, skillLabels } from "@/lib/labels";
 import { FormMessage } from "../ui/form-message";
 import { SubmitButton } from "../ui/submit-button";
@@ -45,6 +46,8 @@ export function MaterialForm({
   republishWarning: boolean;
 }) {
   const [state, action] = useActionState(saveMaterialAction, initialActionState);
+  // Проверяем файл до отправки: слишком большой файл сервер отклонит вместе со всей формой.
+  const [fileError, setFileError] = useState<string | null>(null);
   const v = { ...initial, ...(state.values ?? {}) };
   const s = (k: string) => (Array.isArray(v[k]) ? (v[k] as string[]).join(", ") : String(v[k] ?? ""));
   const arr = (k: string) => (Array.isArray(v[k]) ? (v[k] as string[]) : v[k] ? [String(v[k])] : []);
@@ -126,8 +129,26 @@ export function MaterialForm({
         {hasAttachmentSlot ? (
           <div>
             <label htmlFor="f-file" className="label">Приложить файл</label>
-            <input id="f-file" name="file" type="file" className="input" accept=".pdf,.docx,.pptx,.xlsx,.odt,.odp,.txt,.csv,.png,.jpg,.jpeg" />
-            <p className="hint">PDF, DOCX, PPTX, XLSX, ODT, ODP, TXT, CSV, PNG, JPG — до 10 МБ. Можно приложить до 5 файлов.</p>
+            <input
+              id="f-file"
+              name="file"
+              type="file"
+              className="input"
+              accept=".pdf,.docx,.pptx,.xlsx,.odt,.odp,.txt,.csv,.png,.jpg,.jpeg"
+              aria-invalid={!!(fileError || e.file)}
+              aria-describedby="f-file-hint"
+              onChange={(ev) => {
+                const f = ev.currentTarget.files?.[0];
+                const err = f ? (f.size > ATTACHMENT_MAX_BYTES ? "Файл больше 10 МБ — уменьшите его или приложите ссылкой" : validateAttachment(f)) : null;
+                setFileError(err);
+                if (err) ev.currentTarget.value = "";
+              }}
+            />
+            {fileError || e.file ? (
+              <p id="f-file-hint" className="field-error" role="alert">{fileError ?? e.file}</p>
+            ) : (
+              <p id="f-file-hint" className="hint">PDF, DOCX, PPTX, XLSX, ODT, ODP, TXT, CSV, PNG, JPG — до 10 МБ. Можно приложить до 5 файлов.</p>
+            )}
           </div>
         ) : (
           <p className="text-[14px] text-muted">Достигнут предел в 5 файлов. Удалите ненужный файл, чтобы добавить новый.</p>

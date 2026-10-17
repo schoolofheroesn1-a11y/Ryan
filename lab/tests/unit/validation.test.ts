@@ -41,6 +41,9 @@ describe("вложения", () => {
     expect(validateAttachment({ name: "a.exe", type: "application/pdf", size: 100 })).not.toBeNull();
     expect(validateAttachment({ name: "a.pdf", type: "application/pdf", size: 11 * 1024 * 1024 })).not.toBeNull();
     expect(validateAttachment({ name: "a.html", type: "text/html", size: 10 })).not.toBeNull();
+    // Windows отдаёт CSV как application/vnd.ms-excel, некоторые браузеры — пустой тип
+    expect(validateAttachment({ name: "data.csv", type: "application/vnd.ms-excel", size: 10 })).toBeNull();
+    expect(validateAttachment({ name: "plan.docx", type: "", size: 10 })).toBeNull();
   });
   it("сверяет сигнатуру содержимого", () => {
     expect(sniffMatches("application/pdf", new Uint8Array([0x25, 0x50, 0x44, 0x46]))).toBe(true);

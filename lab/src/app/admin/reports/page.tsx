@@ -22,6 +22,7 @@ export default async function AdminReportsPage() {
           <article key={r.id} className="card p-5">
             <p className="text-[13px] font-semibold text-danger">{reportReasonLabels[r.reason]}</p>
             {r.material && <p className="mt-1"><Link href={`/admin/materials/${r.material.id}`} className="link font-medium">{r.material.title}</Link></p>}
+            {r.researchSlug && <p className="mt-1">Испытание: <Link href={`/research/${r.researchSlug}`} className="link font-medium">{r.researchSlug}</Link></p>}
             <p className="mt-1 text-[13px] text-muted">{r.reporter?.name ?? "Удалённый пользователь"} · {formatDate(r.createdAt)}</p>
             <p className="mt-2 whitespace-pre-line text-[15px]">{r.body}</p>
             <ActionForm action={resolveReportAction} className="mt-3 flex flex-col gap-2">
@@ -41,7 +42,7 @@ export default async function AdminReportsPage() {
           <h2 className="text-lg font-semibold">Недавно закрытые</h2>
           <ul className="mt-3 flex flex-col gap-2 text-[14px]">
             {closed.map((r) => (
-              <li key={r.id}>{reportStatusLabels[r.status]}: {r.material?.title ?? "—"} <span className="text-muted">· {r.resolvedBy?.name} · {formatDate(r.resolvedAt)}{r.resolution && ` — ${r.resolution}`}</span></li>
+              <li key={r.id}>{reportStatusLabels[r.status]}: {r.material?.title ?? (r.researchSlug ? `испытание ${r.researchSlug}` : "—")} <span className="text-muted">· {r.resolvedBy?.name} · {formatDate(r.resolvedAt)}{r.resolution && ` — ${r.resolution}`}</span></li>
             ))}
           </ul>
         </section>

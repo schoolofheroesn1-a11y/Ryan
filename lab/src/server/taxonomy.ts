@@ -4,6 +4,7 @@ import { slugify } from "@/lib/slug";
 import { logAudit } from "./audit";
 import { NotFoundError, ValidationError } from "./errors";
 import { requireStaff, type Actor } from "./permissions";
+import { reindexMaterials } from "./materials";
 
 export async function createCategory(actorInput: Actor | null, args: { kind: CategoryKind; name: string }) {
   const actor = requireStaff(actorInput);
@@ -26,6 +27,8 @@ export async function renameCategory(actorInput: Actor | null, args: { id: strin
   const c = await prisma.category.findUnique({ where: { id: args.id } });
   if (!c) throw new NotFoundError();
   await prisma.category.update({ where: { id: c.id }, data: { name } });
+  const linked = await prisma.materialCategory.findMany({ where: { categoryId: c.id }, select: { materialId: true } });
+  await reindexMaterials(linked.map((l) => l.materialId));
   await logAudit(prisma, { actorId: actor.id, action: "category.rename", targetType: "Category", targetId: c.id, details: `${c.name} → ${name}` });
 }
 
@@ -45,6 +48,8 @@ export async function renameTag(actorInput: Actor | null, args: { id: string; na
   const tag = await prisma.tag.findUnique({ where: { id: args.id } });
   if (!tag) throw new NotFoundError();
   await prisma.tag.update({ where: { id: tag.id }, data: { name } });
+  const linked = await prisma.materialTag.findMany({ where: { tagId: tag.id }, select: { materialId: true } });
+  await reindexMaterials(linked.map((l) => l.materialId));
   await logAudit(prisma, { actorId: actor.id, action: "tag.rename", targetType: "Tag", targetId: tag.id, details: `${tag.name} → ${name}` });
 }
 
@@ -52,6 +57,8 @@ export async function deleteTag(actorInput: Actor | null, id: string) {
   const actor = requireStaff(actorInput);
   const tag = await prisma.tag.findUnique({ where: { id } });
   if (!tag) throw new NotFoundError();
+  const linked = await prisma.materialTag.findMany({ where: { tagId: id }, select: { materialId: true } });
   await prisma.tag.delete({ where: { id } });
+  await reindexMaterials(linked.map((l) => l.materialId));
   await logAudit(prisma, { actorId: actor.id, action: "tag.delete", targetType: "Tag", targetId: id, details: tag.name });
 }

@@ -39,7 +39,9 @@ async function resolveTags(tx: Prisma.TransactionClient, names: string[]) {
   return ids;
 }
 
-function buildSearchText(input: MaterialInput, tagNames: string[], categoryNames: string[]) {
+type SearchSource = Pick<MaterialInput, "audience" | "resources" | "steps" | "example" | "expectedResult" | "adaptation" | "limitations" | "prompts">;
+
+function buildSearchText(input: SearchSource, tagNames: string[], categoryNames: string[]) {
   return [
     input.audience,
     input.resources,
@@ -104,9 +106,7 @@ export async function saveMaterial(
   }
   const input = parsed.data;
 
-  const existing = args.id
-    ? await prisma.material.findUnique({ where: { id: args.id }, select: { id: true, status: true, authorId: true } })
-    : null;
+  const existing = args.id ? await prisma.material.findUnique({ where: { id: args.id } }) : null;
   if (args.id && !existing) throw new NotFoundError("Материал не найден");
   if (existing && !canEditMaterial(actor, existing)) {
     throw new ForbiddenError(
@@ -129,12 +129,20 @@ export async function saveMaterial(
   else if (intent === "publish") next = "PUBLISHED";
   else next = previous ?? "DRAFT";
 
+  // Если автор изменил содержание проверенного материала, проверка относилась к прежней версии.
+  const content = contentData(input);
+  const contentChanged =
+    !!existing && substantiveFields.some((f) => JSON.stringify(existing[f] ?? "") !== JSON.stringify(content[f] ?? ""));
+  const resetVerification =
+    contentChanged && !isStaff(actor) && !["NOT_TESTED", "NEEDS_RECHECK"].includes(existing!.verificationStatus);
+
   return prisma.$transaction(async (tx) => {
     const tagIds = await resolveTags(tx, input.tags);
     const tagNames = input.tags;
     const searchText = buildSearchText(input, tagNames, categories.map((c) => c.name));
     const data = {
-      ...contentData(input),
+      ...content,
+      ...(resetVerification ? { verificationStatus: "NEEDS_RECHECK" as const } : {}),
       status: next,
       searchText,
       publishedAt: next === "PUBLISHED" ? new Date() : undefined,
@@ -172,12 +180,43 @@ export async function saveMaterial(
         },
       });
     }
+    if (resetVerification) {
+      await tx.moderationEvent.create({
+        data: {
+          materialId: material.id,
+          actorId: actor.id,
+          fromVerification: existing!.verificationStatus,
+          toVerification: "NEEDS_RECHECK",
+          comment: "Автор изменил содержание — прежняя проверка относилась к предыдущей версии",
+        },
+      });
+    }
     if (isStaff(actor) && existing && existing.authorId !== actor.id) {
       await logAudit(tx, { actorId: actor.id, action: "material.edit", targetType: "Material", targetId: material.id });
     }
     return material;
   });
 }
+
+/**
+ * Пересобирает поисковый текст материалов по текущим названиям тегов и категорий.
+ * Вызывается после переименования или удаления тегов и категорий.
+ */
+export async function reindexMaterials(ids: string[]) {
+  for (const id of ids) {
+    const m = await prisma.material.findUnique({
+      where: { id },
+      include: { tags: { include: { tag: true } }, categories: { include: { category: true } } },
+    });
+    if (!m) continue;
+    const searchText = buildSearchText(m, m.tags.map((t) => t.tag.name), m.categories.map((c) => c.category.name));
+    // updatedAt не трогаем: содержание материала не менялось
+    await prisma.$executeRaw`UPDATE "Material" SET "searchText" = ${searchText} WHERE "id" = ${id}`;
+  }
+}
+
+/** Поля, изменение которых означает, что прежняя проверка относилась к другому содержанию. */
+const substantiveFields = ["title", "summary", "problem", "audience", "resources", "steps", "example", "limitations", "expectedResult", "prompts", "testReport"] as const;
 
 export type ModerationDecision = "approve" | "reject" | "unpublish" | "republish";
 

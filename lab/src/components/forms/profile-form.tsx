@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { updateProfileAction } from "@/app/actions/profile";
+import { changePasswordAction, updateProfileAction } from "@/app/actions/profile";
 import { initialActionState } from "@/lib/action-state";
 import { FormMessage } from "../ui/form-message";
 import { SubmitButton } from "../ui/submit-button";
@@ -19,6 +19,20 @@ export function ProfileForm({ initial }: { initial: { name: string; specializati
       <TextArea label="О себе" name="bio" rows={4} defaultValue={v.bio} error={e.bio} />
       <TextArea label="Ссылки на профессиональные ресурсы" name="links" rows={3} defaultValue={v.links} error={e.links} hint="По одной ссылке в строке, до 5. Необязательно." />
       <div><SubmitButton>Сохранить профиль</SubmitButton></div>
+    </form>
+  );
+}
+
+export function PasswordForm() {
+  const [state, action] = useActionState(changePasswordAction, initialActionState);
+  const e = state.errors ?? {};
+  return (
+    <form action={action} className="flex max-w-2xl flex-col gap-4" noValidate>
+      <h2 className="text-lg font-semibold">Смена пароля</h2>
+      <FormMessage ok={state.ok} message={state.message} />
+      <TextField label="Текущий пароль" name="current" type="password" autoComplete="current-password" required error={e.current} />
+      <TextField label="Новый пароль" name="next" type="password" autoComplete="new-password" required minLength={8} error={e.next} hint="Не короче 8 символов. После смены все другие сеансы будут завершены." />
+      <div><SubmitButton className="btn-secondary">Сменить пароль</SubmitButton></div>
     </form>
   );
 }

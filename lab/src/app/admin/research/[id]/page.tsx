@@ -33,6 +33,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
   });
   if (!r) notFound();
   const locked = !!r.criteriaLockedAt;
+  const editable = r.status !== "PUBLISHED";
   const hidden = <input type="hidden" name="researchId" value={r.id} />;
 
   return (
@@ -46,6 +47,10 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
         </div>
       </div>
 
+      {!editable && (
+        <FormMessage message="Исследование опубликовано и защищено от изменений. Чтобы что-то исправить, снимите его с публикации, указав причину (она появится в истории испытания), внесите правки и опубликуйте снова." />
+      )}
+
       <section className="card p-5">
         <h2 className="font-semibold">1. Участники испытания</h2>
         <p className="mt-1 text-[13.5px] text-muted">Название и точная версия инструмента (или дата обращения к онлайн-сервису).</p>
@@ -55,12 +60,12 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
               <ActionForm action={removeToolAction} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-[14px]">
                 {hidden}<input type="hidden" name="toolId" value={t.id} />
                 <span><b>{t.name}</b> · {t.version}{t.availability && ` · ${t.availability}`}</span>
-                {!locked && <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>}
+                {!locked && editable && <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>}
               </ActionForm>
             </li>
           ))}
         </ul>
-        {!locked && (
+        {!locked && editable && (
           <ActionForm action={addToolAction} className="mt-3 grid gap-2 sm:grid-cols-2">
             {hidden}
             <input name="name" className="input" placeholder="Название *" aria-label="Название инструмента" />
@@ -82,12 +87,12 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
               <ActionForm action={removeCriterionAction} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-[14px]">
                 {hidden}<input type="hidden" name="criterionId" value={c.id} />
                 <span><b>{c.name}</b> · {dimensionLabels[c.dimension]} · вес {c.weight} · шкала 0–{c.scaleMax}</span>
-                {!locked && <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>}
+                {!locked && editable && <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>}
               </ActionForm>
             </li>
           ))}
         </ul>
-        {locked ? (
+        {locked || !editable ? (
           <p className="mt-3 rounded-lg bg-ok-soft px-3 py-2 text-[14px] text-ok">Критерии и состав участников зафиксированы {formatDate(r.criteriaLockedAt)}. Изменить их нельзя.</p>
         ) : (
           <>
@@ -112,7 +117,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
         )}
       </section>
 
-      {locked && r.tools.length > 0 && r.criteria.length > 0 && (
+      {locked && editable && r.tools.length > 0 && r.criteria.length > 0 && (
         <section className="card p-5">
           <h2 className="font-semibold">3. Результаты</h2>
           <ActionForm action={saveResultsAction} className="mt-3">
@@ -153,18 +158,18 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
                 <ActionForm action={removeIssueAction} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3 text-[14px]">
                   {hidden}<input type="hidden" name="issueId" value={i.id} />
                   <span>{i.isCritical && <b className="text-danger">Критическая: </b>}{r.tools.find((t) => t.id === i.toolId)?.name} — {i.description}</span>
-                  <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>
+                  {editable && <SubmitButton className="btn-danger btn-sm">Удалить</SubmitButton>}
                 </ActionForm>
               </li>
             ))}
           </ul>
-          <ActionForm action={addIssueAction} className="mt-3 grid gap-2 sm:grid-cols-[200px_1fr]">
+          {editable && <ActionForm action={addIssueAction} className="mt-3 grid gap-2 sm:grid-cols-[200px_1fr]">
             {hidden}
             <select name="toolId" className="input" aria-label="Инструмент">{r.tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
             <input name="description" className="input" placeholder="Описание ошибки" aria-label="Описание ошибки" />
             <label className="flex items-center gap-2 text-[14px]"><input type="checkbox" name="isCritical" /> Критическая</label>
             <div><SubmitButton className="btn-secondary btn-sm">Добавить</SubmitButton></div>
-          </ActionForm>
+          </ActionForm>}
         </section>
       )}
 
@@ -172,7 +177,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
         <h2 className="font-semibold">5. Публикация</h2>
         <ActionForm action={setResearchStatusAction} className="mt-3 flex flex-col gap-2">
           {hidden}
-          <input name="comment" className="input" placeholder="Комментарий (необязательно)" aria-label="Комментарий" />
+          <input name="comment" className="input" placeholder={editable ? "Комментарий (необязательно)" : "Причина снятия с публикации (обязательно, будет видна всем)"} aria-label="Комментарий" />
           <div className="flex flex-wrap gap-2">
             {r.status !== "PUBLISHED" && <SubmitButton name="status" value="PUBLISHED" className="btn-primary btn-sm">Опубликовать</SubmitButton>}
             {r.status === "PUBLISHED" && <SubmitButton name="status" value="UNPUBLISHED" className="btn-danger btn-sm">Снять с публикации</SubmitButton>}
@@ -180,7 +185,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
         </ActionForm>
       </section>
 
-      <section>
+      {editable && <section>
         <h2 className="mb-3 font-semibold">Описание исследования</h2>
         <ResearchForm
           id={r.id}
@@ -192,7 +197,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
             recommendations: r.recommendations, reproduction: r.reproduction, isDemo: r.isDemo,
           }}
         />
-      </section>
+      </section>}
     </div>
   );
 }

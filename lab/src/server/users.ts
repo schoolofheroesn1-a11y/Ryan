@@ -87,3 +87,18 @@ export async function setUserBlocked(actorInput: Actor | null, args: { userId: s
     targetId: user.id,
   });
 }
+
+export async function changePassword(actorInput: Actor | null, args: { current: string; next: string }) {
+  const actor = requireActor(actorInput);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: actor.id } });
+  if (!(await bcrypt.compare(args.current, user.passwordHash)))
+    throw new ValidationError("Текущий пароль указан неверно", { current: "Неверный пароль" });
+  if (args.next.length < 8 || args.next.length > 200)
+    throw new ValidationError("Новый пароль: от 8 символов", { next: "Минимум 8 символов" });
+  if (args.next === args.current) throw new ValidationError("Новый пароль совпадает с текущим", { next: "Придумайте другой пароль" });
+  // Завершаем все сессии: если пароль меняют из-за утечки, чужие входы должны прекратиться.
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(args.next, 12) } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+  ]);
+}

@@ -17,7 +17,7 @@ export function HeaderSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   return (
-    <form action="/library" method="get" role="search" className="relative hidden w-full max-w-[280px] lg:block">
+    <form action="/library" method="get" role="search" className="relative hidden w-full max-w-[240px] xl:block">
       <label htmlFor="header-q" className="sr-only">Поиск по библиотеке</label>
       <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
       <input

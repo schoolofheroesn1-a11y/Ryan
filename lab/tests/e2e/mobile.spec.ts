@@ -17,3 +17,11 @@ test("мобильное меню и фильтры работают", async ({ 
   await page.getByLabel("Предмет").first().selectOption("math");
   await expect(page).toHaveURL(/subject=math/);
 });
+
+test("мобильное меню закрывается после перехода", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Меню").click();
+  await page.getByRole("navigation", { name: "Мобильная навигация" }).getByRole("link", { name: "Библиотека" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByRole("navigation", { name: "Мобильная навигация" })).toBeHidden();
+});

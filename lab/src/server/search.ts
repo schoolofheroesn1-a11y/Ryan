@@ -10,14 +10,85 @@ export const PAGE_SIZE = 12;
  * с русской морфологией (рефлексия ≈ рефлексии) дополняется поиском
  * по подстроке, чтобы находились и незаконченные слова («геймиф»).
  */
+const STOP_WORDS = new Set(
+  "и в во на по с со к ко о об от до для из у за над под при про без а но или ли же не ни как что это то так the a an of to in on for and or".split(" "),
+);
+
+/**
+ * Группы синонимов: учитель может написать «нейросеть», а материал — «ИИ» или «языковая модель».
+ * Значения — начала слов (основы), поэтому охватывают разные падежи.
+ */
+const SYNONYMS: string[][] = [
+  ["ии", "ai", "нейросет", "искусственн", "языков модел", "llm", "gpt", "чат-бот", "чатбот", "генеративн"],
+  ["игр", "геймиф", "квест"],
+  ["тест", "контрольн", "проверочн", "викторин"],
+  ["разноуровнев", "дифференц", "индивидуализ"],
+  ["рефлекс", "обратн связ"],
+];
+
+const SEARCH_FIELDS = Prisma.sql`(m."title" || ' ' || m."summary" || ' ' || m."problem" || ' ' || m."searchText")`;
+
+function tokenize(q: string): string[] {
+  return q
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .split(/[^a-zа-я0-9-]+/)
+    .map((t) => t.replace(/^-+|-+$/g, ""))
+    .filter((t) => t.length > 1 && !STOP_WORDS.has(t));
+}
+
+/**
+ * Совпадение одного варианта: короткое слово пользователя — только целиком («ИИ» не находит «технологии»),
+ * основа синонима — по началу слова («игр» → «игра», «игровой»), длинные слова — по подстроке.
+ */
+function textMatch(alt: string, isStem: boolean): Prisma.Sql {
+  const words = alt.split(" ");
+  const parts = words.map((w) =>
+    w.length <= 3
+      ? Prisma.sql`${SEARCH_FIELDS} ~* ${isStem ? `(^|[^а-яёa-z0-9])${w}` : `(^|[^а-яёa-z0-9])${w}($|[^а-яёa-z0-9])`}`
+      : Prisma.sql`${SEARCH_FIELDS} ILIKE ${`%${w.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`,
+  );
+  return Prisma.sql`(${Prisma.join(parts, " AND ")})`;
+}
+
+function alternatives(token: string): string[] {
+  const group = SYNONYMS.find((g) => g.some((stem) => token.startsWith(stem.split(" ")[0])));
+  return group ? [token, ...group.filter((g) => g !== token)] : [token];
+}
+
+/**
+ * Текстовая часть запроса. Обычный запрос разбирается на слова: каждое слово (или его синоним)
+ * должно встретиться в материале — по русской морфологии или по началу слова.
+ * Запросы с операторами поиска («кавычки», -исключение, or) обрабатываются полнотекстовым поиском как есть.
+ */
+function textCondition(q: string): Prisma.Sql | null {
+  if (/["«»]|(^|\s)-\S|\sor\s/i.test(q)) {
+    return Prisma.sql`m."searchVector" @@ websearch_to_tsquery('russian', ${q})`;
+  }
+  const tokens = tokenize(q);
+  if (!tokens.length) {
+    // Запрос только из служебных слов («и», «по») не сужает выдачу; из символов («%», «C++») — ничего не находит.
+    const onlyStopWords = q.toLowerCase().split(/[^a-zа-яё0-9]+/).filter(Boolean).every((w) => STOP_WORDS.has(w));
+    return onlyStopWords && /[a-zа-яё]/i.test(q) ? null : Prisma.sql`FALSE`;
+  }
+  const perToken = tokens.map((token) => {
+    const alts = alternatives(token);
+    const fts = Prisma.join(alts.map((a) => Prisma.sql`m."searchVector" @@ plainto_tsquery('russian', ${a})`), " OR ");
+    const text = Prisma.join(alts.map((a, i) => textMatch(a, i > 0)), " OR ");
+    return Prisma.sql`(${fts} OR ${text})`;
+  });
+  return Prisma.join(perToken, " AND ");
+}
+
+/**
+ * Поиск по опубликованным материалам: полнотекстовый поиск PostgreSQL с русской морфологией
+ * (рефлексия ≈ рефлексии), синонимы и поиск по началу слова («геймиф»).
+ */
 function buildWhere(f: LibraryFilters): Prisma.Sql {
   const parts: Prisma.Sql[] = [Prisma.sql`m."status" = 'PUBLISHED'`];
   if (f.q) {
-    const like = `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    parts.push(Prisma.sql`(
-      m."searchVector" @@ websearch_to_tsquery('russian', ${f.q})
-      OR m."title" ILIKE ${like} OR m."summary" ILIKE ${like} OR m."problem" ILIKE ${like} OR m."searchText" ILIKE ${like}
-    )`);
+    const cond = textCondition(f.q);
+    if (cond) parts.push(Prisma.sql`(${cond})`);
   }
   if (f.types.length) parts.push(Prisma.sql`m."type"::text IN (${Prisma.join(f.types)})`);
   for (const [kind, slug] of [

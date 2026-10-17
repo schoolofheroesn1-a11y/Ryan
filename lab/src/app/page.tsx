@@ -110,7 +110,7 @@ export default async function HomePage() {
             <div className="mt-8 max-w-2xl">
               <SearchBox />
               <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-                <span>Часто ищут:</span>
+                <span>Например:</span>
                 {exampleQueries.map((q) => (
                   <Link key={q} href={`/library?q=${encodeURIComponent(q)}`} className="chip hover:border-accent hover:bg-accent-soft hover:text-accent">
                     {q}

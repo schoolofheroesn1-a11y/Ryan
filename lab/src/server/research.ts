@@ -49,6 +49,7 @@ export async function saveResearch(actorInput: Actor | null, args: { id?: string
   if (args.id) {
     const existing = await prisma.research.findUnique({ where: { id: args.id } });
     if (!existing) throw new NotFoundError();
+    assertNotPublished(existing);
     const updated = await prisma.research.update({ where: { id: args.id }, data });
     await logAudit(prisma, { actorId: actor.id, action: "research.edit", targetType: "Research", targetId: args.id });
     return updated;
@@ -60,9 +61,21 @@ export async function saveResearch(actorInput: Actor | null, args: { id?: string
   return created;
 }
 
+/**
+ * Опубликованное испытание нельзя менять «тихо»: сначала его снимают с публикации
+ * (с комментарием, который попадает в публичную историю), затем правят и публикуют снова.
+ */
+function assertNotPublished(research: { status: PublicationStatus }) {
+  if (research.status === "PUBLISHED")
+    throw new ValidationError(
+      "Исследование опубликовано. Чтобы изменить его, сначала снимите его с публикации с объяснением причины — это попадёт в историю испытания.",
+    );
+}
+
 async function loadEditable(id: string) {
   const research = await prisma.research.findUnique({ where: { id } });
   if (!research) throw new NotFoundError("Исследование не найдено");
+  assertNotPublished(research);
   return research;
 }
 
@@ -96,6 +109,7 @@ export async function removeTool(actorInput: Actor | null, toolId: string) {
   requireStaff(actorInput);
   const tool = await prisma.researchTool.findUnique({ where: { id: toolId }, include: { research: true } });
   if (!tool) throw new NotFoundError();
+  assertNotPublished(tool.research);
   if (tool.research.criteriaLockedAt) throw new ValidationError("Нельзя удалить инструмент после фиксации критериев");
   await prisma.researchTool.delete({ where: { id: toolId } });
 }
@@ -134,6 +148,7 @@ export async function removeCriterion(actorInput: Actor | null, criterionId: str
   requireStaff(actorInput);
   const c = await prisma.researchCriterion.findUnique({ where: { id: criterionId }, include: { research: true } });
   if (!c) throw new NotFoundError();
+  assertNotPublished(c.research);
   if (c.research.criteriaLockedAt) throw new ValidationError("Критерии уже зафиксированы");
   await prisma.researchCriterion.delete({ where: { id: criterionId } });
 }
@@ -163,6 +178,7 @@ export async function saveResults(
     include: { tools: true, criteria: true },
   });
   if (!research) throw new NotFoundError();
+  assertNotPublished(research);
   if (!research.criteriaLockedAt)
     throw new ValidationError("Сначала зафиксируйте критерии и веса — результаты вносятся только после этого");
   for (const e of args.entries) {
@@ -194,19 +210,26 @@ export async function addIssue(
   actorInput: Actor | null,
   args: { researchId: string; toolId: string; description: string; isCritical: boolean },
 ) {
-  requireStaff(actorInput);
+  const actor = requireStaff(actorInput);
+  await loadEditable(args.researchId);
   const tool = await prisma.researchTool.findFirst({ where: { id: args.toolId, researchId: args.researchId } });
   if (!tool) throw new ValidationError("Выберите инструмент");
   const description = args.description.trim().slice(0, 2000);
   if (description.length < 5) throw new ValidationError("Опишите ошибку");
-  return prisma.researchIssue.create({
+  const issue = await prisma.researchIssue.create({
     data: { researchId: args.researchId, toolId: tool.id, description, isCritical: args.isCritical },
   });
+  await logAudit(prisma, { actorId: actor.id, action: "research.issue.add", targetType: "Research", targetId: args.researchId, details: `${args.isCritical ? "критическая: " : ""}${description}` });
+  return issue;
 }
 
 export async function removeIssue(actorInput: Actor | null, issueId: string) {
-  requireStaff(actorInput);
+  const actor = requireStaff(actorInput);
+  const issue = await prisma.researchIssue.findUnique({ where: { id: issueId }, include: { research: true } });
+  if (!issue) throw new NotFoundError("Запись об ошибке не найдена — возможно, её уже удалили");
+  assertNotPublished(issue.research);
   await prisma.researchIssue.delete({ where: { id: issueId } });
+  await logAudit(prisma, { actorId: actor.id, action: "research.issue.remove", targetType: "Research", targetId: issue.researchId, details: `${issue.isCritical ? "критическая: " : ""}${issue.description}` });
 }
 
 export async function setResearchStatus(
@@ -220,6 +243,8 @@ export async function setResearchStatus(
   });
   if (!research) throw new NotFoundError();
   if (!["PUBLISHED", "UNPUBLISHED", "DRAFT"].includes(args.status)) throw new ValidationError("Недопустимый статус");
+  if (args.status === "UNPUBLISHED" && args.comment.trim().length < 5)
+    throw new ValidationError("Укажите причину снятия с публикации — она будет видна в истории испытания");
   if (args.status === "PUBLISHED") {
     if (!research.criteriaLockedAt || research._count.results === 0)
       throw new ValidationError("Публикация невозможна: критерии не зафиксированы или нет результатов");
@@ -250,6 +275,7 @@ export const researchPageInclude = {
   results: true,
   issues: true,
   materials: { where: { status: "PUBLISHED" }, select: { slug: true, title: true, type: true } },
+  moderationEvents: { orderBy: { createdAt: "asc" }, select: { id: true, toStatus: true, comment: true, createdAt: true } },
 } as const;
 
 export async function getResearchForView(slug: string, actor: Actor | null) {

@@ -46,7 +46,11 @@ export async function saveMaterialAction(_: ActionState, form: FormData): Promis
     }
     if (deferSubmit && !fileError) await saveMaterial(user, { id: savedId, raw, intent: "submit" });
   });
-  if (!state.ok) return { ...state, values: formValues(form) };
+  if (!state.ok) {
+    // Браузер не позволяет восстановить выбранный файл в форме — предупреждаем об этом явно.
+    const message = hasFile ? `${state.message} Выбранный файл не сохранён — прикрепите его заново.` : state.message;
+    return { ...state, message, values: formValues(form) };
+  }
 
   revalidatePath("/library");
   revalidatePath(`/m/${slug}`);

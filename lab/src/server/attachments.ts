@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { sniffMatches, validateAttachment } from "@/lib/validation";
+import { canonicalMime, sniffMatches, validateAttachment } from "@/lib/validation";
 import { ForbiddenError, NotFoundError, ValidationError } from "./errors";
 import { canEditMaterial, canViewMaterial, requireActor, type Actor } from "./permissions";
 import { getFile, putFile, removeFile } from "./storage";
@@ -18,8 +18,9 @@ export async function addAttachment(actorInput: Actor | null, args: { materialId
     throw new ValidationError(`Можно приложить не больше ${MAX_ATTACHMENTS} файлов`);
   const error = validateAttachment(args.file);
   if (error) throw new ValidationError(error, { file: error });
+  const mime = canonicalMime(args.file.name)!;
   const bytes = new Uint8Array(await args.file.arrayBuffer());
-  if (!sniffMatches(args.file.type, bytes.subarray(0, 8)))
+  if (!sniffMatches(mime, bytes.subarray(0, 8)))
     throw new ValidationError("Содержимое файла не соответствует его типу", { file: "Файл повреждён или имеет неверное расширение" });
   const key = await putFile(bytes);
   const safeName = args.file.name.replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 150);
@@ -29,7 +30,7 @@ export async function addAttachment(actorInput: Actor | null, args: { materialId
       uploaderId: actor.id,
       fileName: safeName,
       storageKey: key,
-      mimeType: args.file.type,
+      mimeType: mime,
       size: bytes.byteLength,
     },
   });

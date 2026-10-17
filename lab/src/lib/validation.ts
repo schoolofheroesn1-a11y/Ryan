@@ -193,13 +193,30 @@ export const allowedAttachmentTypes: Record<string, string[]> = {
   "image/jpeg": [".jpg", ".jpeg"],
 };
 
+/**
+ * Браузеры и ОС по-разному сообщают тип файла (CSV в Windows приходит как
+ * application/vnd.ms-excel, иногда тип пустой). Поэтому тип определяется по
+ * расширению, а присланный MIME допускается из списка известных вариантов.
+ * Реальное содержимое затем сверяется по сигнатуре (sniffMatches).
+ */
+const mimeAliases: Record<string, string[]> = {
+  "text/csv": ["application/vnd.ms-excel", "application/csv", "text/x-csv", "text/plain"],
+  "text/plain": [],
+  "application/pdf": ["application/x-pdf"],
+  "image/jpeg": ["image/pjpeg"],
+};
+
+export function canonicalMime(name: string): string | null {
+  const ext = name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+  return Object.entries(allowedAttachmentTypes).find(([, exts]) => exts.includes(ext))?.[0] ?? null;
+}
+
 export function validateAttachment(file: { name: string; type: string; size: number }): string | null {
   if (file.size === 0) return "Файл пустой";
   if (file.size > ATTACHMENT_MAX_BYTES) return "Файл больше 10 МБ";
-  const ext = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
-  const allowed = allowedAttachmentTypes[file.type];
-  if (!allowed || !allowed.includes(ext))
-    return "Недопустимый тип файла. Разрешены PDF, DOCX, PPTX, XLSX, ODT, ODP, TXT, CSV, PNG, JPG";
+  const mime = canonicalMime(file.name);
+  const typeOk = mime && (file.type === "" || file.type === mime || (mimeAliases[mime] ?? []).includes(file.type));
+  if (!typeOk) return "Недопустимый тип файла. Разрешены PDF, DOCX, PPTX, XLSX, ODT, ODP, TXT, CSV, PNG, JPG";
   return null;
 }
 
