@@ -31,7 +31,7 @@ export default function MethodologyPage() {
       </PageHeader>
       <div className="container-page flex max-w-4xl flex-col gap-12 py-10">
         <section aria-labelledby="statuses" id="statuses" className="scroll-mt-24">
-          <h2 id="statuses" className="font-serif text-2xl font-semibold">Статусы проверки материалов</h2>
+          <h2 id="statuses" className="font-display text-2xl font-semibold">Статусы проверки материалов</h2>
           <p className="mt-2 text-ink-soft">
             Статус не присваивается автоматически. Его меняет редакция, но сервер не позволит выбрать статус, требования которого не выполнены. Каждое изменение записывается в историю материала.
           </p>
@@ -49,7 +49,7 @@ export default function MethodologyPage() {
         </section>
 
         <section aria-labelledby="kinds">
-          <h2 id="kinds" className="font-serif text-2xl font-semibold">Три вида проверки — три силы вывода</h2>
+          <h2 id="kinds" className="font-display text-2xl font-semibold">Три вида проверки — три силы вывода</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             {(["TECHNICAL", "TEACHER_REVIEW", "STUDENT_OUTCOMES"] as const).map((k) => (
               <div key={k} className="card p-5">
@@ -65,7 +65,7 @@ export default function MethodologyPage() {
         </section>
 
         <section aria-labelledby="template">
-          <h2 id="template" className="font-serif text-2xl font-semibold">Единый шаблон оценки</h2>
+          <h2 id="template" className="font-display text-2xl font-semibold">Единый шаблон оценки</h2>
           <p className="mt-2 text-ink-soft">Для каждого испытания фиксируются следующие параметры. Не все применимы к каждому инструменту — неприменимые отмечаются явно.</p>
           <dl className="mt-5 grid gap-x-8 gap-y-3 sm:grid-cols-2">
             {template.map(([t, d]) => (
@@ -78,7 +78,7 @@ export default function MethodologyPage() {
         </section>
 
         <section aria-labelledby="rules">
-          <h2 id="rules" className="font-serif text-2xl font-semibold">Правила испытаний</h2>
+          <h2 id="rules" className="font-display text-2xl font-semibold">Правила испытаний</h2>
           <ol className="mt-4 list-decimal space-y-3 pl-5 text-[15.5px] leading-relaxed text-ink-soft">
             <li><b className="text-ink">Критерии и веса задаются до испытания.</b> Пока критерии не зафиксированы, результаты внести нельзя; после фиксации критерии и состав участников изменить нельзя.</li>
             <li><b className="text-ink">Одинаковые исходные задания.</b> При сравнении нескольких инструментов все получают одни и те же входные данные и запросы; версии инструментов записываются.</li>
@@ -93,7 +93,7 @@ export default function MethodologyPage() {
         </section>
 
         <section aria-labelledby="community">
-          <h2 id="community" className="font-serif text-2xl font-semibold">Отзывы и сообщения об ошибках</h2>
+          <h2 id="community" className="font-display text-2xl font-semibold">Отзывы и сообщения об ошибках</h2>
           <p className="mt-2 text-[15.5px] leading-relaxed text-ink-soft">
             Отзывы публикуются только после проверки редакцией. Отзыв с отметкой «применял на практике» должен описывать контекст применения — такие отзывы
             учитываются для статуса «Проверено несколькими педагогами». Сообщения об ошибках видит только редакция; по подтверждённому сообщению материал

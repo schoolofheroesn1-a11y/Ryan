@@ -19,7 +19,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
   });
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Пользователи и роли</h1>
+      <h1 className="font-display text-2xl font-semibold">Пользователи и роли</h1>
       <p className="mt-1 text-[14px] text-muted">Редактор модерирует материалы, отзывы и жалобы, ведёт исследования. Администратор дополнительно управляет ролями и видит журнал.</p>
       <form className="mt-4 flex gap-2" method="get">
         <label htmlFor="u-q" className="sr-only">Поиск</label>

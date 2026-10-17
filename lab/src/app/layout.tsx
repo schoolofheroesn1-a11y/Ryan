@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Golos_Text, Source_Serif_4 } from "next/font/google";
+import { Caveat, Onest, Unbounded } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
-const golos = Golos_Text({ variable: "--font-golos", subsets: ["latin", "cyrillic"], display: "swap" });
-const serif = Source_Serif_4({ variable: "--font-serif-display", subsets: ["latin", "cyrillic"], display: "swap" });
+const onest = Onest({ variable: "--font-onest", subsets: ["latin", "cyrillic"], display: "swap" });
+const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin", "cyrillic"], weight: ["500", "600", "700"], display: "swap" });
+const caveat = Caveat({ variable: "--font-caveat", subsets: ["latin", "cyrillic"], weight: ["500", "700"], display: "swap" });
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 
@@ -20,11 +21,11 @@ export const metadata: Metadata = {
   openGraph: { type: "website", locale: "ru_RU", siteName: "Лаборатория педагогических технологий" },
 };
 
-export const viewport: Viewport = { themeColor: "#f7f6f2" };
+export const viewport: Viewport = { themeColor: "#f4f6fb" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ru" className={`${golos.variable} ${serif.variable} h-full antialiased`}>
+    <html lang="ru" className={`${onest.variable} ${unbounded.variable} ${caveat.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:shadow">
           Перейти к содержанию

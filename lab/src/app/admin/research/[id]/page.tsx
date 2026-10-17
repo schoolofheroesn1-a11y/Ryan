@@ -39,7 +39,7 @@ export default async function EditResearchPage({ params, searchParams }: PagePro
     <div className="flex flex-col gap-6">
       {sp.saved && <FormMessage ok message="Исследование сохранено." />}
       <div>
-        <h1 className="font-serif text-2xl font-semibold">{r.title}</h1>
+        <h1 className="font-display text-2xl font-semibold">{r.title}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[14px]">
           <PublicationBadge status={r.status} />
           {r.status === "PUBLISHED" && <Link href={`/research/${r.slug}`} className="link">Открыть страницу</Link>}

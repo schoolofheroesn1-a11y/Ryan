@@ -16,7 +16,7 @@ export default async function AdminReportsPage() {
   ]);
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Жалобы и сообщения об ошибках</h1>
+      <h1 className="font-display text-2xl font-semibold">Жалобы и сообщения об ошибках</h1>
       <div className="mt-6 flex flex-col gap-3">
         {open.length === 0 ? <EmptyState title="Открытых жалоб нет" /> : open.map((r) => (
           <article key={r.id} className="card p-5">

@@ -5,7 +5,7 @@ export default function NotFound() {
   return (
     <div className="container-page py-20">
       <p className="eyebrow">Ошибка 404</p>
-      <h1 className="mt-2 font-serif text-3xl font-semibold">Страница не найдена</h1>
+      <h1 className="mt-2 font-display text-3xl font-semibold">Страница не найдена</h1>
       <p className="mt-3 max-w-xl text-ink-soft">
         Возможно, материал снят с публикации, ещё не прошёл модерацию или ссылка содержит ошибку. Попробуйте найти решение через поиск.
       </p>

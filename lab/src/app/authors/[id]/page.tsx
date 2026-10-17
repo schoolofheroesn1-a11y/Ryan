@@ -37,7 +37,7 @@ export default async function AuthorPage({ params }: PageProps<"/authors/[id]">)
       <header className="border-b border-line bg-surface">
         <div className="container-page py-10">
           <p className="eyebrow">Профиль автора</p>
-          <h1 className="mt-2 flex flex-wrap items-center gap-3 font-serif text-3xl font-semibold">
+          <h1 className="mt-2 flex flex-wrap items-center gap-3 font-display text-3xl font-semibold">
             {u.name} {u.isDemo && <DemoBadge label="Демонстрационный профиль" />}
           </h1>
           {u.specialization && <p className="mt-2 max-w-2xl text-[16px] text-ink-soft">{u.specialization}</p>}

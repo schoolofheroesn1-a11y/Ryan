@@ -58,7 +58,7 @@ export default async function AdminMaterialPage({ params, searchParams }: PagePr
       {fileError && <FormMessage message={`Файл не прикреплён: ${fileError}`} />}
       <div>
         <TypeLabel type={m.type} />
-        <h1 className="mt-1 font-serif text-2xl font-semibold">{m.title}</h1>
+        <h1 className="mt-1 font-display text-2xl font-semibold">{m.title}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <PublicationBadge status={m.status} />
           <VerificationBadge status={m.verificationStatus} size="sm" />

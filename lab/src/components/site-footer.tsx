@@ -1,25 +1,33 @@
 import Link from "next/link";
+import { FlaskConical } from "lucide-react";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-20 border-t border-line bg-surface">
-      <div className="container-page grid gap-8 py-10 text-[14px] text-muted sm:grid-cols-3">
+    <footer className="mt-24 bg-ink text-[#c9cce4]">
+      <div className="container-page grid gap-10 py-12 text-[14px] sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <p className="font-semibold text-ink">Лаборатория педагогических технологий</p>
-          <p className="mt-2 max-w-xs">
+          <p className="flex items-center gap-2 font-display text-[15px] font-semibold text-white">
+            <FlaskConical aria-hidden className="h-5 w-5 text-marker" /> Лаборатория педагогических технологий
+          </p>
+          <p className="mt-3 max-w-sm leading-relaxed">
             Независимая исследовательская площадка: проверяем, какую педагогическую задачу решает технология, насколько хорошо и какой ценой.
           </p>
+          <p className="mt-4 font-hand text-[22px] leading-none text-marker">сначала проверяем — потом советуем</p>
         </div>
-        <nav aria-label="Разделы" className="flex flex-col gap-2">
-          <Link href="/library" className="hover:text-ink">Библиотека решений</Link>
-          <Link href="/research" className="hover:text-ink">Лаборатория испытаний</Link>
-          <Link href="/practice" className="hover:text-ink">Фишки и кейсы</Link>
-          <Link href="/methodology" className="hover:text-ink">Методика и статусы проверки</Link>
+        <nav aria-label="Разделы" className="flex flex-col gap-2.5">
+          <p className="eyebrow text-[#8d92b8]">Разделы</p>
+          <Link href="/library" className="hover:text-white">Библиотека решений</Link>
+          <Link href="/practice" className="hover:text-white">Фишки и кейсы</Link>
+          <Link href="/research" className="hover:text-white">Лаборатория испытаний</Link>
+          <Link href="/methodology" className="hover:text-white">Методика и статусы проверки</Link>
         </nav>
-        <div className="flex flex-col gap-2">
-          <Link href="/submit" className="hover:text-ink">Предложить материал</Link>
-          <Link href="/register" className="hover:text-ink">Присоединиться к сообществу</Link>
-          <p className="mt-2 text-[13px]">Материалы с пометкой «Демо-пример» показывают формат и не являются результатами реальных испытаний.</p>
+        <div className="flex flex-col gap-2.5">
+          <p className="eyebrow text-[#8d92b8]">Участие</p>
+          <Link href="/submit" className="hover:text-white">Предложить материал</Link>
+          <Link href="/register" className="hover:text-white">Присоединиться к сообществу</Link>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#8d92b8]">
+            Материалы с пометкой «Демо-пример» показывают формат и не являются результатами реальных испытаний.
+          </p>
         </div>
       </div>
     </footer>

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type MaterialType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { LibraryFilters } from "@/lib/search-params";
 import { cardInclude } from "./materials";
@@ -81,6 +81,14 @@ export async function searchMaterials(f: LibraryFilters) {
   const ordered = ids.map((id) => materials.find((m) => m.id === id)!).filter(Boolean);
   const total = Number(countRows[0]?.count ?? 0);
   return { items: ordered, total, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
+
+/** Количество материалов каждого типа при текущих фильтрах (без учёта фильтра по типу). */
+export async function countByType(f: LibraryFilters, within?: MaterialType[]) {
+  const where = buildWhere({ ...f, types: within ?? [] });
+  const rows = await prisma.$queryRaw<{ type: MaterialType; count: bigint }[]>`
+    SELECT m."type"::text AS type, COUNT(*)::bigint AS count FROM "Material" m WHERE ${where} GROUP BY m."type"`;
+  return Object.fromEntries(rows.map((r) => [r.type, Number(r.count)])) as Partial<Record<MaterialType, number>>;
 }
 
 export async function getTaxonomy() {

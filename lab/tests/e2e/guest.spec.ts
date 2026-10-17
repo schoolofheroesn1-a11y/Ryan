@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("1. гость находит материал через поиск по задаче", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("searchbox").first().fill("рефлексия");
+  await page.locator("#search-lg").fill("рефлексия");
   await page.getByRole("button", { name: "Найти" }).first().click();
   await expect(page).toHaveURL(/\/library\?q=/);
   await expect(page.getByText(/найдено \d+ материал/)).toBeVisible();

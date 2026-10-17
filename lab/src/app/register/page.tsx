@@ -13,7 +13,7 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
   return (
     <div className="container-page flex justify-center py-12 sm:py-16">
       <div className="card w-full max-w-md p-6 sm:p-8">
-        <h1 className="font-serif text-2xl font-semibold">Присоединиться к сообществу</h1>
+        <h1 className="font-display text-2xl font-semibold">Присоединиться к сообществу</h1>
         <p className="mb-6 mt-1 text-sm text-muted">
           Регистрация бесплатна. Ваши публикации появятся в библиотеке после проверки редакцией.
         </p>

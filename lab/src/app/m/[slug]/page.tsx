@@ -5,6 +5,8 @@ import { MaterialCard } from "@/components/material-card";
 import { BookmarkButton, ReportForm, ReviewForm } from "@/components/material-interactions";
 import { DemoBadge, PublicationBadge, TypeLabel, VerificationBadge } from "@/components/ui/badges";
 import { CopyButton } from "@/components/ui/copy-button";
+import { StepsChecklist } from "@/components/steps-checklist";
+import { Clock, GraduationCap, Timer, Wallet } from "lucide-react";
 import { ShareButton } from "@/components/ui/share-button";
 import { prisma } from "@/lib/db";
 import { formatDate, formatFileSize, formatGrades, formatMinutes, paragraphs } from "@/lib/format";
@@ -27,10 +29,12 @@ export async function generateMetadata({ params }: PageProps<"/m/[slug]">): Prom
   };
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+function Section({ id, title, children, tone }: { id: string; title: string; children: React.ReactNode; tone?: "danger" | "ok" }) {
+  const box = tone === "danger" ? "border-danger/25 bg-danger-soft/50" : tone === "ok" ? "border-ok/25 bg-ok-soft/50" : "border-line bg-surface";
+  const head = tone === "danger" ? "text-danger" : tone === "ok" ? "text-ok" : "";
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-24 border-t border-line pt-7">
-      <h2 id={`${id}-h`} className="mb-3 text-[19px] font-semibold">{title}</h2>
+    <section id={id} aria-labelledby={`${id}-h`} className={`scroll-mt-24 rounded-[var(--radius-card)] border p-5 shadow-[var(--shadow-card)] sm:p-7 ${box}`}>
+      <h2 id={`${id}-h`} className={`mb-4 font-display text-[17px] font-semibold tracking-tight sm:text-[19px] ${head}`}>{title}</h2>
       {children}
     </section>
   );
@@ -98,8 +102,8 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
           </div>
         </div>
       )}
-      <header className="border-b border-line bg-surface">
-        <div className="container-page py-8 sm:py-10">
+      <header className="margin-rule border-b border-line bg-surface/85">
+        <div className="container-page py-9 sm:py-12">
           <nav aria-label="Навигационная цепочка" className="mb-4 text-[13px] text-muted">
             <Link href="/library" className="hover:text-ink">Библиотека</Link> <span aria-hidden>/</span>{" "}
             <Link href={`/library?type=${m.type}`} className="hover:text-ink"><TypeLabel type={m.type} /></Link>
@@ -108,13 +112,23 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
             <VerificationBadge status={m.verificationStatus} />
             {m.isDemo && <DemoBadge label="Демонстрационный материал" />}
           </div>
-          <h1 className="mt-3 max-w-4xl font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-[40px]">{m.title}</h1>
+          <h1 className="mt-4 max-w-4xl font-display text-[26px] font-semibold leading-[1.15] tracking-tight sm:text-[38px]">{m.title}</h1>
           <p className="mt-4 max-w-3xl text-[17px] leading-relaxed text-ink-soft">{m.summary}</p>
-          <dl className="mt-6 grid max-w-4xl grid-cols-2 gap-x-4 gap-y-4 text-[14px] sm:grid-cols-4">
-            <div><dt className="text-muted">Подготовка</dt><dd className="font-medium">{formatMinutes(m.prepTimeMin)}</dd></div>
-            <div><dt className="text-muted">На занятии</dt><dd className="font-medium">{formatMinutes(m.lessonTimeMin)}</dd></div>
-            <div><dt className="text-muted">Стоимость</dt><dd className="font-medium">{costLabels[m.cost]}</dd></div>
-            <div><dt className="text-muted">Классы</dt><dd className="font-medium">{formatGrades(m.gradeFrom, m.gradeTo)}</dd></div>
+          <dl className="mt-7 grid max-w-4xl grid-cols-2 gap-3 text-[14px] sm:grid-cols-4">
+            {[
+              [Clock, "Подготовка", formatMinutes(m.prepTimeMin)],
+              [Timer, "На занятии", formatMinutes(m.lessonTimeMin)],
+              [Wallet, "Стоимость", costLabels[m.cost]],
+              [GraduationCap, "Классы", formatGrades(m.gradeFrom, m.gradeTo)],
+            ].map(([Icon, label, value]) => {
+              const I = Icon as typeof Clock;
+              return (
+                <div key={label as string} className="rounded-xl border border-line bg-paper/70 p-3.5">
+                  <dt className="flex items-center gap-1.5 text-[12.5px] text-muted"><I aria-hidden className="h-3.5 w-3.5" /> {label as string}</dt>
+                  <dd className="mt-1 font-semibold">{value as string}</dd>
+                </div>
+              );
+            })}
           </dl>
           <div className="mt-6 flex flex-wrap gap-2">
             {published &&
@@ -131,7 +145,7 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
       </header>
 
       <div className="container-page grid gap-10 py-8 lg:grid-cols-[1fr_300px]">
-        <div className="flex min-w-0 flex-col gap-7">
+        <div className="flex min-w-0 flex-col gap-5">
           <Section id="problem" title="Какую задачу решает">
             <Text value={m.problem} />
             {tasks.length > 0 && (
@@ -154,14 +168,7 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
           <Section id="steps" title="Пошаговая инструкция">
             {m.steps.length ? (
               <>
-                <ol className="space-y-3">
-                  {m.steps.map((s, i) => (
-                    <li key={i} className="flex gap-3">
-                      <span aria-hidden className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent">{i + 1}</span>
-                      <span className="prose-lab">{s}</span>
-                    </li>
-                  ))}
-                </ol>
+                <StepsChecklist id={m.id} steps={m.steps} />
                 <div className="mt-4"><CopyButton text={instructions} label="Копировать шаги" /></div>
               </>
             ) : (
@@ -172,12 +179,12 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
             <Section id="prompts" title="Промпты">
               <div className="flex flex-col gap-3">
                 {m.prompts.map((p, i) => (
-                  <figure key={i} className="rounded-xl border border-line bg-paper p-4">
-                    <figcaption className="mb-2 flex items-center justify-between gap-2 text-[13px] text-muted">
+                  <figure key={i} className="overflow-hidden rounded-xl bg-ink">
+                    <figcaption className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 text-[13px] text-[#aeb2d6]">
                       Промпт {i + 1}
-                      <CopyButton text={p} label="Копировать промпт" />
+                      <CopyButton text={p} label="Копировать промпт" className="btn btn-sm border border-white/20 bg-white/10 text-white hover:bg-white/20" />
                     </figcaption>
-                    <pre className="whitespace-pre-wrap break-words font-sans text-[14.5px] leading-relaxed text-ink">{p}</pre>
+                    <pre className="whitespace-pre-wrap break-words px-4 py-4 font-mono text-[13.5px] leading-relaxed text-[#eef0ff]">{p}</pre>
                   </figure>
                 ))}
               </div>
@@ -191,8 +198,8 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
               <li>Стоимость: {costLabels[m.cost]}{m.costNote ? `. ${m.costNote}` : ""}</li>
             </ul>
           </Section>
-          <Section id="limitations" title="Ограничения и возможные проблемы"><Text value={m.limitations} /></Section>
-          <Section id="result" title="Ожидаемый результат"><Text value={m.expectedResult} /></Section>
+          <Section id="limitations" title="Ограничения и возможные проблемы" tone="danger"><Text value={m.limitations} /></Section>
+          <Section id="result" title="Ожидаемый результат" tone="ok"><Text value={m.expectedResult} /></Section>
           {m.adaptation && <Section id="adaptation" title="Как адаптировать"><Text value={m.adaptation} /></Section>}
           {files.length > 0 && (
             <Section id="files" title="Вложения">
@@ -287,9 +294,9 @@ export default async function MaterialPage({ params }: PageProps<"/m/[slug]">) {
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Содержание страницы">
-          <nav className="card p-5 text-[14px]">
+          <nav className="card-raised p-5 text-[14px]">
             <p className="eyebrow mb-3">На странице</p>
-            <ol className="flex flex-col gap-1.5 text-ink-soft">
+            <ol className="flex flex-col gap-0.5 text-ink-soft [&_a]:block [&_a]:rounded-md [&_a]:px-2 [&_a]:py-1 [&_a:hover]:bg-accent-soft">
               {[
                 ["problem", "Задача"], ["audience", "Для кого"], ["resources", "Что понадобится"], ["steps", "Инструкция"],
                 ...(m.prompts.length ? [["prompts", "Промпты"]] : []), ["example", "Пример"], ["costs", "Время и стоимость"],

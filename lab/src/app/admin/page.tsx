@@ -14,7 +14,7 @@ export default async function AdminQueuePage() {
   });
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Очередь модерации</h1>
+      <h1 className="font-display text-2xl font-semibold">Очередь модерации</h1>
       <p className="mt-1 text-[14px] text-muted">Материалы, отправленные авторами на проверку. Старые — сверху.</p>
       <div className="mt-6">
         {queue.length === 0 ? (

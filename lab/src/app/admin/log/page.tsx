@@ -8,7 +8,7 @@ export default async function LogPage() {
   const entries = await prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { actor: { select: { name: true } } } });
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Журнал административных действий</h1>
+      <h1 className="font-display text-2xl font-semibold">Журнал административных действий</h1>
       <p className="mt-1 text-[14px] text-muted">Последние 200 записей.</p>
       <div className="mt-5 overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full min-w-[640px] text-[14px]">

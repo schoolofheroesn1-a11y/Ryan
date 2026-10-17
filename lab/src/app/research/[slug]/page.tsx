@@ -47,7 +47,7 @@ export default async function ResearchPage({ params }: PageProps<"/research/[slu
             {r.isDemo && <DemoBadge label="Учебный пример — испытание не проводилось" />}
             {r.status !== "PUBLISHED" && <PublicationBadge status={r.status} />}
           </div>
-          <h1 className="mt-3 max-w-4xl font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-[38px]">{r.title}</h1>
+          <h1 className="mt-3 max-w-4xl font-display text-3xl font-semibold leading-tight tracking-tight sm:text-[38px]">{r.title}</h1>
           <p className="mt-4 max-w-3xl text-[17px] leading-relaxed text-ink-soft">{r.summary}</p>
           <p className="mt-3 max-w-3xl rounded-lg bg-paper px-3 py-2 text-[14px] text-muted">{researchKindHints[r.kind]}</p>
           <dl className="mt-6 grid max-w-3xl gap-4 text-[14px] sm:grid-cols-3">

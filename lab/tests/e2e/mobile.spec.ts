@@ -13,7 +13,7 @@ test("мобильное меню и фильтры работают", async ({ 
   await page.getByText("Меню").click();
   await expect(page.getByRole("navigation", { name: "Мобильная навигация" })).toBeVisible();
   await page.getByText("Меню").click();
-  await page.locator("summary", { hasText: "Фильтры" }).click();
+  await page.getByTestId("filters-mobile-toggle").click();
   await page.getByLabel("Предмет").first().selectOption("math");
   await expect(page).toHaveURL(/subject=math/);
 });

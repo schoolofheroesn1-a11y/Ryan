@@ -1,38 +1,31 @@
 import Link from "next/link";
+import { FlaskConical, Menu } from "lucide-react";
 import { getCurrentUser } from "@/server/auth";
 import { isStaff } from "@/server/permissions";
 import { logoutAction } from "@/app/actions/auth";
-
-const nav = [
-  { href: "/library", label: "Библиотека" },
-  { href: "/research", label: "Испытания" },
-  { href: "/practice", label: "Фишки и кейсы" },
-  { href: "/methodology", label: "Методика" },
-];
+import { HeaderSearch } from "./header-search";
+import { NavLinks } from "./nav-links";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-paper/95 backdrop-blur-sm">
-      <div className="container-page flex h-16 items-center gap-6">
-        <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
-          <span aria-hidden className="grid h-8 w-8 place-items-center rounded-lg bg-ink font-serif text-[15px] text-paper">
-            Л
+    <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur-md">
+      <div className="container-page flex h-[64px] items-center gap-4">
+        <Link href="/" className="group flex shrink-0 items-center gap-2.5" aria-label="Лаборатория педагогических технологий — на главную">
+          <span aria-hidden className="grid h-9 w-9 place-items-center rounded-[10px] bg-accent text-white shadow-[0_2px_0_#1f1a8a] transition-transform group-hover:-rotate-6">
+            <FlaskConical className="h-[18px] w-[18px]" strokeWidth={2.2} />
           </span>
-          <span className="leading-tight">
-            <span className="block text-[15px]">Лаборатория</span>
-            <span className="block text-[11px] font-normal text-muted">педагогических технологий</span>
+          <span className="leading-none">
+            <span className="block font-display text-[14px] font-semibold tracking-tight">Лаборатория</span>
+            <span className="mt-1 block text-[11px] text-muted">педагогических технологий</span>
           </span>
         </Link>
-        <nav aria-label="Основная навигация" className="hidden flex-1 items-center gap-1 md:flex">
-          {nav.map((n) => (
-            <Link key={n.href} href={n.href} className="rounded-md px-3 py-2 text-[15px] text-ink-soft hover:bg-neutral-soft hover:text-ink">
-              {n.label}
-            </Link>
-          ))}
+        <nav aria-label="Основная навигация" className="ml-2 hidden items-center gap-0.5 md:flex">
+          <NavLinks variant="desktop" />
         </nav>
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          <Link href="/submit" className="btn-secondary btn-sm">
+          <HeaderSearch />
+          <Link href="/submit" className="btn-secondary btn-sm whitespace-nowrap">
             Предложить материал
           </Link>
           {user ? (
@@ -42,7 +35,10 @@ export async function SiteHeader() {
                   Редакция
                 </Link>
               )}
-              <Link href="/me" className="btn-ghost btn-sm">
+              <Link href="/me" className="btn-ghost btn-sm" title={user.name}>
+                <span aria-hidden className="grid h-6 w-6 place-items-center rounded-full bg-accent-soft text-[11px] font-semibold text-accent">
+                  {user.name.slice(0, 1).toUpperCase()}
+                </span>
                 Кабинет
               </Link>
               <form action={logoutAction}>
@@ -59,37 +55,37 @@ export async function SiteHeader() {
         </div>
         <details className="relative ml-auto md:hidden">
           <summary className="btn-secondary btn-sm list-none" aria-label="Открыть меню">
-            Меню
+            <Menu aria-hidden className="h-4 w-4" /> Меню
           </summary>
-          <div className="absolute right-0 top-11 w-64 rounded-xl border border-line bg-surface p-2 shadow-lg">
+          <div className="absolute right-0 top-12 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-lift)]">
+            <form action="/library" method="get" role="search" className="p-1 pb-2">
+              <label htmlFor="mobile-q" className="sr-only">Поиск</label>
+              <input id="mobile-q" type="search" name="q" placeholder="Найти решение…" className="input h-10 text-[14px]" />
+            </form>
             <nav aria-label="Мобильная навигация" className="flex flex-col">
-              {nav.map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-md px-3 py-2.5 hover:bg-neutral-soft">
-                  {n.label}
-                </Link>
-              ))}
+              <NavLinks variant="mobile" />
               <hr className="my-2 border-line" />
-              <Link href="/submit" className="rounded-md px-3 py-2.5 hover:bg-neutral-soft">
+              <Link href="/submit" className="rounded-lg px-3 py-2.5 hover:bg-neutral-soft">
                 Предложить материал
               </Link>
               {user ? (
                 <>
                   {isStaff(user) && (
-                    <Link href="/admin" className="rounded-md px-3 py-2.5 hover:bg-neutral-soft">
+                    <Link href="/admin" className="rounded-lg px-3 py-2.5 hover:bg-neutral-soft">
                       Редакция
                     </Link>
                   )}
-                  <Link href="/me" className="rounded-md px-3 py-2.5 hover:bg-neutral-soft">
+                  <Link href="/me" className="rounded-lg px-3 py-2.5 hover:bg-neutral-soft">
                     Личный кабинет
                   </Link>
                   <form action={logoutAction}>
-                    <button className="w-full rounded-md px-3 py-2.5 text-left hover:bg-neutral-soft" type="submit">
+                    <button className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-neutral-soft" type="submit">
                       Выйти
                     </button>
                   </form>
                 </>
               ) : (
-                <Link href="/login" className="rounded-md px-3 py-2.5 font-medium text-accent hover:bg-neutral-soft">
+                <Link href="/login" className="rounded-lg px-3 py-2.5 font-medium text-accent hover:bg-neutral-soft">
                   Войти или зарегистрироваться
                 </Link>
               )}

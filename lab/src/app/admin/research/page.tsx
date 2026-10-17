@@ -11,7 +11,7 @@ export default async function AdminResearchList() {
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl font-semibold">Исследования</h1>
+        <h1 className="font-display text-2xl font-semibold">Исследования</h1>
         <Link href="/admin/research/new" className="btn-primary btn-sm">Новое исследование</Link>
       </div>
       <ul className="mt-6 flex flex-col gap-3">

@@ -22,7 +22,7 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps<"/a
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl font-semibold">Материалы</h1>
+        <h1 className="font-display text-2xl font-semibold">Материалы</h1>
         <Link href="/submit" className="btn-primary btn-sm">Создать материал</Link>
       </div>
       <form className="mt-4 flex flex-wrap gap-2" method="get">

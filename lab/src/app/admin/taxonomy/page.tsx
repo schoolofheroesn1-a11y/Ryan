@@ -13,7 +13,7 @@ export default async function TaxonomyPage() {
   ]);
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="font-serif text-2xl font-semibold">Теги и категории</h1>
+      <h1 className="font-display text-2xl font-semibold">Теги и категории</h1>
       {(Object.keys(categoryKindLabels) as (keyof typeof categoryKindLabels)[]).map((kind) => (
         <section key={kind} className="card p-5">
           <h2 className="font-semibold">{categoryKindLabels[kind]}</h2>

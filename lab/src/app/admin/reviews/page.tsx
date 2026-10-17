@@ -16,7 +16,7 @@ export default async function AdminReviewsPage() {
   });
   return (
     <div>
-      <h1 className="font-serif text-2xl font-semibold">Отзывы на проверке</h1>
+      <h1 className="font-display text-2xl font-semibold">Отзывы на проверке</h1>
       <p className="mt-1 text-[14px] text-muted">Публикуйте отзывы, которые описывают реальный опыт. Отзывы с отметкой «применял на практике» влияют на статус проверки материала.</p>
       <div className="mt-6 flex flex-col gap-3">
         {reviews.length === 0 ? <EmptyState title="Новых отзывов нет" /> : reviews.map((r) => (
