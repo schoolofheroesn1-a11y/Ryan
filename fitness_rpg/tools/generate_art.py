@@ -48,6 +48,16 @@ def main():
         sheet.blit(s, (x, 52 - s.get_height() - 4))
         x += s.get_width() + 4
     save(sheet, "character_sheet", 6)
+
+    # Витрина снаряжения: 4 меча × облики (обычный / доспех Костяного Рыцаря + амулет)
+    skins = pygame.Surface((4 * 70 + 4, 2 * 36 + 4))
+    skins.fill((20, 14, 24))
+    for i, sword in enumerate(art.SWORD_MAPS):
+        for j, look in enumerate(("base", "both")):
+            frames = a.heroes[(sword, look)]
+            skins.blit(frames["idle"][0], (4 + i * 70, 4 + j * 36))
+            skins.blit(frames["attack"][0], (30 + i * 70, 4 + j * 36))
+    save(skins, "skins", 5)
     print("Готово:", os.path.abspath(OUT))
 
 

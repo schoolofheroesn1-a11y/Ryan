@@ -284,14 +284,137 @@ def boss_map(arm):
     return ["".join(r) for r in rows]
 
 
-# --- Мечи героя: клинок на спрайтах перекрашивается под надетый меч ---
-# x — тело клинка, X — кромка/второй ряд (у двуручника клинок толще)
-SWORD_COLORS = {
-    "rusty": ((164, 120, 92), (112, 78, 58)),
-    "steel": ((234, 238, 244), (160, 170, 186)),
-    "great": ((206, 212, 224), (128, 134, 150)),
-    "ash": ((255, 196, 120), (226, 84, 40)),
+# --- Снаряжение героя: у каждого меча своя модель, доспех и амулет меняют самого героя ---
+# Мечи нарисованы вертикально (навершие сверху, остриё вниз); GRIP — строка рукояти.
+# В стойке меч висит в руке остриём к земле, в выпаде — та же модель, повёрнутая на 90°.
+SWORD_MAPS = {
+    # короткий ржавый меч с зазубринами
+    "rusty": [
+        ".k.",
+        "kmk",
+        ".b.",
+        ".b.",
+        "kmk",
+        "kMk",
+        "kMk",
+        ".Mk",
+        "kmk",
+        "kMk",
+        "kmk",
+        ".Mk",
+        "kMk",
+        ".k.",
+    ],
+    # длинный стальной клинок с золотой гардой
+    "steel": [
+        "..k..",
+        ".kgk.",
+        "..b..",
+        "..b..",
+        "kgggk",
+        ".kwk.",
+        ".kwk.",
+        ".klk.",
+        ".kwk.",
+        ".kwk.",
+        ".klk.",
+        ".kwk.",
+        ".kwk.",
+        ".klk.",
+        ".kwk.",
+        "..k..",
+    ],
+    # двуручник: широкий клинок почти в рост героя
+    "great": [
+        "...k...",
+        "..kgk..",
+        "...b...",
+        "...B...",
+        "...b...",
+        "kgggggk",
+        "..kgk..",
+        ".kwwlk.",
+        ".kwwlk.",
+        ".kwllk.",
+        ".kwwlk.",
+        ".kwwlk.",
+        ".kwllk.",
+        ".kwwlk.",
+        ".kwwlk.",
+        ".kwllk.",
+        "..kwk..",
+        "...k...",
+    ],
+    # пепельный клинок: зубчатый, раскалённый
+    "ash": [
+        "..k..",
+        ".kYk.",
+        "..n..",
+        "..n..",
+        "kzYzk",
+        ".kyk.",
+        "kYyk.",
+        ".kyYk",
+        "kYyk.",
+        ".kyYk",
+        "kYyk.",
+        ".kyYk",
+        "kYyk.",
+        ".kyYk",
+        ".kyk.",
+        "..k..",
+    ],
 }
+SWORD_GRIP = 2
+SWORD_PALETTE = dict(PALETTE, y=(255, 230, 160), Y=(246, 120, 40), z=(130, 36, 20))
+
+# Где рука держит рукоять: (x центра рукояти, y её верха)
+IDLE_GRIP = (20, 15)
+ATTACK_GRIP = (22, 13)
+ATTACK_W = 40
+
+# Цвет следа удара для каждого меча
+SLASH_COLORS = {
+    "rusty": (190, 140, 100),
+    "steel": (235, 240, 250),
+    "great": (200, 210, 230),
+    "ash": (255, 150, 60),
+}
+
+# Облик героя: доспех Костяного Рыцаря и/или Амулет Углей
+LOOKS = ("base", "armor", "amulet", "both")
+ARMOR_PALETTE = dict(
+    PALETTE,
+    d=(30, 26, 36), s=(58, 52, 68), l=(98, 90, 112), w=(146, 136, 158),
+    r=(80, 10, 16), R=(150, 24, 30),
+    Y=(246, 120, 40), y=(255, 230, 160),
+)
+BODY_PALETTE = dict(PALETTE, Y=(246, 120, 40), y=(255, 230, 160))
+
+
+def _body_rows(rows, width, look):
+    """Тело героя без меча (+ рога, красные глаза и/или амулет)."""
+    rows = [r.ljust(width, ".") for r in rows]
+    is_attack = width > 24
+    for y in range(len(rows)):
+        cut = range(22, width) if is_attack and 11 <= y <= 14 else \
+            (range(19, 22) if not is_attack and 15 <= y <= 27 else ())
+        for x in cut:
+            if is_attack and y == 11 and x == 21:
+                continue
+            _put(rows, x, y, ".")
+    if look in ("armor", "both"):
+        for x, y in ((7, 0), (8, 1), (18, 0), (17, 1)):  # рога
+            _put(rows, x, y, "O")
+        for x in (12, 14):  # глаза горят в прорези забрала
+            _put(rows, x, 6, "e")
+    if look in ("amulet", "both"):
+        _put(rows, 11, 9, "g")
+        _put(rows, 15, 9, "g")
+        for x, ch in ((12, "Y"), (13, "y"), (14, "Y")):
+            _put(rows, x, 10, ch)
+        _put(rows, 13, 11, "Y")
+    return rows
 
 
 def _put(rows, x, y, ch):
@@ -299,22 +422,32 @@ def _put(rows, x, y, ch):
     rows[y] = row[:x] + ch + row[x + 1:]
 
 
-def hero_sword_maps(sword):
-    """Карты HERO_IDLE/HERO_ATTACK с клинком выбранного меча."""
-    idle, atk = list(HERO_IDLE), list(HERO_ATTACK)
-    for y in range(18, 26):
-        _put(idle, 20, y, "x")
-    _put(idle, 20, 26, "X")
-    for x in range(23, 31):
-        _put(atk, x, 13, "x")
-    if sword == "great":
-        for y in range(17, 27):
-            _put(idle, 19, y, "X")
-        _put(idle, 20, 27, "k")
-        for x in range(23, 32):
-            _put(atk, x, 12, "X")
-            _put(atk, x, 11, "k")
-    return idle, atk
+def _rotate_ccw(rows):
+    """Поворот карты на 90° против часовой: навершие слева, остриё справа."""
+    w = max(len(r) for r in rows)
+    rows = [r.ljust(w, ".") for r in rows]
+    return ["".join(rows[c][w - 1 - r] for c in range(len(rows))) for r in range(w)]
+
+
+def compose_hero(sword, look, pose):
+    """Спрайт героя: меч рисуется первым, рука перчаткой ложится поверх рукояти."""
+    attack = pose == "attack"
+    width = ATTACK_W if attack else 24
+    body = sprite_from_map(_body_rows(HERO_ATTACK if attack else HERO_IDLE, width, look),
+                           ARMOR_PALETTE if look in ("armor", "both") else BODY_PALETTE)
+    blade_map = SWORD_MAPS[sword]
+    if attack:
+        blade = sprite_from_map(_rotate_ccw(blade_map), SWORD_PALETTE)
+        gx, gy = ATTACK_GRIP
+        pos = (gx - SWORD_GRIP, gy - blade.get_height() // 2)
+    else:
+        blade = sprite_from_map(blade_map, SWORD_PALETTE)
+        gx, gy = IDLE_GRIP
+        pos = (gx - blade.get_width() // 2, gy - SWORD_GRIP)
+    surf = pygame.Surface((width, 32), pygame.SRCALPHA)
+    surf.blit(blade, pos)
+    surf.blit(body, (0, 0))
+    return surf
 
 
 def sprite_from_map(rows, palette=PALETTE):
@@ -529,19 +662,22 @@ def make_torch_frames(n=4):
     return frames
 
 
-def make_hero_frames(sword):
-    main, edge = SWORD_COLORS[sword]
-    pal = dict(PALETTE, x=main, X=edge)
-    idle_map, atk_map = hero_sword_maps(sword)
-    hero = sprite_from_map(idle_map, pal)
+def make_hero_frames(sword, look="base"):
+    hero = compose_hero(sword, look, "idle")
     return {
         "idle": [hero, shifted_breath(hero)],
-        "attack": [sprite_from_map(atk_map, pal)],
+        "attack": [compose_hero(sword, look, "attack")],
         "dodge": [crouched(hero)],
         "hurt": [tinted(hero, (255, 80, 60), 0.7)],
         "heal": [tinted(hero, (255, 200, 90), 0.45)],
         "dead": [tinted(crouched(hero), (40, 10, 10), 0.6)],
     }
+
+
+def hero_look(owned):
+    """Облик героя по купленным реликвиям."""
+    armor, amulet = "armor" in owned, "amulet" in owned
+    return "both" if armor and amulet else "armor" if armor else "amulet" if amulet else "base"
 
 
 def make_boss_frames():
@@ -564,8 +700,8 @@ class Art:
     def __init__(self):
         skel = sprite_from_map(SKELETON_IDLE)
         skel_atk = sprite_from_map(SKELETON_ATTACK)
-        self.heroes = {sword: make_hero_frames(sword) for sword in SWORD_COLORS}
-        self.hero = self.heroes["rusty"]
+        self.heroes = {(sword, look): make_hero_frames(sword, look) for sword in SWORD_MAPS for look in LOOKS}
+        self.hero = self.heroes[("rusty", "base")]
         self.boss = make_boss_frames()
         self.skeleton = {
             "idle": [skel, shifted_breath(skel, 12)],
@@ -578,3 +714,7 @@ class Art:
         self.torch = make_torch_frames()
         self.title_bg = make_title_background()
         self.arena_bg = make_arena_background()
+
+    def hero_for(self, sword, owned):
+        """Кадры героя с этим мечом и обликом по реликвиям из owned."""
+        return self.heroes[(sword, hero_look(owned))]

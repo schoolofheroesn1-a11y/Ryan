@@ -22,12 +22,46 @@ const FRAMES = {
   boss: { idle: 2, windup: 2, attack: 1, hurt: 1, enraged: 2, dead: 1 },
   hero: { idle: 2, attack: 1, dodge: 1, hurt: 1, heal: 1, dead: 1 },
 };
+// Облик героя по реликвиям: доспех Костяного Рыцаря (рога, тёмные латы) и/или Амулет Углей
+const LOOKS = ["base", "armor", "amulet", "both"];
+function heroLook(owned) {
+  const armor = owned.includes("armor"), amulet = owned.includes("amulet");
+  return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
+}
+/** Префикс спрайтов героя с этим мечом и обликом. */
+const heroSprite = (sword, owned) => `hero_${sword}_${heroLook(owned)}`;
+
+// След удара для каждого меча
+const SLASH_TIME = 0.18;
+const SLASH_COLORS = { rusty: [190, 140, 100], steel: [235, 240, 250], great: [200, 210, 230], ash: [255, 150, 60] };
+
+/** Дуга следа удара: k от 0 (начало) до 1 (исчезла). Двуручник — шире, пепельный — огненный. */
+function drawSlash(c, x, y, sword, k) {
+  const big = sword === "great";
+  const radius = big ? 22 : 16;
+  const base = SLASH_COLORS[sword];
+  const fade = Math.max(0, 1 - k);
+  for (const [width, shrink, mix] of [[big ? 3 : 2, 0, 0], [1, 3, 0.5]]) {
+    const col = base.map((ch) => Math.floor((ch + (255 - ch) * mix) * fade + 20 * (1 - fade)));
+    c.fillStyle = `rgb(${col.join(",")})`;
+    const sweep = -70 + 140 * Math.min(1, k * 2.5); // дуга быстро «прочерчивается» сверху вниз
+    for (let a = -70; a <= sweep; a += 5) {
+      const rad = (a * Math.PI) / 180;
+      c.fillRect(Math.floor(x + Math.cos(rad) * (radius - shrink) * 0.55), Math.floor(y + Math.sin(rad) * (radius - shrink)), width, width);
+    }
+  }
+  if (sword === "ash") {
+    c.fillStyle = "rgb(255,200,90)";
+    for (let i = 0; i < 4; i++) c.fillRect(x + Math.floor(rand(-4, 10)), y + Math.floor(rand(-radius, radius)), 1, 1);
+  }
+}
+
 const SPRITES = [
   "title_bg", "arena_bg", "skeleton_dark_0",
   "bonfire_0", "bonfire_1", "bonfire_2", "bonfire_3", "torch_0", "torch_1", "torch_2", "torch_3",
 ];
 for (const [who, anims] of Object.entries(FRAMES)) {
-  const prefixes = who === "hero" ? Object.keys(SWORDS).map((sw) => `hero_${sw}`) : [who];
+  const prefixes = who === "hero" ? Object.keys(SWORDS).flatMap((sw) => LOOKS.map((lk) => `hero_${sw}_${lk}`)) : [who];
   for (const pre of prefixes) {
     for (const [name, n] of Object.entries(anims)) for (let i = 0; i < n; i++) SPRITES.push(`${pre}_${name}_${i}`);
   }
@@ -418,7 +452,8 @@ class TitleScene extends Scene {
     c.ellipse(208, GROUND_TITLE - 2, r, 8, 0, 0, Math.PI * 2);
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
-    c.drawImage(anim(`hero_${this.game.player.sword}_idle`, t, 1.5, 2), 172, GROUND_TITLE - 32);
+    const p = this.game.player;
+    c.drawImage(anim(`${heroSprite(p.sword, p.owned)}_idle`, t, 1.5, 2), 172, GROUND_TITLE - 32);
     const sx = 270, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
     if (Math.floor(t * 1.3) % 5 !== 0) {
@@ -525,8 +560,8 @@ class BonfireScene extends Scene {
     c.ellipse(216, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
-    const sw = this.game.player.sword;
-    const hero = this.ritual && this.ritual.done % 2 ? IMG[`hero_${sw}_attack_0`] : IMG[`hero_${sw}_idle_0`];
+    const p = this.game.player, hs = heroSprite(p.sword, p.owned);
+    const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, 168, GROUND_TITLE - 32);
     this.embers.draw(c);
   }
@@ -644,6 +679,8 @@ class BattleScene extends Scene {
     this.paused = false;
     this.torchL = new Particles(64, 58, 8, 2);
     this.torchR = new Particles(256, 58, 8, 2);
+    this.slashT = 0;
+    this.bladeEmbers = new Particles(0, 0, 14, 2);
   }
 
   float(text, x, y, color, size = 16) {
@@ -662,6 +699,7 @@ class BattleScene extends Scene {
       this.regenPause = 0.6;
       this.action = "attack";
       this.actionT = 0.35;
+      this.slashT = SLASH_TIME;
       const crit = en.state === "recover";
       let dmg = p.damage;
       if (crit) dmg = Math.floor(dmg * p.critMult);
@@ -765,6 +803,8 @@ class BattleScene extends Scene {
     const g = this.game, p = g.player, en = this.enemy;
     this.torchL.update(dt);
     this.torchR.update(dt);
+    this.bladeEmbers.update(dt);
+    this.slashT = Math.max(0, this.slashT - dt);
     for (const ft of this.texts) {
       ft.y -= 18 * dt;
       ft.ttl -= dt;
@@ -864,7 +904,8 @@ class BattleScene extends Scene {
     const ex = Math.round(en.x) - (en.state === "attack" ? 8 : 0);
     c.drawImage(spr, ex, GROUND_ARENA - spr.height);
 
-    const hero = `hero_${this.game.player.sword}`; // спрайт с надетым мечом
+    const p = this.game.player;
+    const hero = heroSprite(p.sword, p.owned); // спрайт с надетым мечом и обликом по реликвиям
     if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
     else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
@@ -876,6 +917,11 @@ class BattleScene extends Scene {
       c.globalAlpha = 1;
     }
     c.drawImage(spr, hx, GROUND_ARENA - spr.height);
+    if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME); // след удара
+    if (p.sword === "ash") { // раскалённый клинок искрит
+      [this.bladeEmbers.x, this.bladeEmbers.y] = this.action === "attack" ? [hx + 30, GROUND_ARENA - 20] : [hx + 20, GROUND_ARENA - 10];
+      this.bladeEmbers.draw(c);
+    }
 
     if (en.state === "windup") {
       const k = Math.max(0, Math.min(1, 1 - en.timer / en.windupTime));
@@ -967,6 +1013,7 @@ class ShopScene extends Scene {
     super(game);
     this.index = 0;
     this.embers = new Particles(300, 120, 10);
+    this.previewEmbers = new Particles(548, 236, 16, 6); // искры пепельного клинка в превью
     this.say("Алые камни дают за каждого врага, синие за боссов.", 4);
   }
   say(msg, t = 3) {
@@ -1007,6 +1054,7 @@ class ShopScene extends Scene {
   }
   update(dt) {
     this.embers.update(dt);
+    this.previewEmbers.update(dt);
     this.msgT -= dt;
   }
   draw(c) {
@@ -1041,9 +1089,14 @@ class ShopScene extends Scene {
       g.text(it.desc, r[0] + 8, r[1] + 21, 8, COL.dim);
       g.text(status, r[0] + r[2] - 8, r[1] + 14, 8, scol, "right");
     });
-    // крупное превью героя с надетым мечом
-    const hero = anim(`hero_${p.sword}_idle`, g.time, 1.5, 2);
+    // крупное превью героя; на непокупленной вещи — примерка
+    const key = SHOP_ROWS[this.index];
+    const sword = SWORDS[key] ? key : p.sword;
+    const owned = RELICS[key] ? [...p.owned, key] : p.owned;
+    const hero = anim(`${heroSprite(sword, owned)}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, 470, 2 * GROUND_ARENA - 128, 96, 128);
+    if (key !== "back" && !p.owned.includes(key)) g.text("ПРИМЕРКА", 518, 2 * GROUND_ARENA - 144, 8, "rgb(120,220,255)", "center");
+    if (sword === "ash") this.previewEmbers.draw(g.ctx);
     const w = p.weapon;
     g.text(w.name, W - 12, 20, 8, COL.text, "right");
     g.text(`урон ${p.damage} крит x${w.crit}`, W - 12, 34, 8, COL.dim, "right");

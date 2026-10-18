@@ -83,7 +83,18 @@ def take_screenshots(out_dir):
         s.act("pushup")
     shot(scenes.BattleScene(g), "09_boss_defeated", 1.5, boss_won)
     shop = scenes.ShopScene(g)
-    shot(shop, "10_forge", 0.5, lambda s: (setattr(s.menu, "index", 2), s.choose("great")))
+    shot(shop, "10_forge", 0.5, lambda s: (s.choose("great"), setattr(s.menu, "index", 4)))
+
+    g.player = Player(strength=6, vigor=4, endurance=4, souls=900, wave=11, red_gems=3, blue_gems=0,
+                      owned=["rusty", "steel", "great", "ash", "armor", "amulet"], sword="ash")
+    g.player.save = lambda *a, **k: None
+    g.run = None
+
+    def ash_attack(s):
+        s.ready = 0
+        s.enemy.set("recover", 99)
+        s.act("pushup")
+    shot(scenes.BattleScene(g), "11_ash_blade", 0.06, ash_attack)
     shot(scenes.CameraScene(g), "06_camera", 0.3)
     pygame.quit()
     print("Скриншоты сохранены в", os.path.abspath(out_dir))

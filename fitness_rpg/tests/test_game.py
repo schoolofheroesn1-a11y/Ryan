@@ -398,3 +398,25 @@ class KeyboardTest(unittest.TestCase):
         g.player.save = lambda *a, **k: None
         g.test_keys([self.key(pygame.KEYDOWN, pygame.K_F2), self.key(pygame.KEYDOWN, pygame.K_F3)])
         self.assertEqual((g.player.red_gems, g.player.blue_gems, g.player.wave), (10, 1, 5))
+
+
+class SkinsTest(unittest.TestCase):
+    """Каждая вещь меняет модель героя."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.art = shared_game().art
+
+    def pixels(self, surf):
+        import pygame
+        return pygame.image.tobytes(surf, "RGBA")
+
+    def test_every_sword_and_look_has_its_own_model(self):
+        from game.art import LOOKS, SWORD_MAPS, hero_look
+        idle = {key: self.pixels(f["idle"][0]) for key, f in self.art.heroes.items()}
+        attack = {key: self.pixels(f["attack"][0]) for key, f in self.art.heroes.items()}
+        self.assertEqual(len(idle), len(SWORD_MAPS) * len(LOOKS))
+        self.assertEqual(len(set(idle.values())), len(idle))
+        self.assertEqual(len(set(attack.values())), len(attack))
+        self.assertEqual(hero_look(["rusty", "armor"]), "armor")
+        self.assertEqual(hero_look(["rusty", "armor", "amulet"]), "both")

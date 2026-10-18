@@ -4,7 +4,7 @@ import random
 
 import pygame
 
-from .art import tinted
+from .art import SLASH_COLORS, tinted
 from .core import (COL_DIM, COL_GOLD, COL_GREEN, COL_RED, COL_SHADOW, COL_TEXT,
                    SCREEN_H, SCREEN_W, Particles, Scene)
 from .exercises import NAMES
@@ -100,7 +100,8 @@ class TitleScene(Scene):
         pygame.draw.ellipse(glow, (255, 120, 40, 40), (40 - r, 2, r * 2, 16))
         c.blit(glow, (168, GROUND_TITLE - 10))
         c.blit(anim(a.bonfire, t, 8), (200, GROUND_TITLE - 22))
-        c.blit(anim(a.heroes[self.game.player.sword]["idle"], t, 1.5), (172, GROUND_TITLE - 32))
+        p = self.game.player
+        c.blit(anim(a.hero_for(p.sword, p.owned)["idle"], t, 1.5), (172, GROUND_TITLE - 32))
         # скелет крадётся из тьмы — глаза мерцают
         sx, sy = 270, GROUND_TITLE - 32
         c.blit(self.skel_dark, (sx, sy))
@@ -193,7 +194,8 @@ class BonfireScene(Scene):
         c.blit(glow, (156, GROUND_TITLE - 24))
         fire = pygame.transform.scale(anim(a.bonfire, t, 8), (32, 44))
         c.blit(fire, (200, GROUND_TITLE - 44))
-        hero_frames = a.heroes[self.game.player.sword]
+        p = self.game.player
+        hero_frames = a.hero_for(p.sword, p.owned)
         hero = hero_frames["attack"][0] if self.ritual and self.ritual[3] % 2 else hero_frames["idle"][0]
         c.blit(hero, (168, GROUND_TITLE - 32))
         self.embers.draw(c)
@@ -250,6 +252,31 @@ class BonfireScene(Scene):
 
 
 # ---------------------------------------------------------------- Бой
+SLASH_TIME = 0.18
+
+
+def draw_slash(c, x, y, sword, k):
+    """Дуга следа удара: k от 0 (начало) до 1 (исчезла). Двуручник — шире, пепельный — огненный."""
+    big = sword == "great"
+    radius = 22 if big else 16
+    base = SLASH_COLORS[sword]
+    fade = max(0.0, 1 - k)
+    for width, shrink, mix in ((3 if big else 2, 0, 0.0), (1, 3, 0.5)):
+        col = tuple(int(ch + (255 - ch) * mix) for ch in base)
+        col = tuple(int(ch * fade + 20 * (1 - fade)) for ch in col)
+        sweep = -70 + 140 * min(1.0, k * 2.5)  # дуга быстро «прочерчивается» сверху вниз
+        a = -70
+        while a <= sweep:
+            rad = math.radians(a)
+            px = x + math.cos(rad) * (radius - shrink) * 0.55
+            py = y + math.sin(rad) * (radius - shrink)
+            pygame.draw.rect(c, col, (int(px), int(py), width, width))
+            a += 5
+    if sword == "ash":
+        for _ in range(4):
+            c.set_at((x + random.randint(-4, 10), y + random.randint(-radius, radius)), (255, 200, 90))
+
+
 class FloatText:
     def __init__(self, text, x, y, color, size=22, ttl=1.0):
         self.text, self.x, self.y, self.color, self.size, self.ttl = text, x, y, color, size, ttl
@@ -327,6 +354,8 @@ class BattleScene(Scene):
         self.paused = False
         self.torch_l = Particles(64, 58, rate=8, spread=2)
         self.torch_r = Particles(256, 58, rate=8, spread=2)
+        self.slash_t = 0.0
+        self.blade_embers = Particles(0, 0, rate=14, spread=2)
 
     def save_run(self):
         self.game.run = {"hp": self.hp, "estus": self.estus}
@@ -340,6 +369,7 @@ class BattleScene(Scene):
             self.stamina -= p.attack_cost
             self.regen_pause = 0.6
             self.action, self.action_t = "attack", 0.35
+            self.slash_t = SLASH_TIME
             dmg, crit = p.damage, en.state == "recover"
             if crit:
                 dmg = int(dmg * p.crit_mult)
@@ -441,6 +471,8 @@ class BattleScene(Scene):
         p, en = g.player, self.enemy
         self.torch_l.update(dt)
         self.torch_r.update(dt)
+        self.blade_embers.update(dt)
+        self.slash_t = max(0.0, self.slash_t - dt)
         for ft in self.texts:
             ft.y -= 18 * dt
             ft.ttl -= dt
@@ -538,7 +570,8 @@ class BattleScene(Scene):
         c.blit(spr, (ex, GROUND_ARENA - spr.get_height()))
 
         # Герой (с надетым мечом)
-        hero = a.heroes[self.game.player.sword]
+        p = self.game.player
+        hero = a.hero_for(p.sword, p.owned)
         if self.result == "dead":
             spr = hero["dead"][0]
         elif self.hurt_t > 0:
@@ -551,6 +584,12 @@ class BattleScene(Scene):
             ghost.set_alpha(70)
             c.blit(ghost, (hx + 8, GROUND_ARENA - spr.get_height()))
         c.blit(spr, (hx, GROUND_ARENA - spr.get_height()))
+        if self.slash_t > 0:  # след удара в цвет меча
+            draw_slash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - self.slash_t / SLASH_TIME)
+        if p.sword == "ash":  # раскалённый клинок искрит
+            self.blade_embers.x, self.blade_embers.y = (hx + 30, GROUND_ARENA - 20) if self.action == "attack" \
+                else (hx + 20, GROUND_ARENA - 10)
+            self.blade_embers.draw(c)
 
         if en.state == "windup":  # красная виньетка-предупреждение
             k = max(0.0, min(1.0, 1 - en.timer / en.windup_time))
@@ -646,6 +685,7 @@ class ShopScene(Scene):
         self.menu = Menu(items)
         self.message, self.msg_t = "Алые камни — за каждого врага, синие — за боссов.", 4.0
         self.embers = Particles(300, 120, rate=10)
+        self.preview_embers = Particles(544, 236, rate=16, spread=6)  # искры пепельного клинка в превью
 
     def say(self, msg, t=3.0):
         self.message, self.msg_t = msg, t
@@ -678,6 +718,7 @@ class ShopScene(Scene):
 
     def update(self, dt):
         self.embers.update(dt)
+        self.preview_embers.update(dt)
         self.msg_t -= dt
 
     def draw(self, c):
@@ -721,9 +762,16 @@ class ShopScene(Scene):
             if i == 3:  # разделитель: дальше реликвии за синие камни
                 pygame.draw.line(s, (70, 50, 44), (26, y + 36), (396, y + 36))
             y += 40
-        # крупное превью героя с надетым мечом
-        hero = anim(g.art.heroes[p.sword]["idle"], g.time, 1.5)
+        # крупное превью героя; на непокупленной вещи — примерка
+        key = self.menu.items[self.menu.index][0]
+        sword = key if key in SWORDS else p.sword
+        owned = p.owned + [key] if key in RELICS else p.owned
+        hero = anim(g.art.hero_for(sword, owned)["idle"], g.time, 1.5)
         s.blit(pygame.transform.scale(hero, (96, 128)), (466, 2 * GROUND_ARENA - 126))
+        if key != "back" and key not in p.owned:
+            g.text(s, "ПРИМЕРКА", (514, 2 * GROUND_ARENA - 146), 16, (120, 220, 255), center=True)
+        if sword == "ash":
+            self.preview_embers.draw(s)
         w = p.weapon
         g.text(s, f"Меч: {w['name']}", (SCREEN_W - 16, 24), 18, COL_TEXT, right=True)
         g.text(s, f"урон {p.damage}  крит x{w['crit']}  удар {w['cost']} сил", (SCREEN_W - 16, 42), 14, COL_DIM, right=True)
