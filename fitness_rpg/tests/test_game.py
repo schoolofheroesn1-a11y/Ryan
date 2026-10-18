@@ -294,12 +294,12 @@ class BossAndGearTest(unittest.TestCase):
         self.assertEqual(hp, sorted(hp))
         self.assertGreater(self.battle(Player(wave=10)).enemy.max_hp, self.battle(Player(wave=5)).enemy.max_hp)
 
-    def test_boss_armor_halves_damage_outside_window(self):
+    def test_boss_armor_softens_damage_outside_window(self):
         s = self.battle(Player(wave=5))
         en, p = s.enemy, self.game.player
         en.set("idle", 99)
         s.act("pushup")
-        self.assertEqual(en.max_hp - en.hp, p.damage // 2)
+        self.assertEqual(en.max_hp - en.hp, int(p.damage * 0.7))
         s.stamina = 999
         en.set("recover", 99)
         hp = en.hp

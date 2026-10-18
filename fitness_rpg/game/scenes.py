@@ -300,10 +300,11 @@ class Skeleton:
         self.kind = enemy_kind(wave)
         self.boss = self.kind in ("knight", "chief")
         self.name = self.NAMES[self.kind]
-        base_hp = 90 + 35 * (wave - 1)
-        base_dmg = 16 + 4 * (wave - 1)
-        self.windup_time = max(1.3, 1.9 - 0.05 * wave)  # время на реакцию (присед)
-        self.max_poise, self.combo_chance, self.max_combo = 3, (0.35 if wave >= 3 else 0.0), 1
+        # баланс под обычного человека без спортивной подготовки
+        base_hp = 50 + 15 * (wave - 1)
+        base_dmg = 12 + 2 * (wave - 1)
+        self.windup_time = max(1.6, 2.3 - 0.04 * wave)  # время на реакцию (присед)
+        self.max_poise, self.combo_chance, self.max_combo = 3, (0.25 if wave >= 4 else 0.0), 1
         self.max_hp, self.damage = base_hp, base_dmg
         self.steal = 0            # сколько пепла крадёт удар
         self.potion = False       # глава разбойников один раз пьёт зелье
@@ -311,22 +312,22 @@ class Skeleton:
         if self.kind == "bandit":  # быстрый и хлипкий, крадёт пепел
             self.max_hp = int(base_hp * 0.8)
             self.damage = int(base_dmg * 0.9)
-            self.windup_time = max(1.2, self.windup_time * 0.9)
-            self.combo_chance = 0.5
+            self.windup_time = max(1.5, self.windup_time * 0.9)
+            self.combo_chance = 0.35
             self.steal = 10 + wave
         elif self.kind == "knight":
-            self.max_hp = int(base_hp * 2.0)
-            self.damage = int(base_dmg * 1.25)
+            self.max_hp = int(base_hp * 1.6)
+            self.damage = int(base_dmg * 1.15)
             self.windup_time += 0.3       # тяжёлый двуручник замахивается дольше
             self.max_poise = 5
-            self.combo_chance, self.max_combo = 0.6, 2  # серии до трёх ударов
+            self.combo_chance, self.max_combo = 0.4, 2  # серии до трёх ударов
             self.home_x = 188.0
         elif self.kind == "chief":
-            self.max_hp = int(base_hp * 2.0)
-            self.damage = int(base_dmg * 0.8)  # бьёт всегда дважды, поэтому каждый удар слабее
-            self.windup_time = max(1.3, self.windup_time)
+            self.max_hp = int(base_hp * 1.6)
+            self.damage = int(base_dmg * 0.75)  # бьёт чаще дважды, поэтому каждый удар слабее
+            self.windup_time = max(1.6, self.windup_time)
             self.max_poise = 5
-            self.combo_chance, self.max_combo = 1.0, 1  # две сабли — всегда двойной удар
+            self.combo_chance, self.max_combo = 0.7, 1  # две сабли — чаще всего двойной удар
             self.steal = 20 + 2 * wave
             self.potion = True
             self.home_x = 184.0
@@ -398,7 +399,7 @@ class BattleScene(Scene):
             if crit:
                 dmg = int(dmg * p.crit_mult)
             elif en.kind == "knight":
-                dmg //= 2  # латы рыцаря: вне окна уязвимости проходит половина урона
+                dmg = int(dmg * 0.7)  # латы рыцаря: вне окна уязвимости гасят 30% урона
             en.hp -= dmg
             en.flash = 0.15
             self.game.shake = 0.12
@@ -546,22 +547,22 @@ class BattleScene(Scene):
             en.poise = en.max_poise
             en.combo_left = sum(random.random() < en.combo_chance for _ in range(en.max_combo))
             en.set("windup", en.windup_time)
-            g.sfx.play("warn")
+            g.sfx.play("alert")
         elif en.state == "windup" and en.timer <= 0:
             en.set("attack", 0.35)
             self.resolve_hit()
         elif en.state == "attack" and en.timer <= 0:
             if en.combo_left > 0:
                 en.combo_left -= 1  # следующий, более быстрый замах сразу после удара
-                en.set("windup", en.windup_time * 0.75)
-                g.sfx.play("warn")
+                en.set("windup", en.windup_time * 0.85)
+                g.sfx.play("alert")
                 self.float("ЕЩЁ УДАР!", en.x + 12, 70, (255, 120, 60), 16)
             else:
                 en.set("recover", en.recover_time())
         elif en.state == "recover" and en.timer <= 0:
             en.set("idle", random.uniform(1.6, 3.0))
         elif en.state == "drink" and en.timer <= 0:
-            heal = int(en.max_hp * 0.3)
+            heal = int(en.max_hp * 0.2)
             en.hp = min(en.max_hp, en.hp + heal)
             self.float(f"+{heal} ЗЕЛЬЕ", en.x + 12, 70, (120, 220, 120), 20)
             en.enraged = True  # подлечился и озверел

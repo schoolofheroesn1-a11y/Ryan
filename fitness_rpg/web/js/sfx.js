@@ -46,6 +46,16 @@ export const sfx = {
   dodge: () => tone(500, 0.12, { type: "triangle", slide: 300, vol: 0.1 }),
   heal: () => [0, 0.08, 0.16].forEach((d, i) => tone(440 * (1 + i * 0.25), 0.15, { type: "triangle", delay: d, vol: 0.1 })),
   warn: () => tone(220, 0.08, { vol: 0.08 }),
+  // враг замахнулся — пора приседать: громкий тревожный «дин-дин-ДОН», слышно с 2–3 м
+  alert: () => {
+    [[988, 0, 0.12], [988, 0.14, 0.12], [1319, 0.28, 0.3]].forEach(([f, d, len]) => {
+      tone(f, len, { type: "square", delay: d, vol: 0.24 });
+      tone(f * 2, len * 0.7, { type: "triangle", delay: d, vol: 0.12 });
+    });
+    try {
+      if (navigator.vibrate) navigator.vibrate([120, 40, 120]); // Android
+    } catch (e) { /* нет вибрации */ }
+  },
   rep: () => tone(660, 0.06, { type: "triangle", vol: 0.08 }),
   level: () => [0, 0.1, 0.2, 0.3].forEach((d, i) => tone([392, 494, 587, 784][i], 0.22, { type: "triangle", delay: d })),
   win: () => [0, 0.15, 0.3].forEach((d, i) => tone([330, 415, 494][i], 0.35, { type: "triangle", delay: d })),

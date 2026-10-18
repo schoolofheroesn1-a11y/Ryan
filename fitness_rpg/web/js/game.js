@@ -684,11 +684,12 @@ class Skeleton {
     this.kind = enemyKind(wave);
     this.boss = this.kind === "knight" || this.kind === "chief";
     this.name = Skeleton.NAMES[this.kind];
-    const baseHp = 90 + 35 * (wave - 1);
-    const baseDmg = 16 + 4 * (wave - 1);
-    this.windupTime = Math.max(1.3, 1.9 - 0.05 * wave); // время на реакцию (присед)
+    // баланс под обычного человека без спортивной подготовки
+    const baseHp = 50 + 15 * (wave - 1);
+    const baseDmg = 12 + 2 * (wave - 1);
+    this.windupTime = Math.max(1.6, 2.3 - 0.04 * wave); // время на реакцию (присед)
     this.maxPoise = 3;
-    this.comboChance = wave >= 3 ? 0.35 : 0;
+    this.comboChance = wave >= 4 ? 0.25 : 0;
     this.maxCombo = 1;
     this.maxHp = baseHp;
     this.damage = baseDmg;
@@ -698,22 +699,22 @@ class Skeleton {
     if (this.kind === "bandit") { // быстрый и хлипкий, крадёт пепел
       this.maxHp = Math.floor(baseHp * 0.8);
       this.damage = Math.floor(baseDmg * 0.9);
-      this.windupTime = Math.max(1.2, this.windupTime * 0.9);
-      this.comboChance = 0.5;
+      this.windupTime = Math.max(1.5, this.windupTime * 0.9);
+      this.comboChance = 0.35;
       this.steal = 10 + wave;
     } else if (this.kind === "knight") {
-      this.maxHp = Math.floor(baseHp * 2.0);
-      this.damage = Math.floor(baseDmg * 1.25);
+      this.maxHp = Math.floor(baseHp * 1.6);
+      this.damage = Math.floor(baseDmg * 1.15);
       this.windupTime += 0.3; // тяжёлый двуручник замахивается дольше
       this.maxPoise = 5;
-      this.comboChance = 0.6; // серии до трёх ударов
+      this.comboChance = 0.4; // серии до трёх ударов
       this.maxCombo = 2;
       this.homeX = 188;
     } else if (this.kind === "chief") {
-      this.maxHp = Math.floor(baseHp * 2.0);
-      this.damage = Math.floor(baseDmg * 0.8); // бьёт всегда дважды, поэтому каждый удар слабее
+      this.maxHp = Math.floor(baseHp * 1.6);
+      this.damage = Math.floor(baseDmg * 0.75); // бьёт всегда дважды, поэтому каждый удар слабее
       this.maxPoise = 5;
-      this.comboChance = 1; // две сабли — всегда двойной удар
+      this.comboChance = 0.7; // две сабли — чаще всего двойной удар
       this.steal = 20 + 2 * wave;
       this.potion = true;
       this.homeX = 184;
@@ -808,7 +809,7 @@ class BattleScene extends Scene {
       const crit = en.state === "recover";
       let dmg = p.damage;
       if (crit) dmg = Math.floor(dmg * p.critMult);
-      else if (en.kind === "knight") dmg = Math.floor(dmg / 2); // латы рыцаря: вне окна уязвимости — половина урона
+      else if (en.kind === "knight") dmg = Math.floor(dmg * 0.7); // латы рыцаря: вне окна уязвимости гасят 30% урона
       en.hp -= dmg;
       en.flash = 0.15;
       this.game.shake = 0.12;
@@ -981,23 +982,23 @@ class BattleScene extends Scene {
       en.comboLeft = 0;
       for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
       en.set("windup", en.windupTime);
-      sfx.warn();
+      sfx.alert();
     } else if (en.state === "windup" && en.timer <= 0) {
       en.set("attack", 0.35);
       this.resolveHit();
     } else if (en.state === "attack" && en.timer <= 0) {
       if (en.comboLeft > 0) {
         en.comboLeft -= 1; // следующий, более быстрый замах сразу после удара
-        en.set("windup", en.windupTime * 0.75);
+        en.set("windup", en.windupTime * 0.85);
         this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
-        sfx.warn();
+        sfx.alert();
       } else {
         en.set("recover", en.recoverTime());
       }
     } else if (en.state === "recover" && en.timer <= 0) {
       en.set("idle", rand(1.6, 3));
     } else if (en.state === "drink" && en.timer <= 0) {
-      const heal = Math.floor(en.maxHp * 0.3);
+      const heal = Math.floor(en.maxHp * 0.2);
       en.hp = Math.min(en.maxHp, en.hp + heal);
       this.float(`+${heal} ЗЕЛЬЕ`, en.x + 12, 70, "rgb(120,220,120)");
       en.enraged = true; // подлечился и озверел

@@ -48,6 +48,10 @@ class Sfx:
                 "dodge": T(500, 0.12, "triangle", 0.2, slide=300),
                 "heal": _mix(np, *[T(440 * (1 + i * 0.25), 0.15, "triangle", 0.2, delay=i * 0.08) for i in range(3)]),
                 "warn": T(220, 0.08, vol=0.15),
+                # враг замахнулся — пора приседать: громкий тревожный «дин-дин-ДОН»
+                "alert": _mix(np, *[w for f, d, n in ((988, 0, 0.12), (988, 0.14, 0.12), (1319, 0.28, 0.3))
+                                    for w in (T(f, n, "square", 0.45, delay=d),
+                                              T(f * 2, n * 0.7, "triangle", 0.2, delay=d))]),
                 "rep": T(660, 0.06, "triangle", 0.15),
                 "level": _mix(np, *[T(f, 0.22, "triangle", 0.22, delay=i * 0.1) for i, f in enumerate((392, 494, 587, 784))]),
                 "win": _mix(np, *[T(f, 0.35, "triangle", 0.22, delay=i * 0.15) for i, f in enumerate((330, 415, 494))]),
