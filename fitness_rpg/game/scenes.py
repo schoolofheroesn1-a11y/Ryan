@@ -8,7 +8,8 @@ from .art import tinted
 from .core import (COL_DIM, COL_GOLD, COL_GREEN, COL_RED, COL_SHADOW, COL_TEXT,
                    SCREEN_H, SCREEN_W, Particles, Scene)
 from .exercises import NAMES
-from .player import ESTUS_MAX, STATS, Player
+from .gear import RELICS, SHOP_ORDER, SWORDS, is_boss_wave, item, price_text, rewards
+from .player import STATS, Player
 
 GROUND_TITLE = 150
 GROUND_ARENA = 140
@@ -99,7 +100,7 @@ class TitleScene(Scene):
         pygame.draw.ellipse(glow, (255, 120, 40, 40), (40 - r, 2, r * 2, 16))
         c.blit(glow, (168, GROUND_TITLE - 10))
         c.blit(anim(a.bonfire, t, 8), (200, GROUND_TITLE - 22))
-        c.blit(anim(a.hero["idle"], t, 1.5), (172, GROUND_TITLE - 32))
+        c.blit(anim(a.heroes[self.game.player.sword]["idle"], t, 1.5), (172, GROUND_TITLE - 32))
         # скелет крадётся из тьмы — глаза мерцают
         sx, sy = 270, GROUND_TITLE - 32
         c.blit(self.skel_dark, (sx, sy))
@@ -115,7 +116,8 @@ class TitleScene(Scene):
         g.text(s, "фитнес-RPG: тренируй тело, чтобы выжить во тьме", (SCREEN_W // 2, 62), 18, COL_DIM, center=True)
         self.menu.draw(g, s, 60, 150)
         p = g.player
-        g.text(s, f"Уровень {p.level}   Пепел: {p.souls}   Следующий враг: скелет #{p.wave}",
+        foe = "БОСС" if is_boss_wave(p.wave) else "скелет"
+        g.text(s, f"Уровень {p.level}   Пепел: {p.souls}   Следующий враг: {foe} #{p.wave}",
                (12, SCREEN_H - 20), 16, COL_DIM)
         g.text(s, "Стрелки — выбор, Enter — подтвердить", (SCREEN_W - 12, SCREEN_H - 20), 16, COL_DIM, right=True)
 
@@ -133,6 +135,7 @@ class BonfireScene(Scene):
         game.run = None  # отдых у костра
         items = [(None, (lambda st=st: self.start_ritual(st))) for st in STATS]
         items.append(("В бой", lambda: g.change(BattleScene(g))))
+        items.append(("Кузница", lambda: g.change(ShopScene(g))))
         items.append(("В главное меню", lambda: g.change(TitleScene(g))))
         self.menu = Menu(items)
 
@@ -190,20 +193,22 @@ class BonfireScene(Scene):
         c.blit(glow, (156, GROUND_TITLE - 24))
         fire = pygame.transform.scale(anim(a.bonfire, t, 8), (32, 44))
         c.blit(fire, (200, GROUND_TITLE - 44))
-        hero = a.hero["attack"][0] if self.ritual and self.ritual[3] % 2 else a.hero["idle"][0]
+        hero_frames = a.heroes[self.game.player.sword]
+        hero = hero_frames["attack"][0] if self.ritual and self.ritual[3] % 2 else hero_frames["idle"][0]
         c.blit(hero, (168, GROUND_TITLE - 32))
         self.embers.draw(c)
 
     def draw_ui(self, s):
         g, p = self.game, self.game.player
-        panel = pygame.Surface((300, 260), pygame.SRCALPHA)
+        panel = pygame.Surface((300, 300), pygame.SRCALPHA)
         panel.fill((10, 6, 14, 200))
         s.blit(panel, (16, 16))
-        pygame.draw.rect(s, (90, 64, 50), (16, 16, 300, 260), 1)
+        pygame.draw.rect(s, (90, 64, 50), (16, 16, 300, 300), 1)
         g.text(s, "КОСТЁР", (30, 26), 30, COL_GOLD)
         g.text(s, f"Уровень {p.level}", (30, 54), 18)
         g.text(s, f"Пепел: {p.souls}", (150, 54), 18, COL_GOLD)
         g.text(s, f"Цена уровня: {p.level_cost()} пепла", (30, 72), 16, COL_DIM)
+        g.gems(s, (230, 72), p)
 
         y = 98
         for i, st in enumerate(STATS):
@@ -224,7 +229,7 @@ class BonfireScene(Scene):
             y += 22
 
         stats = (f"Урон {p.damage}   Здоровье {p.max_hp}   Силы {p.max_stamina} (+{p.stamina_regen}/с)")
-        g.text(s, stats, (30, 254), 14, COL_DIM)
+        g.text(s, stats, (30, 296), 14, COL_DIM)
 
         tr = p.total_reps
         g.text(s, "Всего за всё время:", (SCREEN_W - 16, 20), 16, COL_DIM, right=True)
@@ -250,31 +255,51 @@ class FloatText:
         self.text, self.x, self.y, self.color, self.size, self.ttl = text, x, y, color, size, ttl
 
 
-ATTACK_COST = 20
 READY_TIME = 4.0     # секунд на то, чтобы отойти от камеры
 RECOVER_TIME = 1.6   # окно для удара после атаки скелета
 ABSENT_PAUSE = 1.0   # пауза, если игрока нет в кадре дольше этого
 
 
 class Skeleton:
+    """Скелет-страж; каждый 5-й — босс Костяной Рыцарь."""
+
     def __init__(self, wave):
         self.wave = wave
-        self.max_hp = 90 + 35 * (wave - 1)
-        self.hp = self.max_hp
-        self.damage = 16 + 4 * (wave - 1)
+        self.boss = is_boss_wave(wave)
+        base_hp = 90 + 35 * (wave - 1)
+        base_dmg = 16 + 4 * (wave - 1)
         self.windup_time = max(1.3, 1.9 - 0.05 * wave)  # время на реакцию (присед)
-        self.combo_chance = 0.35 if wave >= 3 else 0.0  # с 3-го скелета — двойной удар
-        self.max_poise = 3
+        if self.boss:
+            self.name = "Костяной Рыцарь"
+            self.max_hp = int(base_hp * 2.0)
+            self.damage = int(base_dmg * 1.25)
+            self.windup_time += 0.3       # тяжёлый двуручник замахивается дольше
+            self.max_poise = 5
+            self.combo_chance = 0.6       # серии до трёх ударов
+            self.max_combo = 2
+            self.home_x = 188.0
+        else:
+            self.name = "Скелет-страж"
+            self.max_hp = base_hp
+            self.damage = base_dmg
+            self.max_poise = 3
+            self.combo_chance = 0.35 if wave >= 3 else 0.0  # с 3-го скелета — двойной удар
+            self.max_combo = 1
+            self.home_x = 200.0
+        self.hp = self.max_hp
         self.poise = self.max_poise
         self.state = "idle"
         self.timer = random.uniform(1.5, 2.5)
         self.flash = 0.0
-        self.combo = False
-        self.x = 200.0
-        self.home_x = 200.0
+        self.combo_left = 0
+        self.enraged = False
+        self.x = self.home_x
 
     def set(self, state, timer):
         self.state, self.timer = state, timer
+
+    def recover_time(self):
+        return RECOVER_TIME * (0.8 if self.enraged else 1.0)
 
 
 class BattleScene(Scene):
@@ -285,9 +310,9 @@ class BattleScene(Scene):
         p = game.player
         self.enemy = Skeleton(p.wave)
         # Здоровье и эстус переносятся между боями до отдыха у костра
-        run = game.run or {"hp": p.max_hp, "estus": ESTUS_MAX}
+        run = game.run or {"hp": p.max_hp, "estus": p.estus_max}
         self.hp = min(run["hp"], p.max_hp)
-        self.estus = run["estus"]
+        self.estus = min(run["estus"], p.estus_max)
         self.stamina = float(p.max_stamina)
         self.action, self.action_t = "idle", 0.0
         self.invuln = 0.0
@@ -296,7 +321,7 @@ class BattleScene(Scene):
         self.texts = []
         self.result = None      # "won" / "dead"
         self.result_t = 0.0
-        self.reward = 0
+        self.reward = (0, 0, 0)   # пепел, алые, синие
         self.ready = READY_TIME
         self.absent_t = 0.0
         self.paused = False
@@ -310,24 +335,34 @@ class BattleScene(Scene):
     def act(self, move):
         p, en = self.game.player, self.enemy
         if move == "pushup":
-            if self.stamina < ATTACK_COST:
+            if self.stamina < p.attack_cost:
                 return self.float("Нет сил!", self.HERO_X + 10, 90, COL_GREEN, 18)
-            self.stamina -= ATTACK_COST
+            self.stamina -= p.attack_cost
             self.regen_pause = 0.6
             self.action, self.action_t = "attack", 0.35
             dmg, crit = p.damage, en.state == "recover"
             if crit:
-                dmg = int(dmg * 1.5)
+                dmg = int(dmg * p.crit_mult)
+            elif en.boss:
+                dmg //= 2  # латы босса: вне окна уязвимости проходит половина урона
             en.hp -= dmg
             en.flash = 0.15
             self.game.shake = 0.12
             self.game.sfx.play("crit" if crit else "hit")
-            self.float(f"{dmg}{' КРИТ!' if crit else ''}", en.x + 12, 90, COL_GOLD if crit else COL_TEXT)
+            label = f"{dmg} КРИТ!" if crit else (f"{dmg} БРОНЯ" if en.boss else f"{dmg}")
+            self.float(label, en.x + 12, 90, COL_GOLD if crit else COL_TEXT)
+            if p.lifesteal and self.hp < p.max_hp:
+                self.hp = min(p.max_hp, self.hp + p.lifesteal)
             if en.state == "windup":
                 en.poise -= 1
                 if en.poise <= 0:
-                    en.set("recover", RECOVER_TIME)
+                    en.combo_left = 0
+                    en.set("recover", en.recover_time())
                     self.float("ПРЕРВАН!", en.x + 12, 74, COL_GOLD, 20)
+            if en.boss and not en.enraged and 0 < en.hp <= en.max_hp // 2:
+                en.enraged = True  # ярость: быстрее замах, короче окно уязвимости
+                en.windup_time *= 0.85
+                self.float("ЯРОСТЬ!", en.x + 12, 60, (255, 60, 40), 24)
             if en.hp <= 0:
                 self.win()
         elif move in ("squat_down", "pushup_down"):
@@ -356,12 +391,14 @@ class BattleScene(Scene):
         p, en = self.game.player, self.enemy
         en.set("dead", 0)
         self.result, self.result_t = "won", 0.0
-        self.reward = 80 + 40 * en.wave
-        p.souls += self.reward
+        ash, red, blue = rewards(en.wave)
         if p.lost_souls and p.lost_at_wave == en.wave:
-            self.reward += p.lost_souls
-            p.souls += p.lost_souls
+            ash += p.lost_souls
             p.lost_souls = 0
+        p.souls += ash
+        p.red_gems += red
+        p.blue_gems += blue
+        self.reward = (ash, red, blue)
         p.wave += 1
         p.save()
         self.save_run()
@@ -439,20 +476,20 @@ class BattleScene(Scene):
         en.timer -= dt
         if en.state == "idle" and en.timer <= 0:
             en.poise = en.max_poise
+            en.combo_left = sum(random.random() < en.combo_chance for _ in range(en.max_combo))
             en.set("windup", en.windup_time)
             g.sfx.play("warn")
         elif en.state == "windup" and en.timer <= 0:
             en.set("attack", 0.35)
             self.resolve_hit()
         elif en.state == "attack" and en.timer <= 0:
-            if not en.combo and random.random() < en.combo_chance:
-                en.combo = True  # второй, более быстрый замах сразу после первого
+            if en.combo_left > 0:
+                en.combo_left -= 1  # следующий, более быстрый замах сразу после удара
                 en.set("windup", en.windup_time * 0.75)
                 g.sfx.play("warn")
                 self.float("ЕЩЁ УДАР!", en.x + 12, 70, (255, 120, 60), 16)
             else:
-                en.combo = False
-                en.set("recover", RECOVER_TIME)
+                en.set("recover", en.recover_time())
         elif en.state == "recover" and en.timer <= 0:
             en.set("idle", random.uniform(1.6, 3.0))
         target = self.HERO_X + 30 if en.state == "attack" else en.home_x
@@ -464,11 +501,12 @@ class BattleScene(Scene):
             self.game.sfx.play("dodge")
             self.float("УВОРОТ!", self.HERO_X + 10, 80, (140, 200, 255), 20)
             return
-        self.hp -= en.damage
+        dmg = round(en.damage * self.game.player.damage_taken_mult)
+        self.hp -= dmg
         self.hurt_t = 0.3
-        self.game.shake = 0.3
+        self.game.shake = 0.4 if en.boss else 0.3
         self.game.sfx.play("hurt")
-        self.float(f"-{en.damage}", self.HERO_X + 10, 86, COL_RED)
+        self.float(f"-{dmg}", self.HERO_X + 10, 86, COL_RED)
         if self.hp <= 0:
             self.hp = 0
             self.die()
@@ -481,28 +519,31 @@ class BattleScene(Scene):
         self.torch_l.draw(c)
         self.torch_r.draw(c)
 
-        # Скелет
+        # Скелет или босс
+        frames = a.boss if en.boss else a.skeleton
         if en.state == "dead":
-            spr = a.skeleton["dead"][0]
+            spr = frames["dead"][0]
         elif en.flash > 0:
-            spr = a.skeleton["hurt"][0]
+            spr = frames["hurt"][0]
         elif en.state == "windup":
-            spr = anim(a.skeleton["windup"], t, 8)
+            spr = anim(frames["windup"], t, 8)
         elif en.state == "attack":
-            spr = a.skeleton["attack"][0]
+            spr = frames["attack"][0]
+        elif en.boss and en.enraged:
+            spr = anim(frames["enraged"], t, 1.5)
         else:
-            spr = anim(a.skeleton["idle"], t, 1.5)
+            spr = anim(frames["idle"], t, 1.5)
         ex = int(en.x) - (8 if en.state == "attack" else 0)
         c.blit(spr, (ex, GROUND_ARENA - spr.get_height()))
 
-        # Герой
+        # Герой (с надетым мечом)
+        hero = a.heroes[self.game.player.sword]
         if self.result == "dead":
-            spr = a.hero["dodge"][0]
-            spr = tinted(spr, (40, 10, 10), 0.6)
+            spr = hero["dead"][0]
         elif self.hurt_t > 0:
-            spr = a.hero["hurt"][0]
+            spr = hero["hurt"][0]
         else:
-            spr = anim(a.hero.get(self.action, a.hero["idle"]), t, 1.5)
+            spr = anim(hero.get(self.action, hero["idle"]), t, 1.5)
         hx = self.HERO_X + (10 if self.action == "attack" else -6 if self.action == "dodge" else 0)
         if self.action == "dodge":  # шлейф уворота
             ghost = spr.copy()
@@ -521,7 +562,7 @@ class BattleScene(Scene):
         # полоски игрока (ширина растёт с прокачкой — как в Dark Souls)
         g.bar(s, (16, 16, int(p.max_hp * 1.4), 8), self.hp / p.max_hp, COL_RED)
         g.bar(s, (16, 28, int(p.max_stamina * 1.6), 6), self.stamina / p.max_stamina, COL_GREEN)
-        for i in range(ESTUS_MAX):
+        for i in range(p.estus_max):
             col = (240, 150, 50) if i < self.estus else (60, 50, 50)
             pygame.draw.rect(s, COL_SHADOW, (15 + i * 12, 39, 10, 14))
             pygame.draw.rect(s, col, (16 + i * 12, 42, 8, 10))
@@ -529,9 +570,15 @@ class BattleScene(Scene):
         g.camera_widget(s, (SCREEN_W - 136, 12, 120, 90))
 
         # полоска врага внизу экрана
-        g.text(s, f"Скелет-страж  #{en.wave}", (120, SCREEN_H - 52), 18)
+        if en.boss:  # полоска босса — шире и в золотой рамке
+            pygame.draw.rect(s, COL_GOLD, (117, SCREEN_H - 37, 406, 14), 1)
+            g.text(s, f"БОСС: {en.name}  #{en.wave}" + ("  — ЯРОСТЬ" if en.enraged else ""),
+                   (120, SCREEN_H - 54), 18, (255, 120, 80) if en.enraged else COL_GOLD)
+        else:
+            g.text(s, f"{en.name}  #{en.wave}", (120, SCREEN_H - 52), 18)
         g.bar(s, (120, SCREEN_H - 34, 400, 8), max(0, en.hp) / en.max_hp, (150, 20, 20))
         g.text(s, f"Пепел: {p.souls}", (SCREEN_W - 16, SCREEN_H - 20), 18, COL_GOLD, right=True)
+        g.gems(s, (SCREEN_W - 16, SCREEN_H - 40), p, right=True)
 
         y = 66
         for name, desc, key in MOVE_HINTS:
@@ -548,6 +595,9 @@ class BattleScene(Scene):
             g.text(s, "ПАУЗА: ВСТАНЬТЕ В КАДР", (SCREEN_W // 2, SCREEN_H // 2 - 20), 32, COL_GOLD, center=True)
             g.text(s, "Камера не видит вас, скелет ждёт", (SCREEN_W // 2, SCREEN_H // 2 + 8), 16, COL_DIM, center=True)
         elif self.ready > 0:
+            if en.boss:
+                g.text(s, "БОСС: КОСТЯНОЙ РЫЦАРЬ", (SCREEN_W // 2, 30), 28, (255, 90, 60), center=True)
+                g.text(s, "латы держат удары — бей в окно уязвимости", (SCREEN_W // 2, 150), 16, COL_DIM, center=True)
             g.text(s, "ПРИГОТОВЬТЕСЬ", (SCREEN_W // 2, 56), 36, COL_GOLD, center=True)
             g.text(s, f"{math.ceil(self.ready)}", (SCREEN_W // 2, 84), 56, COL_TEXT, center=True)
             g.text(s, "Отойдите, чтобы тело было в кадре", (SCREEN_W // 2, 128), 16, COL_DIM, center=True)
@@ -556,7 +606,8 @@ class BattleScene(Scene):
             pulse = 0.5 + 0.5 * math.sin(g.time * 14)
             g.text(s, "ОПУСТИСЬ!" if plank else "ПРИСЕДАЙ!", (SCREEN_W // 2, 62), 44, (255, int(60 + 120 * pulse), 40), center=True)
             g.bar(s, (SCREEN_W // 2 - 80, 106, 160, 5), k, (255, 90, 50))
-            g.text(s, "!", (int(en.x + 12) * 2, 2 * (GROUND_ARENA - 44)), 36, (255, 200, 60), center=True)
+            top = GROUND_ARENA - (56 if en.boss else 44)
+            g.text(s, "!", (int(en.x + (30 if en.boss else 12)) * 2, 2 * top), 36, (255, 200, 60), center=True)
         elif en.state == "recover" and not self.result:
             g.text(s, "Окно для удара — ОТЖИМАЙСЯ!", (SCREEN_W // 2, 76), 22, COL_GOLD, center=True)
 
@@ -573,9 +624,114 @@ class BattleScene(Scene):
                        (SCREEN_W // 2, SCREEN_H // 2 + 20), 16, COL_DIM, center=True)
                 g.text(s, "Enter или звёздочка — к костру", (SCREEN_W // 2, SCREEN_H // 2 + 34), 16, COL_TEXT, center=True)
             else:
-                g.text(s, "ВРАГ ПОВЕРЖЕН", (SCREEN_W // 2, SCREEN_H // 2 - 28), 56, COL_GOLD, center=True)
-                g.text(s, f"+{self.reward} пепла.  Звёздочка — следующий бой, Enter — к костру",
-                       (SCREEN_W // 2, SCREEN_H // 2 + 20), 18, COL_TEXT, center=True)
+                ash, red, blue = self.reward
+                title = "БОСС ПОВЕРЖЕН" if en.boss else "ВРАГ ПОВЕРЖЕН"
+                g.text(s, title, (SCREEN_W // 2, SCREEN_H // 2 - 28), 56, COL_GOLD, center=True)
+                loot = f"+{ash} пепла   +{red} алых" + (f"   +{blue} синий" if blue else "")
+                g.text(s, loot, (SCREEN_W // 2, SCREEN_H // 2 + 16), 18, COL_GOLD, center=True)
+                g.text(s, "Звёздочка — следующий бой, Enter — к костру",
+                       (SCREEN_W // 2, SCREEN_H // 2 + 34), 16, COL_TEXT, center=True)
+
+
+# ---------------------------------------------------------------- Кузница
+class ShopScene(Scene):
+    """Мечи за алые камни, уникальное снаряжение за синие (с боссов)."""
+
+    def __init__(self, game):
+        super().__init__(game)
+        g = game
+        items = [(key, (lambda k=key: self.choose(k))) for key in SHOP_ORDER]
+        items.append(("back", lambda: g.change(BonfireScene(g))))
+        self.menu = Menu(items)
+        self.message, self.msg_t = "Алые камни — за каждого врага, синие — за боссов.", 4.0
+        self.embers = Particles(300, 120, rate=10)
+
+    def say(self, msg, t=3.0):
+        self.message, self.msg_t = msg, t
+
+    def choose(self, key):
+        p = self.game.player
+        it = item(key)
+        if key in p.owned:
+            if key in SWORDS:
+                p.equip(key)
+                self.say(f"Надет: {it['name']}")
+            else:
+                self.say(f"{it['name']} уже действует")
+        elif p.buy(key):
+            self.game.sfx.play("level")
+            self.say(f"Куплено: {it['name']}!" + (" Меч надет." if key in SWORDS else ""))
+        else:
+            red, blue = it["price"]
+            need = f"{blue} синих" if blue else f"{red} алых"
+            self.say(f"Не хватает камней: нужно {need}")
+            return
+        p.save()
+
+    def handle(self, keys, moves):
+        for e in keys:
+            if e.key == pygame.K_ESCAPE:
+                self.game.change(BonfireScene(self.game))
+                return
+        self.menu.handle(keys)
+
+    def update(self, dt):
+        self.embers.update(dt)
+        self.msg_t -= dt
+
+    def draw(self, c):
+        a, t = self.game.art, self.game.time
+        c.blit(a.arena_bg, (0, 0))
+        dark = pygame.Surface(c.get_size(), pygame.SRCALPHA)
+        dark.fill((0, 0, 0, 110))
+        c.blit(dark, (0, 0))
+        c.blit(anim(a.bonfire, t, 8), (292, GROUND_ARENA - 22))  # горн
+        self.embers.draw(c)
+
+    def draw_ui(self, s):
+        g, p = self.game, self.game.player
+        panel = pygame.Surface((396, 332), pygame.SRCALPHA)
+        panel.fill((10, 6, 14, 215))
+        s.blit(panel, (12, 14))
+        pygame.draw.rect(s, (90, 64, 50), (12, 14, 396, 332), 1)
+        g.text(s, "КУЗНИЦА", (26, 22), 30, COL_GOLD)
+        g.gems(s, (396, 28), p, right=True)
+        y = 58
+        for i, (key, _) in enumerate(self.menu.items):
+            sel = self.menu.index == i
+            if sel:
+                g.text(s, ">", (20, y + 2), 20, COL_GOLD)
+            if key == "back":
+                g.text(s, "Назад к костру", (34, y + 4), 20, COL_GOLD if sel else COL_TEXT)
+                break
+            it = item(key)
+            if key in p.owned:
+                status, scol = ("НАДЕТ", COL_GOLD) if p.sword == key else \
+                    (("ВЗЯТЬ", COL_TEXT) if key in SWORDS else ("ЕСТЬ", COL_GOLD))
+            else:
+                status = price_text(key)
+                scol = (130, 170, 255) if it["price"][1] else (240, 110, 110)
+                if not p.can_afford(key):
+                    scol = tuple(c // 2 for c in scol)
+            name_col = (150, 190, 255) if it.get("unique") else (COL_GOLD if sel else COL_TEXT)
+            g.text(s, it["name"], (34, y), 18, name_col)
+            g.text(s, it["desc"], (34, y + 16), 14, COL_DIM)
+            g.text(s, status, (396, y + 6), 18, scol, right=True)
+            if i == 3:  # разделитель: дальше реликвии за синие камни
+                pygame.draw.line(s, (70, 50, 44), (26, y + 36), (396, y + 36))
+            y += 40
+        # крупное превью героя с надетым мечом
+        hero = anim(g.art.heroes[p.sword]["idle"], g.time, 1.5)
+        s.blit(pygame.transform.scale(hero, (96, 128)), (466, 2 * GROUND_ARENA - 126))
+        w = p.weapon
+        g.text(s, f"Меч: {w['name']}", (SCREEN_W - 16, 24), 18, COL_TEXT, right=True)
+        g.text(s, f"урон {p.damage}  крит x{w['crit']}  удар {w['cost']} сил", (SCREEN_W - 16, 42), 14, COL_DIM, right=True)
+        relics = [RELICS[k]["name"] for k in RELICS if k in p.owned]
+        if relics:
+            g.text(s, "Реликвии: " + ", ".join(relics), (SCREEN_W - 16, 58), 14, (150, 190, 255), right=True)
+        if self.msg_t > 0:
+            for i, line in enumerate(g._wrap(self.message, 26)):
+                g.text(s, line, (SCREEN_W - 16, SCREEN_H - 66 + i * 15), 16, COL_GOLD, right=True)
 
 
 # ---------------------------------------------------------------- Калибровка камеры

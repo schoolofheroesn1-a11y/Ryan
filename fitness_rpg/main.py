@@ -61,6 +61,29 @@ def take_screenshots(out_dir):
     shot(scenes.BattleScene(g), "05_you_died", 2.0, died)
 
     shot(scenes.BattleScene(g), "07_get_ready", 0.3)
+
+    g.player = Player(strength=4, vigor=3, endurance=3, souls=520, wave=5, red_gems=17, blue_gems=1,
+                      owned=["rusty", "steel"], sword="steel")
+    g.player.save = lambda *a, **k: None
+    g.run = None
+
+    def boss(s):
+        s.ready = 0
+        s.enemy.set("windup", 99)
+        s.enemy.windup_time = 99.6
+        s.enemy.hp = int(s.enemy.max_hp * 0.42)
+        s.enemy.enraged = True
+        s.hp = int(g.player.max_hp * 0.6)
+    shot(scenes.BattleScene(g), "08_boss", 0.5, boss)
+
+    def boss_won(s):
+        s.ready = 0
+        s.enemy.hp = 1
+        s.enemy.set("recover", 99)
+        s.act("pushup")
+    shot(scenes.BattleScene(g), "09_boss_defeated", 1.5, boss_won)
+    shop = scenes.ShopScene(g)
+    shot(shop, "10_forge", 0.5, lambda s: (setattr(s.menu, "index", 2), s.choose("great")))
     shot(scenes.CameraScene(g), "06_camera", 0.3)
     pygame.quit()
     print("Скриншоты сохранены в", os.path.abspath(out_dir))

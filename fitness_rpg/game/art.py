@@ -30,6 +30,11 @@ PALETTE = {
     "M": (150, 92, 54),    # светлая ржавчина
     "n": (40, 32, 48),     # истлевшая ткань
     "N": (70, 56, 80),     # ткань светлее
+    "a": (40, 36, 48),     # тёмный доспех босса
+    "A": (82, 76, 96),     # доспех босса
+    "h": (138, 130, 150),  # блик доспеха
+    "c": (110, 18, 24),    # тёмно-алая ткань
+    "C": (170, 36, 36),    # алая ткань
 }
 
 # --- Главный герой: Негасимый рыцарь (смотрит вправо) ---
@@ -188,6 +193,128 @@ BONFIRE_BASE = [
     ".kooOookkkkoOOok",
     "kkkkkkkkkkkkkkkk",
 ]
+
+
+# --- Босс: Костяной Рыцарь — огромный скелет в латах с двуручным мечом (смотрит влево) ---
+# Спрайт собирается из тела и руки с мечом (опущенной или в выпаде) на холсте 60×44.
+BOSS_W, BOSS_H, BOSS_X = 60, 44, 16
+BOSS_BODY = [
+    "...................k..........k...........",
+    "..................kOk........kOk..........",
+    "..................kOOk......kOOk..........",
+    "...................kOOkkkkkkOOk...........",
+    "...................kkaAhhhhAakk...........",
+    "..................kaAhhhhhhhhAak..........",
+    "..................kaAAAAAAAAAAak..........",
+    "..................kakkkkkkkkkkak..........",
+    "..................kakWOOkkOOWkak..........",
+    "..................kakeEkOOkeEkak..........",
+    "..................kakkkOOOOkkkak..........",
+    "..................kaAkOkOkOkAAak..........",
+    "...................kaAkkkkkkAak...........",
+    "...................kkaAAAAAAakk...........",
+    "..............kkkkkkkkakkkakkkkkkkk.......",
+    "............kkaAAhhAAkcCCckAAhhAAakk......",
+    "...........kaAAhhhhAAkcCCCckAAhhhhAAak....",
+    "...........kaAAAAAAAakcCCCCkaAAAAAAAAk....",
+    "...........kkaaaaaaakkcCCCckkaaaaaaakk....",
+    "................kkaAAhhhhhAAakk.kOOk......",
+    "...............kaAAhhhhhhhAAak..kOk.......",
+    "...............kaAAAhggghAAAak..kOOk......",
+    "...............kaAAAAgggAAAAak...kOk......",
+    "...............kaaAAAAgAAAAaak...kOOk.....",
+    "................kkaaAAAAAaakk....kOk......",
+    "................kOkkaaaaakkOk....kWWk.....",
+    "................kOOOkkkkkOOOk....kWWk.....",
+    "................kkOkOkOkOkOkk.....kk......",
+    "................kcCCcCCCcCCck.............",
+    "...............kcCCCCcgcCCCCck............",
+    "...............kccCCCCcCCCCcck............",
+    "...............kkcCcckkkccCckk............",
+    "................kaAk.....kaAk.............",
+    "................kaAhk...kaAhk.............",
+    "................kaAAk...kaAAk.............",
+    "................kkOkk...kkOkk.............",
+    "................kOOOk...kOOOk.............",
+    "................kaAAk...kaAAk.............",
+    "................kaAhk...kaAhk.............",
+    "................kaAAk...kaAAk.............",
+    "................kaAAk...kaAAk.............",
+    "...............kaAAAk..kaAAAk.............",
+    "..............kaAAAAk.kaAAAAk.............",
+    "..............kkkkkkk.kkkkkkk.............",
+]
+# Рука с мечом, опущенным остриём в землю (координаты холста 60×44)
+BOSS_ARM_DOWN = {
+    19: (26, "kOOk"), 20: (26, "kOk"), 21: (25, "kOOk"), 22: (25, "kOk"),
+    23: (24, "kOOk"), 24: (24, "kOk"), 25: (23, "kWWk"), 26: (23, "kbWk"),
+    27: (23, "kbBk"), 28: (20, "kkggggggk"),
+    **{r: (23, "kwlhk") for r in range(29, 41)},
+    41: (23, "kwlk"), 42: (24, "kwk"), 43: (25, "k"),
+}
+# Выпад: рука вытянута вперёд, клинок горизонтально
+BOSS_ARM_SWING = {
+    16: (17, "kgk"), 17: (17, "kgk"), 18: (17, "kgk"),
+    19: (0, "kkkkkkkkkkkkkkkkkgkkkkkkkkkk"),
+    20: (0, "kwwwwwwwwwwwwwwwkgbWOOOOOOOOk"),
+    21: (0, "klllllllllllllllkgbWOOOOOOOOk"),
+    22: (1, "kkkkkkkkkkkkkkkkgkkkkkkkkkk"),
+    23: (17, "kgk"), 24: (17, "kgk"), 25: (18, "k"),
+}
+
+
+# Замах: меч поднят над головой
+BOSS_ARM_RAISED = {
+    0: (24, "kk"), **{r: (23, "kwlk") for r in range(1, 10)},
+    10: (20, "kkggggggk"), 11: (23, "kbBk"), 12: (23, "kWWk"), 13: (24, "kOk"),
+    14: (24, "kOOk"), 15: (25, "kOk"), 16: (25, "kOOk"), 17: (26, "kOk"), 18: (26, "kOk"),
+}
+
+
+def boss_map(arm):
+    rows = [list("." * BOSS_W) for _ in range(BOSS_H)]
+    for y, row in enumerate(BOSS_BODY):
+        for x, ch in enumerate(row):
+            if ch != ".":
+                rows[y][BOSS_X + x] = ch
+    for y, (x0, seg) in arm.items():
+        for i, ch in enumerate(seg):
+            if ch != "." and 0 <= x0 + i < BOSS_W:
+                rows[y][x0 + i] = ch
+    return ["".join(r) for r in rows]
+
+
+# --- Мечи героя: клинок на спрайтах перекрашивается под надетый меч ---
+# x — тело клинка, X — кромка/второй ряд (у двуручника клинок толще)
+SWORD_COLORS = {
+    "rusty": ((164, 120, 92), (112, 78, 58)),
+    "steel": ((234, 238, 244), (160, 170, 186)),
+    "great": ((206, 212, 224), (128, 134, 150)),
+    "ash": ((255, 196, 120), (226, 84, 40)),
+}
+
+
+def _put(rows, x, y, ch):
+    row = rows[y].ljust(x + 1, ".")
+    rows[y] = row[:x] + ch + row[x + 1:]
+
+
+def hero_sword_maps(sword):
+    """Карты HERO_IDLE/HERO_ATTACK с клинком выбранного меча."""
+    idle, atk = list(HERO_IDLE), list(HERO_ATTACK)
+    for y in range(18, 26):
+        _put(idle, 20, y, "x")
+    _put(idle, 20, 26, "X")
+    for x in range(23, 31):
+        _put(atk, x, 13, "x")
+    if sword == "great":
+        for y in range(17, 27):
+            _put(idle, 19, y, "X")
+        _put(idle, 20, 27, "k")
+        for x in range(23, 32):
+            _put(atk, x, 12, "X")
+            _put(atk, x, 11, "k")
+    return idle, atk
 
 
 def sprite_from_map(rows, palette=PALETTE):
@@ -402,21 +529,44 @@ def make_torch_frames(n=4):
     return frames
 
 
+def make_hero_frames(sword):
+    main, edge = SWORD_COLORS[sword]
+    pal = dict(PALETTE, x=main, X=edge)
+    idle_map, atk_map = hero_sword_maps(sword)
+    hero = sprite_from_map(idle_map, pal)
+    return {
+        "idle": [hero, shifted_breath(hero)],
+        "attack": [sprite_from_map(atk_map, pal)],
+        "dodge": [crouched(hero)],
+        "hurt": [tinted(hero, (255, 80, 60), 0.7)],
+        "heal": [tinted(hero, (255, 200, 90), 0.45)],
+        "dead": [tinted(crouched(hero), (40, 10, 10), 0.6)],
+    }
+
+
+def make_boss_frames():
+    boss = sprite_from_map(boss_map(BOSS_ARM_DOWN))
+    swing = sprite_from_map(boss_map(BOSS_ARM_SWING))
+    raised = sprite_from_map(boss_map(BOSS_ARM_RAISED))
+    return {
+        "idle": [boss, shifted_breath(boss, 19)],
+        "windup": [tinted(raised, (255, 90, 50), 0.35), raised],
+        "attack": [swing],
+        "hurt": [tinted(boss, (255, 255, 255), 0.8)],
+        "enraged": [tinted(boss, (255, 40, 30), 0.25), tinted(shifted_breath(boss, 19), (255, 40, 30), 0.25)],
+        "dead": [crouched(tinted(boss, (60, 50, 50), 0.5))],
+    }
+
+
 class Art:
     """Набор всех спрайтов игры, создаётся один раз после pygame.init()."""
 
     def __init__(self):
-        hero = sprite_from_map(HERO_IDLE)
-        hero_atk = sprite_from_map(HERO_ATTACK)
         skel = sprite_from_map(SKELETON_IDLE)
         skel_atk = sprite_from_map(SKELETON_ATTACK)
-        self.hero = {
-            "idle": [hero, shifted_breath(hero)],
-            "attack": [hero_atk],
-            "dodge": [crouched(hero)],
-            "hurt": [tinted(hero, (255, 80, 60), 0.7)],
-            "heal": [tinted(hero, (255, 200, 90), 0.45)],
-        }
+        self.heroes = {sword: make_hero_frames(sword) for sword in SWORD_COLORS}
+        self.hero = self.heroes["rusty"]
+        self.boss = make_boss_frames()
         self.skeleton = {
             "idle": [skel, shifted_breath(skel, 12)],
             "windup": [tinted(skel, (255, 90, 50), 0.35), skel],

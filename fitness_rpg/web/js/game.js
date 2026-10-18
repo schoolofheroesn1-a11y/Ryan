@@ -3,7 +3,8 @@
 // В портретной ориентации под игрой появляется большая панель камеры.
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
-import { ESTUS_MAX, Player, STATS } from "./player.js";
+import { RELICS, SHOP_ORDER, SWORDS, isBossWave, item, priceText, rewards } from "./gear.js";
+import { Player, STATS } from "./player.js";
 import { initAudio, sfx } from "./sfx.js";
 
 const CW = 320, CH = 180;
@@ -16,13 +17,21 @@ const COL = {
   red: "rgb(200,40,36)", green: "rgb(70,160,70)", shadow: "rgb(8,6,12)",
 };
 
+const FRAMES = {
+  skeleton: { idle: 2, windup: 2, attack: 1, hurt: 1, dead: 1 },
+  boss: { idle: 2, windup: 2, attack: 1, hurt: 1, enraged: 2, dead: 1 },
+  hero: { idle: 2, attack: 1, dodge: 1, hurt: 1, heal: 1, dead: 1 },
+};
 const SPRITES = [
-  "title_bg", "arena_bg", "skeleton_dark_0", "hero_dead_0",
-  "hero_idle_0", "hero_idle_1", "hero_attack_0", "hero_dodge_0", "hero_hurt_0", "hero_heal_0",
-  "skeleton_idle_0", "skeleton_idle_1", "skeleton_windup_0", "skeleton_windup_1",
-  "skeleton_attack_0", "skeleton_hurt_0", "skeleton_dead_0",
+  "title_bg", "arena_bg", "skeleton_dark_0",
   "bonfire_0", "bonfire_1", "bonfire_2", "bonfire_3", "torch_0", "torch_1", "torch_2", "torch_3",
 ];
+for (const [who, anims] of Object.entries(FRAMES)) {
+  const prefixes = who === "hero" ? Object.keys(SWORDS).map((sw) => `hero_${sw}`) : [who];
+  for (const pre of prefixes) {
+    for (const [name, n] of Object.entries(anims)) for (let i = 0; i < n; i++) SPRITES.push(`${pre}_${name}_${i}`);
+  }
+}
 const IMG = {};
 
 function loadImages() {
@@ -179,6 +188,39 @@ class Game {
     return this.keys.some((k) => names.includes(k));
   }
 
+  /** Пиксельный камень 8×10: алый или синий. */
+  gem(x, y, kind) {
+    const c = this.ctx;
+    const [dark, mid, light] = kind === "red"
+      ? ["rgb(110,14,24)", "rgb(210,40,50)", "rgb(255,150,150)"]
+      : ["rgb(20,40,120)", "rgb(60,110,230)", "rgb(170,210,255)"];
+    const poly = (pts, color) => {
+      c.fillStyle = color;
+      c.beginPath();
+      pts.forEach(([px, py], i) => (i ? c.lineTo(px, py) : c.moveTo(px, py)));
+      c.closePath();
+      c.fill();
+    };
+    poly([[x + 5, y + 1], [x + 9, y + 5], [x + 5, y + 11], [x + 1, y + 5]], COL.shadow);
+    poly([[x + 4, y], [x + 8, y + 4], [x + 4, y + 10], [x, y + 4]], mid);
+    poly([[x + 4, y + 10], [x + 8, y + 4], [x + 4, y + 5]], dark);
+    c.fillStyle = light;
+    c.fillRect(x + 2, y + 3, 2, 1);
+  }
+
+  /** Счётчик камней «◆ 12  ◆ 1»; align "right" — по правому краю. */
+  gems(x, y, p, align = "left") {
+    const c = this.ctx;
+    c.font = `8px ${FONT}`;
+    const red = `${p.redGems}`, blue = `${p.blueGems}`;
+    const width = 12 + c.measureText(red).width + 14 + 12 + c.measureText(blue).width;
+    if (align === "right") x -= width;
+    this.gem(x, y - 1, "red");
+    x += 12 + this.text(red, x + 12, y, 8, "rgb(240,110,110)") + 14;
+    this.gem(x, y - 1, "blue");
+    this.text(blue, x + 12, y, 8, "rgb(130,170,255)");
+  }
+
   cameraWidget() {
     const [x, y, w, h] = this.cam;
     this.rect([x - 2, y - 2, w + 4, h + 4], COL.shadow);
@@ -325,7 +367,7 @@ class TitleScene extends Scene {
     c.ellipse(208, GROUND_TITLE - 2, r, 8, 0, 0, Math.PI * 2);
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
-    c.drawImage(anim("hero_idle", t, 1.5, 2), 172, GROUND_TITLE - 32);
+    c.drawImage(anim(`hero_${this.game.player.sword}_idle`, t, 1.5, 2), 172, GROUND_TITLE - 32);
     const sx = 270, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
     if (Math.floor(t * 1.3) % 5 !== 0) {
@@ -344,12 +386,14 @@ class TitleScene extends Scene {
       const confirm = i === 3 && this.confirmT > 0;
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
     });
-    g.text(`Ур. ${p.level}  Пепел: ${p.souls}  Враг: скелет #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
+    g.text(`Ур. ${p.level}  Пепел: ${p.souls}  Враг: ${isBossWave(p.wave) ? "БОСС" : "скелет"} #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
     if (!g.portrait) g.text("Нажмите на пункт меню", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
 }
 
 // ------------------------------------------------------------------ Костёр
+const BONFIRE_BUTTONS = [[[20, 216, 92, 26], "В БОЙ"], [[118, 216, 96, 26], "КУЗНИЦА"], [[220, 216, 90, 26], "МЕНЮ"]];
+
 class BonfireScene extends Scene {
   constructor(game) {
     super(game);
@@ -398,7 +442,7 @@ class BonfireScene extends Scene {
       return;
     }
     const rows = this.statRows();
-    const n = rows.length + 2;
+    const n = rows.length + 3;
     if (g.key("ArrowUp")) this.index = (this.index + n - 1) % n;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % n;
     const activate = (i) => {
@@ -406,13 +450,13 @@ class BonfireScene extends Scene {
       this.index = i;
       if (i < rows.length) this.startRitual(rows[i][0]);
       else if (i === rows.length) g.change(new BattleScene(g));
+      else if (i === rows.length + 1) g.change(new ShopScene(g));
       else g.change(new TitleScene(g));
     };
     if (g.key("Enter", " ")) return activate(this.index);
     if (g.key("Escape")) return g.change(new TitleScene(g));
     rows.forEach(([, r], i) => { if (g.tapped(r)) activate(i); });
-    if (g.tapped([20, 216, 140, 26])) activate(rows.length);
-    if (g.tapped([170, 216, 140, 26])) activate(rows.length + 1);
+    BONFIRE_BUTTONS.forEach(([r], j) => { if (g.tapped(r)) activate(rows.length + j); });
   }
   update(dt) {
     this.embers.update(dt);
@@ -430,7 +474,8 @@ class BonfireScene extends Scene {
     c.ellipse(216, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
-    const hero = this.ritual && this.ritual.done % 2 ? IMG.hero_attack_0 : IMG.hero_idle_0;
+    const sw = this.game.player.sword;
+    const hero = this.ritual && this.ritual.done % 2 ? IMG[`hero_${sw}_attack_0`] : IMG[`hero_${sw}_idle_0`];
     c.drawImage(hero, 168, GROUND_TITLE - 32);
     this.embers.draw(c);
   }
@@ -443,6 +488,7 @@ class BonfireScene extends Scene {
     g.text(`Уровень ${p.level}`, 22, 46, 8);
     g.text(`Пепел: ${p.souls}`, 160, 46, 8, COL.gold);
     g.text(`Цена уровня: ${p.levelCost()} пепла`, 22, 62, 8, COL.dim);
+    g.gems(310, 22, p, "right");
     g.text("Нажмите на навык:", 22, 78, 8, COL.dim);
     this.statRows().forEach(([st, r], i) => {
       const [name, ex, desc] = STATS[st];
@@ -450,8 +496,7 @@ class BonfireScene extends Scene {
       g.text(`${name} ${p[st]}`, r[0] + 8, r[1] + 7, 8, this.index === i ? COL.gold : COL.text);
       g.text(`${NAMES[ex]} x${p.repsNeeded(st)}: ${desc}`, r[0] + 8, r[1] + 21, 8, COL.dim);
     });
-    g.button([20, 216, 140, 26], "В БОЙ", { selected: this.index === 3 });
-    g.button([170, 216, 140, 26], "МЕНЮ", { selected: this.index === 4 });
+    BONFIRE_BUTTONS.forEach(([r, label], j) => g.button(r, label, { selected: this.index === 3 + j }));
     g.text(`Урон ${p.damage}  Здоровье ${p.maxHp}  Силы ${p.maxStamina}`, 22, 248, 8, COL.dim);
     const tr = p.totalReps;
     g.text(`Всего: отжим ${tr.pushup} присед ${tr.squat} звезда ${tr.jack}`, 22, 260, 8, COL.text);
@@ -474,29 +519,50 @@ class BonfireScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Бой
+/** Скелет-страж; каждый 5-й — босс Костяной Рыцарь. */
 class Skeleton {
   constructor(wave) {
     this.wave = wave;
-    this.maxHp = 90 + 35 * (wave - 1);
-    this.hp = this.maxHp;
-    this.damage = 16 + 4 * (wave - 1);
+    this.boss = isBossWave(wave);
+    const baseHp = 90 + 35 * (wave - 1);
+    const baseDmg = 16 + 4 * (wave - 1);
     this.windupTime = Math.max(1.3, 1.9 - 0.05 * wave); // время на реакцию (присед)
-    this.comboChance = wave >= 3 ? 0.35 : 0; // с 3-го скелета — двойной удар
-    this.maxPoise = 3;
+    if (this.boss) {
+      this.name = "Костяной Рыцарь";
+      this.maxHp = Math.floor(baseHp * 2.0);
+      this.damage = Math.floor(baseDmg * 1.25);
+      this.windupTime += 0.3; // тяжёлый двуручник замахивается дольше
+      this.maxPoise = 5;
+      this.comboChance = 0.6; // серии до трёх ударов
+      this.maxCombo = 2;
+      this.homeX = 188;
+    } else {
+      this.name = "Скелет-страж";
+      this.maxHp = baseHp;
+      this.damage = baseDmg;
+      this.maxPoise = 3;
+      this.comboChance = wave >= 3 ? 0.35 : 0; // с 3-го скелета — двойной удар
+      this.maxCombo = 1;
+      this.homeX = 200;
+    }
+    this.hp = this.maxHp;
     this.poise = this.maxPoise;
     this.state = "idle";
     this.timer = rand(1.5, 2.5);
     this.flash = 0;
-    this.combo = false;
-    this.x = this.homeX = 200;
+    this.comboLeft = 0;
+    this.enraged = false;
+    this.x = this.homeX;
   }
   set(state, timer) {
     this.state = state;
     this.timer = timer;
   }
+  recoverTime() {
+    return RECOVER_TIME * (this.enraged ? 0.8 : 1);
+  }
 }
 
-const ATTACK_COST = 20;
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const RECOVER_TIME = 1.6; // окно для удара после атаки скелета
 const ABSENT_PAUSE = 1.0; // пауза, если игрока нет в кадре дольше этого
@@ -509,9 +575,9 @@ class BattleScene extends Scene {
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
     // Здоровье и эстус переносятся между боями до отдыха у костра
-    const run = game.run || { hp: p.maxHp, estus: ESTUS_MAX };
+    const run = game.run || { hp: p.maxHp, estus: p.estusMax };
     this.hp = Math.min(run.hp, p.maxHp);
-    this.estus = run.estus;
+    this.estus = Math.min(run.estus, p.estusMax);
     this.stamina = p.maxStamina;
     this.action = "idle";
     this.actionT = 0;
@@ -521,7 +587,7 @@ class BattleScene extends Scene {
     this.texts = [];
     this.result = null;
     this.resultT = 0;
-    this.reward = 0;
+    this.reward = [0, 0, 0]; // пепел, алые, синие
     this.ready = READY_TIME;
     this.absentT = 0;
     this.paused = false;
@@ -540,24 +606,34 @@ class BattleScene extends Scene {
   act(move) {
     const p = this.game.player, en = this.enemy;
     if (move === "pushup") {
-      if (this.stamina < ATTACK_COST) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
-      this.stamina -= ATTACK_COST;
+      if (this.stamina < p.attackCost) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+      this.stamina -= p.attackCost;
       this.regenPause = 0.6;
       this.action = "attack";
       this.actionT = 0.35;
       const crit = en.state === "recover";
-      const dmg = crit ? Math.floor(p.damage * 1.5) : p.damage;
+      let dmg = p.damage;
+      if (crit) dmg = Math.floor(dmg * p.critMult);
+      else if (en.boss) dmg = Math.floor(dmg / 2); // латы босса: вне окна уязвимости — половина урона
       en.hp -= dmg;
       en.flash = 0.15;
       this.game.shake = 0.12;
       crit ? sfx.crit() : sfx.hit();
-      this.float(`${dmg}${crit ? " КРИТ!" : ""}`, en.x + 12, 90, crit ? COL.gold : COL.text);
+      const label = crit ? `${dmg} КРИТ!` : en.boss ? `${dmg} БРОНЯ` : `${dmg}`;
+      this.float(label, en.x + 12, 90, crit ? COL.gold : COL.text);
+      if (p.lifesteal && this.hp < p.maxHp) this.hp = Math.min(p.maxHp, this.hp + p.lifesteal);
       if (en.state === "windup") {
         en.poise -= 1;
         if (en.poise <= 0) {
-          en.set("recover", RECOVER_TIME);
+          en.comboLeft = 0;
+          en.set("recover", en.recoverTime());
           this.float("ПРЕРВАН!", en.x + 12, 74, COL.gold);
         }
+      }
+      if (en.boss && !en.enraged && en.hp > 0 && en.hp <= en.maxHp / 2) {
+        en.enraged = true; // ярость: быстрее замах, короче окно уязвимости
+        en.windupTime *= 0.85;
+        this.float("ЯРОСТЬ!", en.x + 12, 60, "rgb(255,60,40)");
       }
       if (en.hp <= 0) this.win();
     } else if (move === "squat_down" || move === "pushup_down") {
@@ -586,13 +662,15 @@ class BattleScene extends Scene {
     en.set("dead", 0);
     this.result = "won";
     this.resultT = 0;
-    this.reward = 80 + 40 * en.wave;
-    p.souls += this.reward;
+    let [ash, red, blue] = rewards(en.wave);
     if (p.lostSouls && p.lostAtWave === en.wave) {
-      this.reward += p.lostSouls;
-      p.souls += p.lostSouls;
+      ash += p.lostSouls;
       p.lostSouls = 0;
     }
+    p.souls += ash;
+    p.redGems += red;
+    p.blueGems += blue;
+    this.reward = [ash, red, blue];
     p.wave += 1;
     p.save();
     this.saveRun();
@@ -671,20 +749,21 @@ class BattleScene extends Scene {
     en.timer -= dt;
     if (en.state === "idle" && en.timer <= 0) {
       en.poise = en.maxPoise;
+      en.comboLeft = 0;
+      for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
       en.set("windup", en.windupTime);
       sfx.warn();
     } else if (en.state === "windup" && en.timer <= 0) {
       en.set("attack", 0.35);
       this.resolveHit();
     } else if (en.state === "attack" && en.timer <= 0) {
-      if (!en.combo && Math.random() < en.comboChance) {
-        en.combo = true; // второй, более быстрый замах сразу после первого
+      if (en.comboLeft > 0) {
+        en.comboLeft -= 1; // следующий, более быстрый замах сразу после удара
         en.set("windup", en.windupTime * 0.75);
         this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
         sfx.warn();
       } else {
-        en.combo = false;
-        en.set("recover", RECOVER_TIME);
+        en.set("recover", en.recoverTime());
       }
     } else if (en.state === "recover" && en.timer <= 0) {
       en.set("idle", rand(1.6, 3));
@@ -699,12 +778,13 @@ class BattleScene extends Scene {
       sfx.dodge();
       return this.float("УВОРОТ!", this.HERO_X + 10, 80, "rgb(140,200,255)");
     }
-    this.hp -= en.damage;
+    const dmg = Math.round(en.damage * this.game.player.damageTakenMult);
+    this.hp -= dmg;
     this.hurtT = 0.3;
-    this.game.shake = 0.3;
+    this.game.shake = en.boss ? 0.4 : 0.3;
     sfx.hurt();
-    if (navigator.vibrate) navigator.vibrate(150);
-    this.float(`-${en.damage}`, this.HERO_X + 10, 86, COL.red);
+    if (navigator.vibrate) navigator.vibrate(en.boss ? 250 : 150);
+    this.float(`-${dmg}`, this.HERO_X + 10, 86, COL.red);
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
@@ -719,18 +799,21 @@ class BattleScene extends Scene {
     this.torchR.draw(c);
 
     let spr;
-    if (en.state === "dead") spr = IMG.skeleton_dead_0;
-    else if (en.flash > 0) spr = IMG.skeleton_hurt_0;
-    else if (en.state === "windup") spr = anim("skeleton_windup", t, 8, 2);
-    else if (en.state === "attack") spr = IMG.skeleton_attack_0;
-    else spr = anim("skeleton_idle", t, 1.5, 2);
+    const kind = en.boss ? "boss" : "skeleton";
+    if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
+    else if (en.flash > 0) spr = IMG[`${kind}_hurt_0`];
+    else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
+    else if (en.state === "attack") spr = IMG[`${kind}_attack_0`];
+    else if (en.boss && en.enraged) spr = anim("boss_enraged", t, 1.5, 2);
+    else spr = anim(`${kind}_idle`, t, 1.5, 2);
     const ex = Math.round(en.x) - (en.state === "attack" ? 8 : 0);
     c.drawImage(spr, ex, GROUND_ARENA - spr.height);
 
-    if (this.result === "dead") spr = IMG.hero_dead_0;
-    else if (this.hurtT > 0) spr = IMG.hero_hurt_0;
-    else if (this.action === "idle") spr = anim("hero_idle", t, 1.5, 2);
-    else spr = IMG[`hero_${this.action}_0`];
+    const hero = `hero_${this.game.player.sword}`; // спрайт с надетым мечом
+    if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
+    else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
+    else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
+    else spr = IMG[`${hero}_${this.action}_0`];
     const hx = this.HERO_X + (this.action === "attack" ? 10 : this.action === "dodge" ? -6 : 0);
     if (this.action === "dodge") {
       c.globalAlpha = 0.3;
@@ -751,7 +834,7 @@ class BattleScene extends Scene {
     const g = this.game, p = g.player, en = this.enemy;
     g.bar(16, 16, Math.floor(p.maxHp * 1.4), 8, this.hp / p.maxHp, COL.red);
     g.bar(16, 28, Math.floor(p.maxStamina * 1.6), 6, this.stamina / p.maxStamina, COL.green);
-    for (let i = 0; i < ESTUS_MAX; i++) {
+    for (let i = 0; i < p.estusMax; i++) {
       g.rect([15 + i * 12, 39, 10, 14], COL.shadow);
       g.rect([16 + i * 12, 42, 8, 10], i < this.estus ? "rgb(240,150,50)" : "rgb(60,50,50)");
       g.rect([18 + i * 12, 40, 4, 2], "rgb(140,120,100)");
@@ -761,9 +844,16 @@ class BattleScene extends Scene {
       g.manualButtons();
     }
 
-    g.text(`Скелет-страж #${en.wave}`, 140, GAME_H - 46, 8);
+    if (en.boss) { // полоска босса — в золотой рамке
+      g.ctx.strokeStyle = COL.gold;
+      g.ctx.strokeRect(137.5, GAME_H - 34.5, 345, 11);
+      g.text(`БОСС: ${en.name} #${en.wave}${en.enraged ? " - ЯРОСТЬ" : ""}`, 140, GAME_H - 48, 8, en.enraged ? "rgb(255,120,80)" : COL.gold);
+    } else {
+      g.text(`${en.name} #${en.wave}`, 140, GAME_H - 46, 8);
+    }
     g.bar(140, GAME_H - 32, 340, 8, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
     g.text(`Пепел: ${p.souls}`, W - 12, GAME_H - 16, 8, COL.gold, "right");
+    g.gems(W - 12, GAME_H - 32, p, "right");
     g.button([12, GAME_H - 30, 104, 22], "< КОСТЁР");
 
     [["ОТЖИМАНИЕ", "удар"], ["ПРИСЕД/ВНИЗ", "уворот"], ["ЗВЕЗДОЧКА", "эстус"]]
@@ -775,6 +865,10 @@ class BattleScene extends Scene {
       g.text("ПАУЗА: ВСТАНЬТЕ В КАДР", W / 2, GAME_H / 2 - 12, 16, COL.gold, "center");
       g.text("Камера не видит вас, скелет ждёт", W / 2, GAME_H / 2 + 10, 8, COL.dim, "center");
     } else if (this.ready > 0) {
+      if (en.boss) {
+        g.text("БОСС: КОСТЯНОЙ РЫЦАРЬ", W / 2, 34, 16, "rgb(255,90,60)", "center");
+        g.text("Латы держат удары: бей в окно уязвимости", W / 2, 140, 8, COL.dim, "center");
+      }
       g.text("ПРИГОТОВЬТЕСЬ", W / 2, 60, 16, COL.gold, "center");
       g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
       g.text("Отойдите, чтобы тело было в кадре", W / 2, 124, 8, COL.dim, "center");
@@ -783,7 +877,8 @@ class BattleScene extends Scene {
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
       g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
-      g.text("!", Math.round(en.x + 12) * 2, 2 * (GROUND_ARENA - 44), 24, "rgb(255,200,60)", "center");
+      const top = GROUND_ARENA - (en.boss ? 58 : 44);
+      g.text("!", Math.round(en.x + (en.boss ? 30 : 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text("Окно для удара: ОТЖИМАЙСЯ!", W / 2, 70, 8, COL.gold, "center");
     }
@@ -797,11 +892,109 @@ class BattleScene extends Scene {
         g.text("Пепел остался на месте гибели: победите", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
         g.text("этого скелета, чтобы вернуть его. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
       } else {
-        g.text("ВРАГ ПОВЕРЖЕН", W / 2, GAME_H / 2 - 28, 32, COL.gold, "center");
-        g.text(`+${this.reward} пепла`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
+        const [ash, red, blue] = this.reward;
+        g.text(en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН", W / 2, GAME_H / 2 - 28, 32, COL.gold, "center");
+        g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
         g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.text, "center");
       }
     }
+  }
+}
+
+// ------------------------------------------------------------------ Кузница
+const SHOP_ROWS = [...SHOP_ORDER, "back"];
+const shopRect = (i) => [18, 48 + i * 40, 384, i === SHOP_ORDER.length ? 26 : 36];
+
+/** Мечи за алые камни, уникальное снаряжение за синие (с боссов). */
+class ShopScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.index = 0;
+    this.embers = new Particles(300, 120, 10);
+    this.say("Алые камни дают за каждого врага, синие за боссов.", 4);
+  }
+  say(msg, t = 3) {
+    this.message = msg;
+    this.msgT = t;
+  }
+  choose(key) {
+    const g = this.game, p = g.player, it = item(key);
+    if (key === "back") return g.change(new BonfireScene(g));
+    if (p.owned.includes(key)) {
+      if (SWORDS[key]) {
+        p.equip(key);
+        this.say(`Надет: ${it.name}`);
+      } else {
+        this.say(`${it.name} уже действует`);
+      }
+    } else if (p.buy(key)) {
+      sfx.level();
+      this.say(`Куплено: ${it.name}!${SWORDS[key] ? " Меч надет." : ""}`);
+    } else {
+      const [red, blue] = it.price;
+      return this.say(`Не хватает камней: нужно ${blue ? `${blue} синих` : `${red} алых`}`);
+    }
+    p.save();
+  }
+  handle() {
+    const g = this.game, n = SHOP_ROWS.length;
+    if (g.key("Escape")) return g.change(new BonfireScene(g));
+    if (g.key("ArrowUp")) this.index = (this.index + n - 1) % n;
+    if (g.key("ArrowDown")) this.index = (this.index + 1) % n;
+    const activate = (i) => {
+      sfx.click();
+      this.index = i;
+      this.choose(SHOP_ROWS[i]);
+    };
+    if (g.key("Enter", " ")) return activate(this.index);
+    SHOP_ROWS.forEach((_, i) => { if (g.tapped(shopRect(i))) activate(i); });
+  }
+  update(dt) {
+    this.embers.update(dt);
+    this.msgT -= dt;
+  }
+  draw(c) {
+    c.drawImage(IMG.arena_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.43)";
+    c.fillRect(0, 0, CW, CH);
+    c.drawImage(anim("bonfire", this.game.time, 8, 4), 292, GROUND_ARENA - 22); // горн
+    this.embers.draw(c);
+  }
+  drawUi() {
+    const g = this.game, p = g.player;
+    g.rect([10, 10, 400, 340], "rgba(10,6,14,0.85)");
+    g.ctx.strokeStyle = "rgb(90,64,50)";
+    g.ctx.strokeRect(10.5, 10.5, 399, 339);
+    g.text("КУЗНИЦА", 22, 20, 16, COL.gold);
+    g.gems(400, 24, p, "right");
+    SHOP_ROWS.forEach((key, i) => {
+      const r = shopRect(i), sel = this.index === i;
+      if (key === "back") return g.button(r, "НАЗАД К КОСТРУ", { selected: sel });
+      const it = item(key);
+      let status, scol;
+      if (p.owned.includes(key)) {
+        if (p.sword === key) [status, scol] = ["НАДЕТ", COL.gold];
+        else [status, scol] = SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ["ЕСТЬ", COL.gold];
+      } else {
+        status = priceText(key);
+        scol = it.price[1] ? "rgb(130,170,255)" : "rgb(240,110,110)";
+        if (!p.canAfford(key)) scol = it.price[1] ? "rgb(65,85,128)" : "rgb(120,55,55)";
+      }
+      g.button(r, "", { selected: sel });
+      g.text(it.name, r[0] + 8, r[1] + 7, 8, it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
+      g.text(it.desc, r[0] + 8, r[1] + 21, 8, COL.dim);
+      g.text(status, r[0] + r[2] - 8, r[1] + 14, 8, scol, "right");
+    });
+    // крупное превью героя с надетым мечом
+    const hero = anim(`hero_${p.sword}_idle`, g.time, 1.5, 2);
+    g.ctx.drawImage(hero, 470, 2 * GROUND_ARENA - 128, 96, 128);
+    const w = p.weapon;
+    g.text(w.name, W - 12, 20, 8, COL.text, "right");
+    g.text(`урон ${p.damage} крит x${w.crit}`, W - 12, 34, 8, COL.dim, "right");
+    g.text(`удар ${w.cost} сил`, W - 12, 46, 8, COL.dim, "right");
+    const relics = Object.keys(RELICS).filter((k) => p.owned.includes(k)).map((k) => RELICS[k].name);
+    relics.forEach((name, i) => g.text(name, W - 12, 62 + i * 12, 8, "rgb(150,190,255)", "right"));
+    if (this.msgT > 0) g.wrap(this.message, 26).forEach((l, i) => g.text(l, W - 12, GAME_H - 52 + i * 12, 8, COL.gold, "right"));
   }
 }
 
@@ -897,4 +1090,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BattleScene, BonfireScene, CameraScene, TitleScene };
+export { BattleScene, BonfireScene, CameraScene, ShopScene, TitleScene };

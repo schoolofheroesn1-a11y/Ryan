@@ -98,3 +98,34 @@ test("player level up", () => {
   assert.equal(p.strength, 2);
   assert.equal(p.souls, 100 - cost);
 });
+
+import { isBossWave, rewards } from "../js/gear.js";
+
+test("every 5th wave is a boss, bosses give a blue gem", () => {
+  assert.deepEqual([...Array(15).keys()].map((i) => i + 1).filter(isBossWave), [5, 10, 15]);
+  assert.deepEqual(rewards(1).slice(1), [2, 0]);
+  assert.equal(rewards(5)[2], 1);
+  assert.ok(rewards(6)[1] > rewards(1)[1]); // алых камней со временем больше
+});
+
+test("shop: buy, equip, unique items need blue gems", () => {
+  const p = new Player({ redGems: 5 });
+  assert.equal(p.buy("steel"), false);
+  p.redGems = 6;
+  assert.equal(p.buy("steel"), true);
+  assert.equal(p.sword, "steel");
+  assert.equal(p.damage, 10 + 3 * p.strength + 5);
+  p.equip("rusty");
+  assert.equal(p.sword, "rusty");
+  assert.equal(p.buy("ash"), false);
+  p.blueGems = 6;
+  assert.ok(p.buy("ash") && p.buy("armor") && p.buy("amulet"));
+  assert.equal(p.estusMax, 4);
+  assert.equal(p.damageTakenMult, 0.75);
+  assert.equal(p.lifesteal, 4);
+});
+
+test("old saves without gear load safely", () => {
+  const p = new Player({ strength: 3, sword: "bogus", owned: "junk" });
+  assert.deepEqual([p.sword, p.owned, p.redGems], ["rusty", ["rusty"], 0]);
+});

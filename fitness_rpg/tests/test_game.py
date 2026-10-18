@@ -13,6 +13,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from game import exercises as ex  # noqa: E402
 from game.player import Player  # noqa: E402
 
+_GAME = None
+
+
+def shared_game():
+    """Один экземпляр игры на все тесты: pygame держит одно окно на процесс."""
+    global _GAME
+    if _GAME is None:
+        from game.core import Game
+        _GAME = Game(use_camera=False)
+    return _GAME
+
 
 def blank():
     return [(0.5, 0.5, 0.0)] * 33
@@ -144,8 +155,7 @@ class PlayerTest(unittest.TestCase):
 class BattleTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from game.core import Game
-        cls.game = Game(use_camera=False)
+        cls.game = shared_game()
 
     def setUp(self):
         from game.scenes import BattleScene
@@ -254,3 +264,94 @@ class BattleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BossAndGearTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.game = shared_game()
+
+    def battle(self, player):
+        from game.scenes import BattleScene
+        player.save = lambda *a, **k: None
+        self.game.player = player
+        self.game.run = None
+        s = BattleScene(self.game)
+        s.ready = 0
+        self.game.change(s)
+        return s
+
+    def test_every_fifth_wave_is_boss(self):
+        from game.gear import is_boss_wave
+        self.assertEqual([w for w in range(1, 16) if is_boss_wave(w)], [5, 10, 15])
+        boss, regular = self.battle(Player(wave=5)).enemy, self.battle(Player(wave=4)).enemy
+        self.assertTrue(boss.boss)
+        self.assertFalse(regular.boss)
+        self.assertGreater(boss.max_hp, 1.5 * regular.max_hp)
+
+    def test_enemies_get_stronger(self):
+        hp = [self.battle(Player(wave=w)).enemy.max_hp for w in (1, 2, 3, 4)]
+        self.assertEqual(hp, sorted(hp))
+        self.assertGreater(self.battle(Player(wave=10)).enemy.max_hp, self.battle(Player(wave=5)).enemy.max_hp)
+
+    def test_boss_armor_halves_damage_outside_window(self):
+        s = self.battle(Player(wave=5))
+        en, p = s.enemy, self.game.player
+        en.set("idle", 99)
+        s.act("pushup")
+        self.assertEqual(en.max_hp - en.hp, p.damage // 2)
+        s.stamina = 999
+        en.set("recover", 99)
+        hp = en.hp
+        s.act("pushup")
+        self.assertEqual(hp - en.hp, int(p.damage * p.crit_mult))
+
+    def test_rewards_red_for_enemy_blue_for_boss(self):
+        for wave, blue in ((1, 0), (5, 1)):
+            s = self.battle(Player(wave=wave))
+            p = self.game.player
+            while not s.result:
+                s.stamina = 999
+                s.enemy.set("recover", 99)
+                s.act("pushup")
+            self.assertGreaterEqual(p.red_gems, 2)
+            self.assertEqual(p.blue_gems, blue)
+
+    def test_shop_buy_and_equip(self):
+        p = Player(red_gems=5)
+        self.assertFalse(p.buy("steel"))  # стоит 6
+        p.red_gems = 6
+        self.assertTrue(p.buy("steel"))
+        self.assertEqual((p.sword, p.red_gems), ("steel", 0))
+        self.assertEqual(p.damage, 10 + 3 * p.strength + 5)
+        p.equip("rusty")
+        self.assertEqual(p.sword, "rusty")
+        self.assertFalse(p.buy("ash"))  # уникальный — только за синие
+        p.blue_gems = 3
+        self.assertTrue(p.buy("ash"))
+        self.assertEqual(p.lifesteal, 4)
+
+    def test_relics(self):
+        p = Player(blue_gems=3)
+        self.assertTrue(p.buy("armor"))
+        self.assertTrue(p.buy("amulet"))
+        self.assertEqual(p.estus_max, 4)
+        s = self.battle(p)
+        self.assertEqual(s.estus, 4)
+        s.enemy.set("windup", 0.01)
+        self.run_hit(s)
+        self.assertEqual(p.max_hp - s.hp, round(s.enemy.damage * 0.75))
+
+    def run_hit(self, s):
+        for _ in range(5):
+            s.update(1 / 60)
+
+    def test_old_save_without_gear_loads(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s.json")
+            with open(path, "w") as f:
+                json.dump({"strength": 3, "souls": 40, "sword": "bogus"}, f)
+            p = Player.load(path)
+        self.assertEqual((p.strength, p.sword, p.owned, p.red_gems), (3, "rusty", ["rusty"], 0))

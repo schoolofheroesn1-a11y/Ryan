@@ -35,14 +35,17 @@ def main():
     save(a.skeleton["idle"][0], "skeleton_idle", 8)
     save(a.skeleton["attack"][0], "skeleton_attack", 8)
     save(a.bonfire[0], "bonfire", 8)
+    save(a.boss["idle"][0], "boss_idle", 6)
+    save(a.boss["windup"][1], "boss_windup", 6)
+    save(a.boss["attack"][0], "boss_attack", 6)
 
     # Общий лист персонажей на тёмном фоне
-    sheet = pygame.Surface((150, 40))
+    sheet = pygame.Surface((216, 52))
     sheet.fill((20, 14, 24))
     x = 4
     for s in (a.hero["idle"][0], a.hero["attack"][0], a.skeleton["idle"][0],
-              a.skeleton["attack"][0], a.bonfire[0]):
-        sheet.blit(s, (x, 40 - s.get_height() - 4))
+              a.skeleton["attack"][0], a.bonfire[0], a.boss["idle"][0]):
+        sheet.blit(s, (x, 52 - s.get_height() - 4))
         x += s.get_width() + 4
     save(sheet, "character_sheet", 6)
     print("Готово:", os.path.abspath(OUT))

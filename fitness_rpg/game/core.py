@@ -108,6 +108,28 @@ class Game:
         pygame.draw.rect(surf, color, (x, y, int(w * max(0.0, min(1.0, frac))), h))
         pygame.draw.line(surf, tuple(min(255, c + 50) for c in color), (x, y), (x + int(w * max(0, frac)) - 1, y))
 
+    def gem(self, surf, x, y, kind):
+        """Пиксельный камень 8×10: алый или синий."""
+        dark, mid, light = ((110, 14, 24), (210, 40, 50), (255, 150, 150)) if kind == "red" else \
+            ((20, 40, 120), (60, 110, 230), (170, 210, 255))
+        pts = [(x + 4, y), (x + 8, y + 4), (x + 4, y + 10), (x, y + 4)]
+        pygame.draw.polygon(surf, COL_SHADOW, [(px + 1, py + 1) for px, py in pts])
+        pygame.draw.polygon(surf, mid, pts)
+        pygame.draw.polygon(surf, dark, [(x + 4, y + 10), (x + 8, y + 4), (x + 4, y + 5)])
+        pygame.draw.line(surf, light, (x + 2, y + 4), (x + 4, y + 1))
+
+    def gems(self, surf, pos, player, right=False):
+        """Счётчик камней «◆ 12  ◆ 1». right=True — выравнивание по правому краю."""
+        red, blue = f"{player.red_gems}", f"{player.blue_gems}"
+        width = 12 + self.font(18).size(red)[0] + 16 + 12 + self.font(18).size(blue)[0]
+        x, y = pos
+        if right:
+            x -= width
+        self.gem(surf, x, y + 2, "red")
+        x += 12 + self.text(surf, red, (x + 12, y), 18, (240, 110, 110)) + 16
+        self.gem(surf, x, y + 2, "blue")
+        self.text(surf, blue, (x + 12, y), 18, (130, 170, 255))
+
     def camera_widget(self, surf, rect):
         """Мини-превью камеры со скелетом позы, либо подсказка про клавиши."""
         x, y, w, h = rect
