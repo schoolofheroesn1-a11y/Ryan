@@ -1,0 +1,101 @@
+# «Пепел и Железо»: тесты, Android APK и сайт для телефонов (GitHub Pages).
+name: fitness-rpg
+
+on:
+  push:
+    paths:
+      - "fitness_rpg/**"
+      - ".github/workflows/fitness-rpg.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: fitness-rpg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Python-тесты
+        working-directory: fitness_rpg
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          pip install pygame numpy
+          python -m unittest discover -s tests
+      - name: JS-тесты (мобильная версия)
+        working-directory: fitness_rpg
+        run: node --test web/tests/*.test.mjs
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Сборка APK
+        run: sh fitness_rpg/mobile/build_android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ash-and-iron-apk
+          path: fitness_rpg/mobile/dist/ash-and-iron.apk
+      - name: Публикация APK в релиз (ссылку можно открыть прямо с телефона)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: "Пепел и Железо — Android (последняя сборка)"
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: |
+            Скачайте `ash-and-iron.apk` на телефон Android и установите
+            (разрешите установку из неизвестных источников). Сборка из ${{ github.ref_name }} @ ${{ github.sha }}.
+            iPhone: откройте веб-версию в Safari → «Поделиться» → «На экран Домой».
+          files: fitness_rpg/mobile/dist/ash-and-iron.apk
+
+  web:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Сайт + MediaPipe и модель позы
+        run: |
+          sh fitness_rpg/web/fetch_vendor.sh
+          mkdir -p site
+          cp -r fitness_rpg/web/. site/
+          rm -rf site/tests site/fetch_vendor.sh site/.gitignore
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy-pages:
+    if: github.ref == 'refs/heads/main'
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

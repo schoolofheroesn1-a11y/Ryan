@@ -11,6 +11,44 @@
 | ![Бой](screenshots/03_battle_windup.png) | ![Костёр](screenshots/02_bonfire.png) |
 | ![Крит в окно уязвимости](screenshots/04_battle_attack.png) | ![Вы погибли](screenshots/05_you_died.png) |
 
+## 📱 Телефон: Android и iPhone
+
+Игра работает на телефоне. Это та же игра, переписанная на JavaScript (`web/`), с тем же артом
+и той же логикой распознавания. Камера фронтальная, позу распознаёт MediaPipe прямо на
+телефоне, видео никуда не отправляется.
+
+| Портрет: игра сверху, камера снизу | Альбомная ориентация |
+|---|---|
+| ![Телефон, портрет](screenshots/mobile_portrait_bonfire.png) | ![Телефон, альбом](screenshots/mobile_landscape_battle.png) |
+
+**Как поставить:**
+- **Android:** скачайте `ash-and-iron.apk` из релиза
+  [android-latest](https://github.com/schoolofheroesn1-a11y/Ryan/releases/tag/android-latest)
+  и установите (разрешите установку из неизвестных источников). Либо откройте сайт игры в Chrome:
+  меню ⋮ → «Установить приложение».
+- **iPhone:** откройте сайт игры в Safari, затем «Поделиться» → «На экран Домой».
+  Игра запустится во весь экран как приложение.
+- **Сайт игры:** `https://schoolofheroesn1-a11y.github.io/Ryan/`. Он заработает после слияния в `main`
+  и однократного включения Pages: Settings → Pages → Source: **GitHub Actions**.
+
+**Как играть с телефоном:** поставьте телефон на пол, прислонив к стене, и отойдите на 2–3 м,
+чтобы в кадр попадало всё тело. Экран во время игры не гаснет. Без камеры можно жать кнопки
+ОТЖИМ / ПРИСЕД / ЗВЕЗДА. Прогресс хранится в памяти телефона.
+
+**Сборка вручную:**
+```bash
+sh web/fetch_vendor.sh                 # MediaPipe + модель позы в web/vendor (без CDN)
+cd web && python -m http.server 8000   # открыть http://localhost:8000 (камера работает на localhost/https)
+sh mobile/build_android.sh             # APK (нужны Node 22, JDK 21, Android SDK)
+node --test web/tests/*.test.mjs       # тесты мобильной версии
+```
+Всё это делает CI: `.github/workflows/fitness-rpg.yml` прогоняет тесты, собирает APK в релиз
+`android-latest` и публикует сайт на GitHub Pages.
+
+Нативное приложение для App Store собирается только на Mac с аккаунтом Apple Developer, поэтому
+на iPhone игра ставится как веб-приложение (PWA). Внешне и по возможностям, включая камеру,
+это то же самое.
+
 ## Как упражнения управляют игрой
 
 | Упражнение | В бою | Прокачивает у костра |
@@ -62,6 +100,8 @@ game/scenes.py          главный экран, костёр, бой, кал�
 game/core.py            окно 640×360 (мир 320×180 ×2), цикл, текст, виджеты
 tools/generate_art.py   выгрузка арта в assets/*.png (+ увеличенные превью *_x6/x8)
 tests/test_game.py      тесты распознавания и боевой логики
+web/                    мобильная версия (HTML5 + JS, PWA): js/, assets/, sw.js, manifest
+mobile/                 Android-обёртка Capacitor (build_android.sh)
 ```
 
 Арт рисуется кодом на Python: каждый спрайт задан строками символов, один символ — один

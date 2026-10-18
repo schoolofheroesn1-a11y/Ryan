@@ -1,0 +1,39 @@
+@font-face {
+  font-family: "PressStart2P";
+  src: url("fonts/press-start-2p-cyrillic-400-normal.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "PressStart2P";
+  src: url("fonts/press-start-2p-latin-400-normal.woff2") format("woff2");
+}
+html, body {
+  margin: 0; height: 100%; background: #0a060c; color: #e2d6be;
+  overflow: hidden; overscroll-behavior: none; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  font-family: "PressStart2P", monospace;
+}
+body {
+  display: flex; align-items: center; justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; touch-action: none; }
+#gate {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 24px; box-sizing: border-box; text-align: center;
+  background: radial-gradient(circle at 50% 70%, #3a1418 0%, #0a060c 70%);
+}
+#gate[hidden] { display: none; }
+#gate img { image-rendering: pixelated; }
+#gate h1 { font-size: 22px; color: #e8cea0; margin: 0; text-shadow: 3px 3px #78201a; line-height: 1.4; }
+#gate p { font-size: 10px; line-height: 1.7; color: #968a80; margin: 0; max-width: 520px; }
+#gate .hint { font-size: 8px; }
+#gate button {
+  font: inherit; font-size: 12px; padding: 16px 20px; width: min(340px, 90vw);
+  color: #e8be5c; background: #2a1414; border: 2px solid #e8be5c; cursor: pointer;
+  opacity: .4; pointer-events: none;
+}
+#gate.ready button { opacity: 1; pointer-events: auto; }
+#gate button.secondary { color: #e2d6be; border-color: #5a4032; background: #140c12; }
+#gate button:active { transform: translateY(2px); }
