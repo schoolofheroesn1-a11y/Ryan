@@ -577,7 +577,7 @@ class BonfireScene extends Scene {
   }
   /** В портрете — крупные панели навыков, кнопки переезжают под камеру. */
   statRows() {
-    if (this.game.portrait) return Object.keys(STATS).map((st, i) => [st, [16, 66 + i * 98, 608, 90]]);
+    if (this.game.portrait) return Object.keys(STATS).map((st, i) => [st, [16, 66 + i * 98, 400, 90]]);
     return Object.keys(STATS).map((st, i) => [st, [20, 92 + i * 40, 290, 36]]);
   }
   /** «В БОЙ», «КУЗНИЦА», «МЕНЮ»: в портрете — на месте кнопок упражнений под камерой. */
@@ -656,6 +656,7 @@ class BonfireScene extends Scene {
     c.beginPath();
     c.ellipse(216, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
     c.fill();
+    if (this.game.portrait) return; // на телефоне вертикально костёр и рыцарь рисуются крупно рядом с панелями
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
     const p = this.game.player, hs = heroSprite(p.sword, p.owned, this.game.skin);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
@@ -714,9 +715,27 @@ class BonfireScene extends Scene {
       const [name, ex, desc] = STATS[st];
       const active = this.ritual ? this.ritual.stat === st : this.index === i;
       g.button(r, "", { selected: active, fill: active ? "rgba(70,40,30,0.85)" : "rgba(12,8,16,0.8)" });
-      g.text(`${name} ${p[st]}`, r[0] + 16, r[1] + 14, 24, active ? COL.gold : COL.text);
-      g.text(`${NAMES[ex]} x${p.repsNeeded(st)}: ${desc}`, r[0] + 16, r[1] + 54, 16, COL.dim);
+      g.text(`${name} ${p[st]}`, r[0] + 14, r[1] + 10, 24, active ? COL.gold : COL.text);
+      g.text(`${NAMES[ex]} x${p.repsNeeded(st)}`, r[0] + 14, r[1] + 42, 16, COL.text);
+      g.text(desc, r[0] + 14, r[1] + 66, 12, COL.dim);
     });
+    this.drawCamp(g.ctx, 424, 326);
+  }
+
+  /** Рыцарь у костра справа от панелей (крупно, ×3), во время ритуала «тренируется». */
+  drawCamp(c, x, ground) {
+    const g = this.game, t = g.time, p = g.player;
+    const r = 92 + Math.round(Math.sin(t * 5) * 6);
+    c.fillStyle = "rgba(255,120,40,0.22)";
+    c.beginPath();
+    c.ellipse(x + 130, ground - 4, r, 18, 0, 0, Math.PI * 2);
+    c.fill();
+    c.imageSmoothingEnabled = false;
+    const hs = heroSprite(p.sword, p.owned, g.skin);
+    const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
+    c.drawImage(hero, x + 12, ground - hero.height * 3, hero.width * 3, hero.height * 3);
+    const fire = anim("bonfire", t, 8, 4);
+    c.drawImage(fire, x + 112, ground - fire.height * 3, fire.width * 3, fire.height * 3);
   }
 
   drawOverlay() {
