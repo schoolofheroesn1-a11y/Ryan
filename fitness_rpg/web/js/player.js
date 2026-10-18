@@ -28,7 +28,7 @@ export class Player {
   get maxHp() { return 80 + 12 * this.vigor; }
   get maxStamina() { return 60 + 8 * this.endurance; }
   get staminaRegen() { return 10 + 2 * this.endurance; }
-  get damage() { return 12 + 4 * this.strength; }
+  get damage() { return 10 + 3 * this.strength; }
 
   levelCost() { return 60 + 30 * (this.level - 1); }
   repsNeeded(stat) { return Math.min(4 + this[stat], 20); }

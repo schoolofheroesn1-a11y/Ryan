@@ -6,6 +6,7 @@ import pygame
 from .art import Art
 from .motion import MotionInput
 from .player import Player
+from .sfx import Sfx
 
 CANVAS_W, CANVAS_H = 320, 180      # мир рисуется в низком разрешении...
 SCREEN_W, SCREEN_H = 640, 360      # ...и масштабируется ×2; интерфейс — поверх
@@ -66,14 +67,16 @@ class Scene:
 class Game:
     def __init__(self, use_camera=True, camera_index=0):
         pygame.init()
-        pygame.display.set_caption("Пепел и Железо — фитнес-RPG")
+        pygame.display.set_caption("Ash & Iron — фитнес-RPG")
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.SCALED | pygame.RESIZABLE)
         self.canvas = pygame.Surface((CANVAS_W, CANVAS_H))
         self.clock = pygame.time.Clock()
         self.fonts = {}
         self.art = Art()
+        self.sfx = Sfx()
         self.player = Player.load()
         self.motion = MotionInput(use_camera, camera_index)
+        self.run = None  # здоровье/эстус между боями (None — полные, после костра)
         self.shake = 0.0
         self.time = 0.0
         self.running = True

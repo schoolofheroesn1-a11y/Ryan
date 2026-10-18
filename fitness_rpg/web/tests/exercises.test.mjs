@@ -71,7 +71,8 @@ test("pushup rep", () => {
   const d = new ex.ExerciseDetector();
   d.update(plank(170), 0);
   assert.equal(d.posture, "планка");
-  assert.deepEqual(d.update(plank(80), 0.6), []);
+  assert.deepEqual(d.update(plank(80), 0.6), ["pushup_down"]);
+  assert.equal(d.low, true);
   assert.deepEqual(d.update(plank(170), 1.2), ["pushup"]);
 });
 

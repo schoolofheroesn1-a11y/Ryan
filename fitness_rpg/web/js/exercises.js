@@ -3,6 +3,7 @@
 //   "pushup"     — засчитано отжимание (атака / прокачка Силы)
 //   "squat_down" — игрок присел (мгновенный уворот в бою)
 //   "squat"      — засчитан полный присед (прокачка Живучести)
+//   "pushup_down"— игрок опустился в нижнюю точку отжимания (уворот из планки)
 //   "jack"       — засчитан прыжок «звёздочка» (эстус / прокачка Выносливости)
 
 export const NOSE = 0;
@@ -54,6 +55,11 @@ export class ExerciseDetector {
     this.counts = { pushup: 0, squat: 0, jack: 0 };
     this.posture = "нет человека";
     this.knee = this.elbow = this.tilt = null;
+  }
+
+  /** Игрок сейчас «внизу» (присед или нижняя точка отжимания) — пригнулся под удар. */
+  get low() {
+    return this.squatDown || this.pushupDown;
   }
 
   _rep(name, t, events) {
@@ -109,6 +115,7 @@ export class ExerciseDetector {
     if (this.elbow == null) return;
     if (!this.pushupDown && this.elbow < PUSHUP_DOWN_ELBOW) {
       this.pushupDown = true;
+      events.push("pushup_down");
     } else if (this.pushupDown && this.elbow > PUSHUP_UP_ELBOW) {
       this.pushupDown = false;
       this._rep("pushup", t, events);

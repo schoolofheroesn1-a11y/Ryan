@@ -289,7 +289,7 @@ def make_title_background(w=320, h=180, seed=13):
         surf.set_at((x, y), rnd.choice([(200, 190, 210), (120, 110, 140), (240, 230, 200)]))
 
     # Затмённая луна с ореолом
-    mx, my = 236, 42
+    mx, my = 262, 60
     for r, col in ((26, (70, 30, 40)), (22, (110, 50, 46)), (18, (230, 200, 160))):
         pygame.draw.circle(surf, col, (mx, my), r)
     pygame.draw.circle(surf, (190, 150, 120), (mx - 5, my + 3), 4)

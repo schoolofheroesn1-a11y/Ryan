@@ -6,6 +6,7 @@
     "pushup"      — засчитано отжимание (атака / прокачка Силы)
     "squat_down"  — игрок присел (мгновенный уворот в бою)
     "squat"       — засчитан полный присед (прокачка Живучести)
+    "pushup_down" — игрок опустился в нижнюю точку отжимания (уворот из планки)
     "jack"        — засчитан прыжок «звёздочка» (эстус / прокачка Выносливости)
 """
 import math
@@ -72,6 +73,11 @@ class ExerciseDetector:
         self.elbow = None
         self.tilt = None
 
+    @property
+    def low(self):
+        """Игрок сейчас «внизу» (присед или нижняя точка отжимания) — пригнулся под удар."""
+        return self.squat_down or self.pushup_down
+
     def _rep(self, name, t, events):
         if t - self.last_rep[name] >= MIN_REP_INTERVAL:
             self.last_rep[name] = t
@@ -122,6 +128,7 @@ class ExerciseDetector:
             return
         if not self.pushup_down and self.elbow < PUSHUP_DOWN_ELBOW:
             self.pushup_down = True
+            events.append("pushup_down")
         elif self.pushup_down and self.elbow > PUSHUP_UP_ELBOW:
             self.pushup_down = False
             self._rep("pushup", t, events)

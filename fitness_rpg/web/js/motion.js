@@ -45,6 +45,16 @@ export class Motion {
 
   /** Вызывать из обработчика нажатия: iOS даёт камеру только по жесту пользователя. */
   async start() {
+    if (this.ok || this.starting) return; // повторное касание, пока камера включается
+    this.starting = true;
+    try {
+      await this._start();
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  async _start() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       this.status = "браузер не даёт камеру (нужен https)";
       return;

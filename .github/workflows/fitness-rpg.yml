@@ -1,4 +1,4 @@
-# «Пепел и Железо»: тесты, Android APK и сайт для телефонов (GitHub Pages).
+# «Ash & Iron»: тесты, Android APK и сайт для телефонов (GitHub Pages).
 name: fitness-rpg
 
 on:
@@ -62,7 +62,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
-          name: "Пепел и Железо — Android (последняя сборка)"
+          name: "Ash & Iron — Android (последняя сборка)"
           prerelease: true
           target_commitish: ${{ github.sha }}
           body: |

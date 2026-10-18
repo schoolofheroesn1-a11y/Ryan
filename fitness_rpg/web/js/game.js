@@ -1,9 +1,10 @@
-// «Пепел и Железо» — мобильная (браузерная) версия. Порт game/core.py + game/scenes.py.
+// «Ash & Iron» — мобильная (браузерная) версия. Порт game/core.py + game/scenes.py.
 // Мир рисуется в 320×180 и масштабируется ×2; интерфейс — в логических координатах 640×H.
 // В портретной ориентации под игрой появляется большая панель камеры.
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
 import { ESTUS_MAX, Player, STATS } from "./player.js";
+import { initAudio, sfx } from "./sfx.js";
 
 const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
@@ -84,6 +85,7 @@ class Game {
     this.keys = [];
     this.taps = [];
     this.manualCounts = { pushup: 0, squat: 0, jack: 0 };
+    this.run = null; // здоровье/эстус между боями (null — полные, после костра)
     this.resize();
     addEventListener("resize", () => this.resize());
     addEventListener("keydown", (e) => this.keys.push(e.key));
@@ -279,12 +281,21 @@ class TitleScene extends Scene {
       ["Продолжить путь", () => g.change(new BattleScene(g))],
       ["Костёр: прокачка", () => g.change(new BonfireScene(g))],
       ["Камера и советы", () => g.change(new CameraScene(g))],
-      ["Новая игра", () => {
-        g.player = new Player();
-        g.player.save();
-        g.change(new BonfireScene(g));
-      }],
+      ["Новая игра", () => this.newGame()],
     ];
+    this.confirmT = 0;
+  }
+  newGame() {
+    // Защита от случайного касания: прогресс стирается только со второго нажатия
+    if (this.confirmT <= 0) {
+      this.confirmT = 3;
+      return;
+    }
+    const g = this.game;
+    g.player = new Player();
+    g.player.save();
+    g.run = null;
+    g.change(new BonfireScene(g));
   }
   rects() {
     return this.items.map((_, i) => [32, 112 + i * 36, 232, 28]);
@@ -293,11 +304,17 @@ class TitleScene extends Scene {
     const g = this.game;
     if (g.key("ArrowUp")) this.index = (this.index + this.items.length - 1) % this.items.length;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % this.items.length;
-    if (g.key("Enter", " ")) return this.items[this.index][1]();
-    this.rects().forEach((r, i) => { if (g.tapped(r)) this.items[i][1](); });
+    const activate = (i) => {
+      sfx.click();
+      this.index = i;
+      this.items[i][1]();
+    };
+    if (g.key("Enter", " ")) return activate(this.index);
+    this.rects().forEach((r, i) => { if (g.tapped(r)) activate(i); });
   }
   update(dt) {
     this.embers.update(dt);
+    this.confirmT -= dt;
   }
   draw(c) {
     const t = this.game.time;
@@ -320,10 +337,13 @@ class TitleScene extends Scene {
   }
   drawUi() {
     const g = this.game, p = g.player;
-    g.text("ПЕПЕЛ И ЖЕЛЕЗО", W / 2 + 2, 22, 32, "rgb(120,30,26)", "center", false);
-    g.text("ПЕПЕЛ И ЖЕЛЕЗО", W / 2, 20, 32, "rgb(232,206,160)", "center", false);
+    g.text("ASH & IRON", W / 2 + 3, 19, 40, "rgb(120,30,26)", "center", false);
+    g.text("ASH & IRON", W / 2, 16, 40, "rgb(232,206,160)", "center", false);
     g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.dim, "center");
-    this.rects().forEach((r, i) => g.button(r, this.items[i][0], { selected: i === this.index }));
+    this.rects().forEach((r, i) => {
+      const confirm = i === 3 && this.confirmT > 0;
+      g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
+    });
     g.text(`Ур. ${p.level}  Души: ${p.souls}  Враг: скелет #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
     if (!g.portrait) g.text("Нажмите на пункт меню", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
@@ -338,6 +358,7 @@ class BonfireScene extends Scene {
     this.ritual = null; // {stat, ex, need, done}
     this.say("Костёр зажжён. Здоровье и эстус восстановлены.");
     this.index = 0;
+    game.run = null; // отдых у костра
   }
   say(msg, t = 3.5) {
     this.message = msg;
@@ -358,7 +379,12 @@ class BonfireScene extends Scene {
         this.ritual = null;
         return this.say("Ритуал прерван. Души не потрачены.");
       }
-      for (const m of moves) if (m === this.ritual.ex) this.ritual.done += 1;
+      for (const m of moves) {
+        if (m === this.ritual.ex) {
+          this.ritual.done += 1;
+          sfx.rep();
+        }
+      }
       if (this.ritual.done >= this.ritual.need) {
         const st = this.ritual.stat;
         p.levelUp(st);
@@ -366,6 +392,7 @@ class BonfireScene extends Scene {
         this.ritual = null;
         this.say(`${STATS[st][0]} повышена до ${p[st]}!`, 4);
         this.embers.rate = 120;
+        sfx.level();
         if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
       }
       return;
@@ -375,6 +402,8 @@ class BonfireScene extends Scene {
     if (g.key("ArrowUp")) this.index = (this.index + n - 1) % n;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % n;
     const activate = (i) => {
+      sfx.click();
+      this.index = i;
       if (i < rows.length) this.startRitual(rows[i][0]);
       else if (i === rows.length) g.change(new BattleScene(g));
       else g.change(new TitleScene(g));
@@ -448,15 +477,17 @@ class BonfireScene extends Scene {
 class Skeleton {
   constructor(wave) {
     this.wave = wave;
-    this.maxHp = 60 + 25 * (wave - 1);
+    this.maxHp = 90 + 35 * (wave - 1);
     this.hp = this.maxHp;
-    this.damage = 18 + 6 * (wave - 1);
-    this.windupTime = Math.max(1.25, 1.8 - 0.05 * wave); // время на реакцию (присед)
-    this.maxPoise = 2;
+    this.damage = 16 + 4 * (wave - 1);
+    this.windupTime = Math.max(1.3, 1.9 - 0.05 * wave); // время на реакцию (присед)
+    this.comboChance = wave >= 3 ? 0.35 : 0; // с 3-го скелета — двойной удар
+    this.maxPoise = 3;
     this.poise = this.maxPoise;
     this.state = "idle";
-    this.timer = rand(2, 3);
+    this.timer = rand(1.5, 2.5);
     this.flash = 0;
+    this.combo = false;
     this.x = this.homeX = 200;
   }
   set(state, timer) {
@@ -465,6 +496,11 @@ class Skeleton {
   }
 }
 
+const ATTACK_COST = 20;
+const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
+const RECOVER_TIME = 1.6; // окно для удара после атаки скелета
+const ABSENT_PAUSE = 1.0; // пауза, если игрока нет в кадре дольше этого
+
 class BattleScene extends Scene {
   constructor(game) {
     super(game);
@@ -472,9 +508,11 @@ class BattleScene extends Scene {
     const p = game.player;
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
-    this.hp = p.maxHp;
+    // Здоровье и эстус переносятся между боями до отдыха у костра
+    const run = game.run || { hp: p.maxHp, estus: ESTUS_MAX };
+    this.hp = Math.min(run.hp, p.maxHp);
+    this.estus = run.estus;
     this.stamina = p.maxStamina;
-    this.estus = ESTUS_MAX;
     this.action = "idle";
     this.actionT = 0;
     this.invuln = 0;
@@ -484,6 +522,9 @@ class BattleScene extends Scene {
     this.result = null;
     this.resultT = 0;
     this.reward = 0;
+    this.ready = READY_TIME;
+    this.absentT = 0;
+    this.paused = false;
     this.torchL = new Particles(64, 58, 8, 2);
     this.torchR = new Particles(256, 58, 8, 2);
   }
@@ -492,11 +533,15 @@ class BattleScene extends Scene {
     this.texts.push({ text, x, y, color, size, ttl: 1 });
   }
 
+  saveRun() {
+    this.game.run = { hp: this.hp, estus: this.estus };
+  }
+
   act(move) {
     const p = this.game.player, en = this.enemy;
     if (move === "pushup") {
-      if (this.stamina < 20) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
-      this.stamina -= 20;
+      if (this.stamina < ATTACK_COST) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+      this.stamina -= ATTACK_COST;
       this.regenPause = 0.6;
       this.action = "attack";
       this.actionT = 0.35;
@@ -505,22 +550,24 @@ class BattleScene extends Scene {
       en.hp -= dmg;
       en.flash = 0.15;
       this.game.shake = 0.12;
+      crit ? sfx.crit() : sfx.hit();
       this.float(`${dmg}${crit ? " КРИТ!" : ""}`, en.x + 12, 90, crit ? COL.gold : COL.text);
       if (en.state === "windup") {
         en.poise -= 1;
         if (en.poise <= 0) {
-          en.set("recover", 1.2);
+          en.set("recover", RECOVER_TIME);
           this.float("ПРЕРВАН!", en.x + 12, 74, COL.gold);
         }
       }
       if (en.hp <= 0) this.win();
-    } else if (move === "squat_down") {
-      if (this.stamina < 15) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
-      this.stamina -= 15;
-      this.regenPause = 0.5;
+    } else if (move === "squat_down" || move === "pushup_down") {
+      // Уворот бесплатный: приседать/опускаться можно сколько угодно.
+      // Если уже идёт замах — игрок пригнулся заранее и защищён до самого удара.
       this.action = "dodge";
       this.actionT = 0.9;
-      this.invuln = 0.9;
+      const untilStrike = en.state === "windup" ? en.timer + 0.25 : 0;
+      this.invuln = Math.max(this.invuln, 0.9, untilStrike);
+      sfx.dodge();
     } else if (move === "jack") {
       if (this.estus <= 0) return this.float("Эстус пуст", this.HERO_X + 10, 90, COL.dim, 8);
       if (this.hp >= p.maxHp) return this.float("Здоровье полное", this.HERO_X + 10, 90, COL.dim, 8);
@@ -529,6 +576,7 @@ class BattleScene extends Scene {
       this.hp = Math.min(p.maxHp, this.hp + heal);
       this.action = "heal";
       this.actionT = 0.8;
+      sfx.heal();
       this.float(`+${heal}`, this.HERO_X + 10, 90, "rgb(255,170,60)");
     }
   }
@@ -547,6 +595,9 @@ class BattleScene extends Scene {
     }
     p.wave += 1;
     p.save();
+    this.saveRun();
+    sfx.win();
+    if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
   }
 
   die() {
@@ -557,23 +608,32 @@ class BattleScene extends Scene {
     p.lostAtWave = p.wave;
     p.souls = 0;
     p.save();
+    this.game.run = null; // возрождение у костра с полным здоровьем
+    sfx.die();
   }
 
   handle(moves) {
     const g = this.game;
     if (this.result) {
-      if (this.resultT > 1 && (g.taps.length || g.key("Enter", " ", "Escape"))) {
+      if (this.resultT < 1) return;
+      // Звёздочка — следующий бой без подхода к телефону; касание/Enter — к костру
+      if (this.result === "won" && moves.includes("jack")) return g.change(new BattleScene(g));
+      if (g.taps.length || g.key("Enter", " ", "Escape") || (this.result === "dead" && moves.includes("jack"))) {
         g.taps.length = 0;
         g.change(new BonfireScene(g));
       }
       return;
     }
-    if (g.key("Escape") || g.tapped([12, GAME_H - 30, 104, 22])) return g.change(new BonfireScene(g));
+    if (g.key("Escape") || g.tapped([12, GAME_H - 30, 104, 22])) {
+      this.saveRun();
+      return g.change(new BonfireScene(g));
+    }
+    if (this.ready > 0 || this.paused) return;
     for (const m of moves) if (m !== "squat") this.act(m); // в бою важен сам момент приседа
   }
 
   update(dt) {
-    const p = this.game.player, en = this.enemy;
+    const g = this.game, p = g.player, en = this.enemy;
     this.torchL.update(dt);
     this.torchR.update(dt);
     for (const ft of this.texts) {
@@ -587,9 +647,23 @@ class BattleScene extends Scene {
       this.resultT += dt;
       return;
     }
+    // С камерой: бой ждёт, пока игрок встанет в кадр, и замирает, если он вышел
+    const d = g.motion.ok ? g.motion.detector : null;
+    const present = !d || d.posture !== "нет человека";
+    this.absentT = present ? 0 : this.absentT + dt;
+    this.paused = !!d && this.absentT > ABSENT_PAUSE;
+    if (this.paused) return;
+    if (this.ready > 0) {
+      const before = Math.ceil(this.ready);
+      if (present) this.ready -= dt;
+      if (Math.ceil(this.ready) !== before && this.ready > 0) sfx.warn();
+      return;
+    }
+
     this.actionT -= dt;
     if (this.actionT <= 0) this.action = "idle";
     this.invuln = Math.max(0, this.invuln - dt);
+    if (d && d.low) this.invuln = Math.max(this.invuln, 0.15); // пока игрок внизу — он под ударом не стоит
     this.regenPause -= dt;
     if (this.regenPause <= 0) this.stamina = Math.min(p.maxStamina, this.stamina + p.staminaRegen * dt);
 
@@ -598,11 +672,20 @@ class BattleScene extends Scene {
     if (en.state === "idle" && en.timer <= 0) {
       en.poise = en.maxPoise;
       en.set("windup", en.windupTime);
+      sfx.warn();
     } else if (en.state === "windup" && en.timer <= 0) {
       en.set("attack", 0.35);
       this.resolveHit();
     } else if (en.state === "attack" && en.timer <= 0) {
-      en.set("recover", 1.0);
+      if (!en.combo && Math.random() < en.comboChance) {
+        en.combo = true; // второй, более быстрый замах сразу после первого
+        en.set("windup", en.windupTime * 0.75);
+        this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
+        sfx.warn();
+      } else {
+        en.combo = false;
+        en.set("recover", RECOVER_TIME);
+      }
     } else if (en.state === "recover" && en.timer <= 0) {
       en.set("idle", rand(1.6, 3));
     }
@@ -612,10 +695,14 @@ class BattleScene extends Scene {
 
   resolveHit() {
     const en = this.enemy;
-    if (this.invuln > 0) return this.float("УВОРОТ!", this.HERO_X + 10, 80, "rgb(140,200,255)");
+    if (this.invuln > 0) {
+      sfx.dodge();
+      return this.float("УВОРОТ!", this.HERO_X + 10, 80, "rgb(140,200,255)");
+    }
     this.hp -= en.damage;
     this.hurtT = 0.3;
     this.game.shake = 0.3;
+    sfx.hurt();
     if (navigator.vibrate) navigator.vibrate(150);
     this.float(`-${en.damage}`, this.HERO_X + 10, 86, COL.red);
     if (this.hp <= 0) {
@@ -675,17 +762,26 @@ class BattleScene extends Scene {
     }
 
     g.text(`Скелет-страж #${en.wave}`, 140, GAME_H - 46, 8);
-    g.bar(140, GAME_H - 32, 380, 8, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
+    g.bar(140, GAME_H - 32, 340, 8, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
     g.text(`Души: ${p.souls}`, W - 12, GAME_H - 16, 8, COL.gold, "right");
     g.button([12, GAME_H - 30, 104, 22], "< КОСТЁР");
 
-    [["ОТЖИМАНИЕ", "удар"], ["ПРИСЕД", "уворот"], ["ЗВЕЗДОЧКА", "эстус"]]
+    [["ОТЖИМАНИЕ", "удар"], ["ПРИСЕД/ВНИЗ", "уворот"], ["ЗВЕЗДОЧКА", "эстус"]]
       .forEach(([a, b], i) => g.text(`${a}: ${b}`, 16, 62 + i * 12, 8, COL.dim));
 
-    if (en.state === "windup" && !this.result) {
+    const plank = g.motion.ok && g.motion.detector.posture === "планка";
+    if (this.paused) {
+      g.rect([0, GAME_H / 2 - 30, W, 60], "rgba(0,0,0,0.75)");
+      g.text("ПАУЗА: ВСТАНЬТЕ В КАДР", W / 2, GAME_H / 2 - 12, 16, COL.gold, "center");
+      g.text("Камера не видит вас, скелет ждёт", W / 2, GAME_H / 2 + 10, 8, COL.dim, "center");
+    } else if (this.ready > 0) {
+      g.text("ПРИГОТОВЬТЕСЬ", W / 2, 60, 16, COL.gold, "center");
+      g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
+      g.text("Отойдите, чтобы тело было в кадре", W / 2, 124, 8, COL.dim, "center");
+    } else if (en.state === "windup" && !this.result) {
       const k = Math.max(0, Math.min(1, en.timer / en.windupTime));
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
-      g.text("ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
+      g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
       g.text("!", Math.round(en.x + 12) * 2, 2 * (GROUND_ARENA - 44), 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
@@ -698,11 +794,12 @@ class BattleScene extends Scene {
       g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
         g.text("ВЫ ПОГИБЛИ", W / 2, GAME_H / 2 - 28, 32, "rgb(170,20,20)", "center");
-        g.text("Души остались на месте гибели.", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
-        g.text("Победите этого скелета, чтобы вернуть их.", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
+        g.text("Души остались на месте гибели: победите", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
+        g.text("этого скелета, чтобы вернуть их. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
       } else {
         g.text("ВРАГ ПОВЕРЖЕН", W / 2, GAME_H / 2 - 28, 32, COL.gold, "center");
-        g.text(`+${this.reward} душ. Нажмите, чтобы вернуться к костру`, W / 2, GAME_H / 2 + 18, 8, COL.text, "center");
+        g.text(`+${this.reward} душ`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
+        g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.text, "center");
       }
     }
   }
@@ -714,10 +811,11 @@ class CameraScene extends Scene {
     super(game);
     this.manual = true;
   }
-  handle() {
+  handle(moves) {
     const g = this.game;
+    if (moves.some((m) => m === "pushup" || m === "squat" || m === "jack")) sfx.rep();
     if (g.key("Escape", "Enter") || g.tapped([W / 2 - 60, GAME_H - 30, 120, 22])) g.change(new TitleScene(g));
-    if (!g.motion.ok && g.motion.status !== "загрузка модели позы…" && g.tapped([20, 300, 200, 24])) g.motion.start();
+    if (!g.motion.ok && !g.motion.starting && g.tapped([20, 300, 200, 24])) g.motion.start();
   }
   draw(c) {
     c.drawImage(IMG.arena_bg, 0, 0);
@@ -743,7 +841,7 @@ class CameraScene extends Scene {
     ];
     let y = 140;
     for (const tip of tips) for (const l of g.wrap(tip, g.portrait ? 74 : 56)) { g.text(l, x, y, 8, COL.dim); y += 12; }
-    if (!g.motion.ok && g.motion.status !== "загрузка модели позы…") g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
+    if (!g.motion.ok && !g.motion.starting) g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
     g.button([W / 2 - 60, GAME_H - 30, 120, 22], "НАЗАД");
     if (!g.portrait) {
       g.cameraWidget();
@@ -772,9 +870,15 @@ export async function boot() {
     try {
       if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
     } catch (e) { /* iOS Safari не умеет — не страшно */ }
-    try {
-      if (navigator.wakeLock) await navigator.wakeLock.request("screen"); // экран не гаснет на тренировке
-    } catch (e) { /* не поддерживается */ }
+    initAudio();
+    // Экран не гаснет на тренировке; после сворачивания блокировку нужно взять заново
+    const lockScreen = async () => {
+      try {
+        if (navigator.wakeLock && document.visibilityState === "visible") await navigator.wakeLock.request("screen");
+      } catch (e) { /* не поддерживается */ }
+    };
+    lockScreen();
+    document.addEventListener("visibilitychange", lockScreen);
     const game = new Game(canvas, useCamera);
     window.game = game; // для отладки и автотестов
     game.change(new TitleScene(game));

@@ -45,7 +45,7 @@ class Player:
 
     @property
     def damage(self):
-        return 12 + 4 * self.strength
+        return 10 + 3 * self.strength
 
     # --- Прокачка у костра ---
     def level_cost(self):

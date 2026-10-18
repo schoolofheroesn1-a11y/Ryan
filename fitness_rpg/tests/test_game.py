@@ -96,8 +96,10 @@ class ExerciseDetectorTest(unittest.TestCase):
         d = ex.ExerciseDetector()
         self.assertEqual(d.update(plank(170), 0.0), [])
         self.assertEqual(d.posture, "планка")
-        self.assertEqual(d.update(plank(80), 0.6), [])
+        self.assertEqual(d.update(plank(80), 0.6), ["pushup_down"])
+        self.assertTrue(d.low)
         self.assertEqual(d.update(plank(170), 1.2), ["pushup"])
+        self.assertFalse(d.low)
         self.assertEqual(d.counts["pushup"], 1)
 
     def test_jumping_jack(self):
@@ -149,7 +151,9 @@ class BattleTest(unittest.TestCase):
         from game.scenes import BattleScene
         self.game.player = Player()
         self.game.player.save = lambda *a, **k: None
+        self.game.run = None
         self.scene = BattleScene(self.game)
+        self.scene.ready = 0  # пропускаем отсчёт «Приготовьтесь»
         self.game.change(self.scene)
 
     def run_for(self, seconds):
@@ -180,6 +184,65 @@ class BattleTest(unittest.TestCase):
         self.assertEqual(s.result, "won")
         self.assertGreater(p.souls, souls)
         self.assertEqual(p.wave, 2)
+
+    def test_early_dodge_lasts_until_strike(self):
+        # Присел сразу, как только скелет начал замах — удар всё равно не проходит
+        s = self.scene
+        s.enemy.set("windup", s.enemy.windup_time)
+        s.act("squat_down")
+        self.run_for(s.enemy.windup_time + 0.3)
+        self.assertEqual(s.hp, self.game.player.max_hp)
+
+    def test_dodge_is_free(self):
+        s = self.scene
+        s.stamina = 5
+        s.act("pushup_down")
+        self.assertEqual(s.stamina, 5)
+        self.assertGreater(s.invuln, 0)
+
+    def test_countdown_blocks_actions(self):
+        from game.scenes import BattleScene
+        s = BattleScene(self.game)
+        self.game.change(s)
+        s.handle([], ["pushup"])
+        self.assertEqual(s.enemy.hp, s.enemy.max_hp)
+        self.run_for(0.5)
+        self.assertEqual(s.enemy.state, "idle")
+
+    def test_hp_carries_over_and_jack_starts_next_fight(self):
+        from game.scenes import BattleScene
+        s = self.scene
+        s.hp = 40
+        while not s.result:
+            s.stamina = 999
+            s.act("pushup")
+        s.result_t = 2
+        s.handle([], ["jack"])
+        nxt = self.game.scene
+        self.assertIsInstance(nxt, BattleScene)
+        self.assertIsNot(nxt, s)
+        self.assertEqual(nxt.hp, 40)
+
+    def test_bonfire_restores(self):
+        from game.scenes import BattleScene, BonfireScene
+        self.game.run = {"hp": 10, "estus": 0}
+        BonfireScene(self.game)
+        self.assertEqual(BattleScene(self.game).hp, self.game.player.max_hp)
+
+    def test_new_game_needs_confirmation(self):
+        from game.scenes import TitleScene
+        self.game.player = Player(souls=500)
+        self.game.player.save = lambda *a, **k: None
+        t = TitleScene(self.game)
+        self.game.change(t)
+        Player.save, orig = (lambda *a, **k: None), Player.save
+        try:
+            t.new_game()
+            self.assertEqual(self.game.player.souls, 500)
+            t.new_game()
+            self.assertEqual(self.game.player.souls, 100)
+        finally:
+            Player.save = orig
 
     def test_estus_heals(self):
         s = self.scene

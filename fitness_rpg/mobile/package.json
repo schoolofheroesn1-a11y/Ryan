@@ -2,7 +2,7 @@
   "name": "ash-and-iron-mobile",
   "private": true,
   "version": "1.0.0",
-  "description": "Нативная Android-обёртка (Capacitor) для веб-версии «Пепел и Железо»",
+  "description": "Нативная Android-обёртка (Capacitor) для веб-версии «Ash & Iron»",
   "scripts": {
     "build:android": "sh build_android.sh"
   },
