@@ -6,6 +6,7 @@ import { ExerciseDetector } from "./exercises.js";
 const MP_VERSION = "1.1.1";
 const LOCAL_BASE = new URL("../vendor/tasks-vision/", import.meta.url).href;
 const CDN_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/`;
+const LOCAL_WASM = LOCAL_BASE + "wasm";
 const LOCAL_MODEL = new URL("../vendor/pose_landmarker_lite.task", import.meta.url).href;
 const CDN_MODEL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -24,9 +25,9 @@ async function exists(url) {
 
 async function loadVision() {
   try {
-    return { vision: await import(LOCAL_BASE + "vision_bundle.mjs"), base: LOCAL_BASE };
+    return { vision: await import(LOCAL_BASE + "vision_bundle.mjs"), wasm: LOCAL_WASM };
   } catch (e) {
-    return { vision: await import(CDN_BASE + "vision_bundle.mjs"), base: CDN_BASE };
+    return { vision: await import(CDN_BASE + "vision_bundle.mjs"), wasm: CDN_BASE + "wasm" };
   }
 }
 
@@ -73,8 +74,8 @@ export class Motion {
     }
     try {
       this.status = "загрузка модели позы…";
-      const { vision, base } = await loadVision();
-      const fileset = await vision.FilesetResolver.forVisionTasks(base + "wasm");
+      const { vision, wasm } = await loadVision();
+      const fileset = await vision.FilesetResolver.forVisionTasks(wasm);
       const model = (await exists(LOCAL_MODEL)) ? LOCAL_MODEL : CDN_MODEL;
       const opts = (delegate) => ({
         baseOptions: { modelAssetPath: model, delegate },
