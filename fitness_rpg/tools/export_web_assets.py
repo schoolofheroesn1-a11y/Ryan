@@ -34,7 +34,7 @@ def main():
         save(s, f"bonfire_{i}")
     for i, s in enumerate(a.torch):
         save(s, f"torch_{i}")
-    save(a.title_bg, "title_bg")
+    # фон меню (menu_bg.png) делает tools/make_menu_bg.py из assets/menu_source.jpg
     save(a.arena_bg, "arena_bg")
     save(art.tinted(a.skeleton["idle"][0], (20, 10, 24), 0.55), "skeleton_dark_0")
     save(art.tinted(a.hero["dodge"][0], (40, 10, 10), 0.6), "hero_dead_0")

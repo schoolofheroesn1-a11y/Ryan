@@ -16,7 +16,7 @@ export class Player {
     this.strength = 1;
     this.vigor = 1;
     this.endurance = 1;
-    this.souls = 100;
+    this.souls = 100; // пепел — валюта прокачки (поле зовётся souls ради старых сохранений)
     this.wave = 1;
     this.lostSouls = 0;
     this.lostAtWave = 0;

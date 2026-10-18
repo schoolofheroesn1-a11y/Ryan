@@ -20,9 +20,9 @@ class Player:
     strength: int = 1
     vigor: int = 1
     endurance: int = 1
-    souls: int = 100
+    souls: int = 100          # пепел — валюта прокачки (поле зовётся souls ради старых сохранений)
     wave: int = 1             # номер следующего скелета
-    lost_souls: int = 0       # души, оставленные на месте гибели
+    lost_souls: int = 0       # пепел, оставленный на месте гибели
     lost_at_wave: int = 0
     total_reps: dict = field(default_factory=lambda: {"pushup": 0, "squat": 0, "jack": 0})
 
@@ -49,7 +49,7 @@ class Player:
 
     # --- Прокачка у костра ---
     def level_cost(self):
-        """Цена следующего уровня в душах."""
+        """Цена следующего уровня в пепле."""
         return 60 + 30 * (self.level - 1)
 
     def reps_needed(self, stat):

@@ -8,7 +8,7 @@ import { initAudio, sfx } from "./sfx.js";
 
 const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
-const GROUND_TITLE = 150, GROUND_ARENA = 140;
+const GROUND_TITLE = 158, GROUND_ARENA = 140; // 158 — каменный уступ на фоне меню (assets/menu_bg.png)
 const FONT = '"PressStart2P", monospace';
 
 const COL = {
@@ -17,7 +17,7 @@ const COL = {
 };
 
 const SPRITES = [
-  "title_bg", "arena_bg", "skeleton_dark_0", "hero_dead_0",
+  "menu_bg", "arena_bg", "skeleton_dark_0", "hero_dead_0",
   "hero_idle_0", "hero_idle_1", "hero_attack_0", "hero_dodge_0", "hero_hurt_0", "hero_heal_0",
   "skeleton_idle_0", "skeleton_idle_1", "skeleton_windup_0", "skeleton_windup_1",
   "skeleton_attack_0", "skeleton_hurt_0", "skeleton_dead_0",
@@ -234,8 +234,7 @@ class Game {
 
     const w = this.wctx;
     w.imageSmoothingEnabled = false;
-    w.fillStyle = "#000";
-    w.fillRect(0, 0, CW, CH);
+    w.clearRect(0, 0, CW, CH); // прозрачный мир: сцена может подложить фон в полном разрешении
     this.scene.draw(w);
 
     const c = this.ctx;
@@ -248,6 +247,7 @@ class Game {
       ox = Math.round(rand(-2, 2)) * 2;
       oy = Math.round(rand(-2, 2)) * 2;
     }
+    this.scene.drawBackdrop();
     c.drawImage(this.world, ox, oy, W, GAME_H);
     this.scene.drawUi();
     if (this.portrait) {
@@ -266,6 +266,7 @@ class Scene {
   }
   handle(moves) {}
   update(dt) {}
+  drawBackdrop() {} // фон 640×360 под пиксельным миром (по умолчанию нет)
   draw(c) {}
   drawUi() {}
 }
@@ -274,7 +275,7 @@ class Scene {
 class TitleScene extends Scene {
   constructor(game) {
     super(game);
-    this.embers = new Particles(208, 132, 22);
+    this.embers = new Particles(176, 140, 22);
     this.index = 0;
     const g = game;
     this.items = [
@@ -316,17 +317,20 @@ class TitleScene extends Scene {
     this.embers.update(dt);
     this.confirmT -= dt;
   }
+  drawBackdrop() {
+    this.game.ctx.drawImage(IMG.menu_bg, 0, 0, W, GAME_H);
+  }
   draw(c) {
     const t = this.game.time;
-    c.drawImage(IMG.title_bg, 0, 0);
-    const r = 34 + Math.round(Math.sin(t * 6) * 2);
-    c.fillStyle = "rgba(255,120,40,0.16)";
+    const r = 30 + Math.round(Math.sin(t * 6) * 2);
+    c.fillStyle = "rgba(255,120,40,0.19)";
     c.beginPath();
-    c.ellipse(208, GROUND_TITLE - 2, r, 8, 0, 0, Math.PI * 2);
+    c.ellipse(176, GROUND_TITLE - 2, r, 8, 0, 0, Math.PI * 2);
     c.fill();
-    c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
-    c.drawImage(anim("hero_idle", t, 1.5, 2), 172, GROUND_TITLE - 32);
-    const sx = 270, sy = GROUND_TITLE - 32;
+    c.drawImage(anim("bonfire", t, 8, 4), 168, GROUND_TITLE - 22);
+    c.drawImage(anim("hero_idle", t, 1.5, 2), 140, GROUND_TITLE - 32);
+    // скелет крадётся из тьмы у края уступа — глаза мерцают
+    const sx = 196, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
     if (Math.floor(t * 1.3) % 5 !== 0) {
       c.fillStyle = "rgb(255,70,40)";
@@ -339,22 +343,24 @@ class TitleScene extends Scene {
     const g = this.game, p = g.player;
     g.text("ASH & IRON", W / 2 + 3, 19, 40, "rgb(120,30,26)", "center", false);
     g.text("ASH & IRON", W / 2, 16, 40, "rgb(232,206,160)", "center", false);
-    g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.dim, "center");
+    g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.text, "center");
+    g.rect([0, GAME_H - 24, W, 24], "rgba(8,4,10,0.72)"); // плашка под строкой состояния
     this.rects().forEach((r, i) => {
       const confirm = i === 3 && this.confirmT > 0;
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
     });
-    g.text(`Ур. ${p.level}  Души: ${p.souls}  Враг: скелет #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
+    g.text(`Ур. ${p.level}  Пепел: ${p.souls}  Враг: скелет #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
     if (!g.portrait) g.text("Нажмите на пункт меню", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
 }
 
 // ------------------------------------------------------------------ Костёр
+const RITUAL_CANCEL = [166 - 70, GAME_H - 26, 140, 22];
 class BonfireScene extends Scene {
   constructor(game) {
     super(game);
     this.manual = true;
-    this.embers = new Particles(216, 116, 26);
+    this.embers = new Particles(208, 124, 26);
     this.ritual = null; // {stat, ex, need, done}
     this.say("Костёр зажжён. Здоровье и эстус восстановлены.");
     this.index = 0;
@@ -369,15 +375,15 @@ class BonfireScene extends Scene {
   }
   startRitual(stat) {
     const p = this.game.player;
-    if (!p.canLevel()) return this.say(`Нужно ${p.levelCost()} душ, у вас ${p.souls}. Победите скелетов!`);
+    if (!p.canLevel()) return this.say(`Нужно ${p.levelCost()} пепла, у вас ${p.souls}. Победите скелетов!`);
     this.ritual = { stat, ex: STATS[stat][1], need: p.repsNeeded(stat), done: 0 };
   }
   handle(moves) {
     const g = this.game, p = g.player;
     if (this.ritual) {
-      if (g.key("Escape") || g.tapped([W / 2 - 70, GAME_H - 26, 140, 22])) {
+      if (g.key("Escape") || g.tapped(RITUAL_CANCEL)) {
         this.ritual = null;
-        return this.say("Ритуал прерван. Души не потрачены.");
+        return this.say("Ритуал прерван. Пепел не потрачен.");
       }
       for (const m of moves) {
         if (m === this.ritual.ex) {
@@ -419,19 +425,22 @@ class BonfireScene extends Scene {
     this.embers.rate += (26 - this.embers.rate) * Math.min(1, dt * 1.5);
     this.msgT -= dt;
   }
+  drawBackdrop() {
+    const c = this.game.ctx;
+    c.drawImage(IMG.menu_bg, 0, 0, W, GAME_H);
+    c.fillStyle = "rgba(0,0,0,0.43)";
+    c.fillRect(0, 0, W, GAME_H);
+  }
   draw(c) {
     const t = this.game.time;
-    c.drawImage(IMG.title_bg, 0, 0);
-    c.fillStyle = "rgba(0,0,0,0.47)";
-    c.fillRect(0, 0, CW, CH);
     const r = 46 + Math.round(Math.sin(t * 5) * 3);
     c.fillStyle = "rgba(255,120,40,0.2)";
     c.beginPath();
-    c.ellipse(216, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
+    c.ellipse(208, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
     c.fill();
-    c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
+    c.drawImage(anim("bonfire", t, 8, 4), 192, GROUND_TITLE - 44, 32, 44);
     const hero = this.ritual && this.ritual.done % 2 ? IMG.hero_attack_0 : IMG.hero_idle_0;
-    c.drawImage(hero, 168, GROUND_TITLE - 32);
+    c.drawImage(hero, 164, GROUND_TITLE - 32);
     this.embers.draw(c);
   }
   drawUi() {
@@ -441,8 +450,8 @@ class BonfireScene extends Scene {
     g.ctx.strokeRect(12.5, 12.5, 305, 259);
     g.text("КОСТЁР", 22, 22, 16, COL.gold);
     g.text(`Уровень ${p.level}`, 22, 46, 8);
-    g.text(`Души: ${p.souls}`, 160, 46, 8, COL.gold);
-    g.text(`Цена уровня: ${p.levelCost()} душ`, 22, 62, 8, COL.dim);
+    g.text(`Пепел: ${p.souls}`, 160, 46, 8, COL.gold);
+    g.text(`Цена уровня: ${p.levelCost()} пепла`, 22, 62, 8, COL.dim);
     g.text("Нажмите на навык:", 22, 78, 8, COL.dim);
     this.statRows().forEach(([st, r], i) => {
       const [name, ex, desc] = STATS[st];
@@ -462,11 +471,13 @@ class BonfireScene extends Scene {
 
     if (this.ritual) {
       const { stat, ex, need, done } = this.ritual;
-      g.rect([0, GAME_H - 84, W, 84], "rgba(0,0,0,0.85)");
-      g.text(`Ритуал: ${STATS[stat][0]}`, W / 2, GAME_H - 78, 8, COL.dim, "center");
-      g.text(`${NAMES[ex]}: ${done} / ${need}`, W / 2, GAME_H - 64, 16, COL.gold, "center");
-      g.bar(W / 2 - 150, GAME_H - 40, 300, 8, done / need, "rgb(230,140,50)");
-      g.button([W / 2 - 70, GAME_H - 26, 140, 22], "ПРЕРВАТЬ");
+      // плашка ритуала — только в левой колонке, чтобы рыцарь у костра оставался виден
+      const cx = 166;
+      g.rect([0, GAME_H - 84, 332, 84], "rgba(0,0,0,0.85)");
+      g.text(`Ритуал: ${STATS[stat][0]}`, cx, GAME_H - 78, 8, COL.dim, "center");
+      g.text(`${NAMES[ex]}: ${done} / ${need}`, cx, GAME_H - 64, 16, COL.gold, "center");
+      g.bar(cx - 140, GAME_H - 40, 280, 8, done / need, "rgb(230,140,50)");
+      g.button(RITUAL_CANCEL, "ПРЕРВАТЬ");
     } else if (this.msgT > 0) {
       g.wrap(this.message, 76).forEach((l, i) => g.text(l, W / 2, GAME_H - 36 + i * 12, 8, COL.gold, "center"));
     }
@@ -763,7 +774,7 @@ class BattleScene extends Scene {
 
     g.text(`Скелет-страж #${en.wave}`, 140, GAME_H - 46, 8);
     g.bar(140, GAME_H - 32, 340, 8, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
-    g.text(`Души: ${p.souls}`, W - 12, GAME_H - 16, 8, COL.gold, "right");
+    g.text(`Пепел: ${p.souls}`, W - 12, GAME_H - 16, 8, COL.gold, "right");
     g.button([12, GAME_H - 30, 104, 22], "< КОСТЁР");
 
     [["ОТЖИМАНИЕ", "удар"], ["ПРИСЕД/ВНИЗ", "уворот"], ["ЗВЕЗДОЧКА", "эстус"]]
@@ -794,11 +805,11 @@ class BattleScene extends Scene {
       g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
         g.text("ВЫ ПОГИБЛИ", W / 2, GAME_H / 2 - 28, 32, "rgb(170,20,20)", "center");
-        g.text("Души остались на месте гибели: победите", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
-        g.text("этого скелета, чтобы вернуть их. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
+        g.text("Пепел остался на месте гибели: победите", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
+        g.text("этого скелета, чтобы вернуть его. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
       } else {
         g.text("ВРАГ ПОВЕРЖЕН", W / 2, GAME_H / 2 - 28, 32, COL.gold, "center");
-        g.text(`+${this.reward} душ`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
+        g.text(`+${this.reward} пепла`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
         g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.text, "center");
       }
     }
