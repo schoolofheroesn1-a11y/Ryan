@@ -160,10 +160,18 @@ class Game {
     });
   }
 
+  /** Нужна ли сцене нижняя часть экрана в портрете (камера или крупное меню). */
+  get usesPanel() {
+    const s = this.scene;
+    return !!s && (s.needsCamera || s.ownsPanel);
+  }
+
   resize() {
     const vw = innerWidth, vh = innerHeight;
     this.portrait = vh > vw * 1.05;
-    this.H = this.portrait ? Math.min(1400, Math.max(GAME_H + 200, Math.round((W * vh) / vw))) : GAME_H;
+    // камера видна только там, где нужны упражнения; иначе экран — одна картинка игры
+    this.panelOn = this.portrait && this.usesPanel;
+    this.H = this.panelOn ? Math.min(1400, Math.max(GAME_H + 200, Math.round((W * vh) / vw))) : GAME_H;
     this.canvas.width = W;
     this.canvas.height = this.H;
     const scale = Math.min(vw / W, vh / this.H);
@@ -362,6 +370,7 @@ class Game {
   }
 
   frame(dt) {
+    if (this.portrait && this.usesPanel !== this.panelOn) this.resize();
     let moves = this.motion.poll();
     // клавиатура (браузер на ПК) и экранные кнопки
     const pushup = ["pushup"], squat = ["squat_down", "squat"], jack = ["jack"];
@@ -374,7 +383,7 @@ class Game {
     this.testKeys();
     if (this.portrait || !this.motion.ok) {
       for (const [ex, r] of this.manual) {
-        if (this.scene.manual && this.tapped(r)) {
+        if (this.scene.manual && this.scene.needsCamera && this.tapped(r)) {
           moves.push(...(ex === "squat" ? ["squat_down", "squat"] : [ex]));
           this.manualCounts[ex] += 1;
         }
@@ -403,7 +412,7 @@ class Game {
     }
     c.drawImage(this.world, ox, oy, W, GAME_H);
     this.scene.drawUi();
-    if (this.portrait && !this.scene.ownsPanel) {
+    if (this.portrait && this.scene.needsCamera) {
       this.cameraWidget();
       if (this.scene.manual) this.manualButtons();
     }
@@ -421,6 +430,10 @@ class Scene {
   constructor(game) {
     this.game = game;
     this.manual = false; // показывать кнопки ручных упражнений
+  }
+  /** Сейчас нужны упражнения: показать камеру и кнопки ручного ввода. */
+  get needsCamera() {
+    return false;
   }
   handle(moves) {}
   update(dt) {}
@@ -547,6 +560,9 @@ class BonfireScene extends Scene {
     this.message = msg;
     this.msgT = t;
   }
+  get needsCamera() {
+    return !!this.ritual; // камера только во время ритуала прокачки
+  }
   statRows() {
     return Object.keys(STATS).map((st, i) => [st, [20, 92 + i * 40, 290, 36]]);
   }
@@ -640,7 +656,7 @@ class BonfireScene extends Scene {
     g.text(`Урон ${p.damage}  Здоровье ${p.maxHp}  Силы ${p.maxStamina}`, 22, 248, 8, COL.dim);
     const tr = p.totalReps;
     g.text(`Всего: отжим ${tr.pushup} присед ${tr.squat} звезда ${tr.jack}`, 22, 260, 8, COL.text);
-    if (!g.portrait) {
+    if (!g.portrait && this.needsCamera) {
       g.cameraWidget();
       g.manualButtons();
     }
@@ -760,6 +776,9 @@ class BattleScene extends Scene {
     this.aura = new SwordAura();
     this.hitFx = new HitFx();
     this.victory = null;
+  }
+  get needsCamera() {
+    return true;
   }
 
   /** Где сейчас стоит герой (верхний левый угол спрайта) и в какой он позе. */
@@ -1533,6 +1552,10 @@ class CameraScene extends Scene {
     super(game);
     this.manual = true;
   }
+  get needsCamera() {
+    return true;
+  }
+
   handle(moves) {
     const g = this.game;
     if (moves.some((m) => m === "pushup" || m === "squat" || m === "jack")) sfx.rep();
