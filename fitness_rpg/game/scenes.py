@@ -705,8 +705,8 @@ class BattleScene(Scene):
             pulse = 0.5 + 0.5 * math.sin(g.time * 14)
             g.text(s, "ОПУСТИСЬ!" if plank else "ПРИСЕДАЙ!", (SCREEN_W // 2, 62), 44, (255, int(60 + 120 * pulse), 40), center=True)
             g.bar(s, (SCREEN_W // 2 - 80, 106, 160, 5), k, (255, 90, 50))
-            top = GROUND_ARENA - {"knight": 56, "chief": 46}.get(en.kind, 44)
-            g.text(s, "!", (int(en.x + {"knight": 30, "chief": 24}.get(en.kind, 12)) * 2, 2 * top), 36, (255, 200, 60), center=True)
+            top = GROUND_ARENA - {"knight": 56, "chief": 54}.get(en.kind, 44)
+            g.text(s, "!", (int(en.x + {"knight": 30, "chief": 28}.get(en.kind, 12)) * 2, 2 * top), 36, (255, 200, 60), center=True)
         elif en.state == "recover" and not self.result:
             g.text(s, "Окно для удара — ОТЖИМАЙСЯ!", (SCREEN_W // 2, 76), 22, COL_GOLD, center=True)
         elif en.state == "drink" and not self.result:

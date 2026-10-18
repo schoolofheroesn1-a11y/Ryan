@@ -1044,8 +1044,8 @@ class BattleScene extends Scene {
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
       g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
-      const top = GROUND_ARENA - ({ knight: 58, chief: 48 }[en.kind] || 44);
-      g.text("!", Math.round(en.x + ({ knight: 30, chief: 24 }[en.kind] || 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
+      const top = GROUND_ARENA - ({ knight: 58, chief: 56 }[en.kind] || 44);
+      g.text("!", Math.round(en.x + ({ knight: 30, chief: 28 }[en.kind] || 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text("Окно для удара: ОТЖИМАЙСЯ!", W / 2, 70, 8, COL.gold, "center");
     } else if (en.state === "drink" && !this.result) {

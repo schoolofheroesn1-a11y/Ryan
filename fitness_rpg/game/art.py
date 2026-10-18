@@ -397,7 +397,26 @@ CHIEF_ARM_DRINK = {
 }
 
 
+CHIEF_DUP_ROWS = (4, 11, 13, 15, 20, 24, 26, 28)   # капюшон, торс, кушак, ноги
+CHIEF_DUP_COLS = (CHIEF_X + 15, CHIEF_X + 16)      # шире в плечах
+
+
+def _enlarge(rows, dup_rows, dup_cols):
+    """Увеличивает пиксельную карту, повторяя выбранные ряды и столбцы (пиксели остаются чёткими)."""
+    out = []
+    for y, row in enumerate(rows):
+        wide = "".join(ch * (2 if x in dup_cols else 1) for x, ch in enumerate(row))
+        out.append(wide)
+        if y in dup_rows:
+            out.append(wide)
+    return out
+
+
 def chief_map(arm):
+    return _enlarge(_chief_map_base(arm), CHIEF_DUP_ROWS, CHIEF_DUP_COLS)
+
+
+def _chief_map_base(arm):
     rows = [list("." * CHIEF_W) for _ in range(34)]
     for y, row in enumerate(_chief_body()):
         for x, ch in enumerate(row):
@@ -789,6 +808,79 @@ def make_arena_background(w=320, h=180, seed=7):
     return surf
 
 
+def draw_gothic_castle(surf, cx, base, rnd):
+    """Узкий высокий готический замок вдали на холме: шпили-иглы, собор с розой, стрельчатые окна."""
+    hill_col, hill_mid, hill_hi = (30, 40, 32), (38, 50, 38), (84, 90, 62)
+    pygame.draw.ellipse(surf, hill_col, (cx - 80, base - 4, 160, 40))
+    pygame.draw.ellipse(surf, hill_mid, (cx - 46, base - 4, 92, 30))
+    for x in range(cx - 44, cx + 44):  # травянистая кромка холма в свете заката
+        y = base - 4 + int(15 * (1 - (1 - ((x - cx) / 46) ** 2) ** 0.5))
+        surf.set_at((x, y), hill_hi)
+        if x % 3 == 0:
+            surf.set_at((x, y - 1), hill_hi)
+
+    # даль: камень светлее и холоднее, чем силуэты на переднем плане
+    stone, dark, rim = (44, 32, 54), (28, 20, 36), (120, 72, 74)
+    glow, glow_dim = (255, 176, 90), (210, 120, 60)
+
+    def needle(x, top, w, h):
+        """Шпиль-игла с крестоцветом."""
+        pygame.draw.polygon(surf, stone, [(x, top), (x + (w - 1) / 2, top - h), (x + w - 1, top)])
+        pygame.draw.line(surf, rim, (x + (w - 1) // 2 + 1, top - h + 2), (x + w - 1, top))
+        surf.set_at((x + (w - 1) // 2, top - h - 1), stone)
+
+    def tower(x, top, w, spire_h, win_step=6):
+        pygame.draw.rect(surf, stone, (x, top, w, base - top))
+        pygame.draw.line(surf, rim, (x + w - 1, top), (x + w - 1, base - 1))  # край в свете заката
+        surf.set_at((x - 1, top - 1), stone)  # угловые пинакли
+        surf.set_at((x + w, top - 1), stone)
+        needle(x, top, w, spire_h)
+        for wy in range(top + 3, base - 4, win_step):  # стрельчатые окна-бойницы
+            if rnd.random() < 0.7:
+                surf.set_at((x + w // 2 - 1 + (w % 2), wy), glow_dim)
+                pygame.draw.line(surf, glow, (x + w // 2 - 1 + (w % 2), wy + 1), (x + w // 2 - 1 + (w % 2), wy + 2))
+
+    # стена с зубцами
+    wall_top = base - 11
+    pygame.draw.rect(surf, stone, (cx - 22, wall_top, 44, 11))
+    for bx in range(cx - 22, cx + 22, 2):
+        if (bx - cx) % 4 == 0:
+            surf.set_at((bx, wall_top - 1), stone)
+    # башни: низкие по краям, высокие и тонкие ближе к собору
+    tower(cx - 25, base - 21, 4, 8)
+    tower(cx + 21, base - 19, 4, 7)
+    tower(cx - 16, base - 37, 5, 14)
+    tower(cx + 11, base - 34, 5, 13)
+    # контрфорсы к собору
+    for sx, ex in ((cx - 11, cx - 5), (cx + 11, cx + 5)):
+        pygame.draw.line(surf, stone, (sx, base - 18), (ex, base - 27))
+        pygame.draw.line(surf, stone, (sx, base - 13), (ex, base - 21))
+    # собор: самый высокий, узкий, с фронтоном и иглой
+    top = base - 44
+    pygame.draw.rect(surf, stone, (cx - 5, top, 10, base - top))
+    pygame.draw.line(surf, rim, (cx + 4, top), (cx + 4, base - 1))
+    pygame.draw.polygon(surf, stone, [(cx - 5, top), (cx, top - 5), (cx + 4, top)])
+    needle(cx - 1, top - 4, 3, 20)
+    for px in (cx - 6, cx + 5):  # пинакли по углам фасада
+        needle(px, top, 2, 4)
+    # розовое окно
+    pygame.draw.circle(surf, glow_dim, (cx, top + 6), 2)
+    surf.set_at((cx, top + 6), glow)
+    for dx, dy in ((0, -2), (0, 2), (-2, 0), (2, 0)):
+        surf.set_at((cx + dx, top + 6 + dy), dark)
+    # высокие стрельчатые окна собора
+    for wx in (cx - 3, cx + 2):
+        for wy in (top + 12, top + 22):
+            surf.set_at((wx, wy), glow_dim)
+            pygame.draw.line(surf, glow, (wx, wy + 1), (wx, wy + 4))
+    # стрельчатые ворота
+    pygame.draw.rect(surf, (12, 8, 14), (cx - 2, base - 6, 4, 6))
+    surf.set_at((cx - 1, base - 7), (12, 8, 14))
+    surf.set_at((cx, base - 7), (12, 8, 14))
+    # знамя на шпиле
+    pygame.draw.rect(surf, (160, 30, 34), (cx + 1, top - 22, 3, 2))
+
+
 def make_castle_background(w=320, h=180, seed=21):
     """Подступы к замку: травяное поле, горы и тёмный замок на холме под багровым закатом."""
     rnd = random.Random(seed)
@@ -808,8 +900,8 @@ def make_castle_background(w=320, h=180, seed=21):
     for _ in range(40):  # редкие звёзды наверху
         surf.set_at((rnd.randrange(w), rnd.randrange(40)), rnd.choice([(170, 160, 190), (110, 100, 130)]))
     # тусклое солнце садится за замок
-    sx, sy = 214, 92
-    for r, col in ((24, (150, 70, 52)), (19, (190, 96, 60)), (15, (230, 150, 90))):
+    sx, sy = 206, 92
+    for r, col in ((22, (150, 70, 52)), (17, (190, 96, 60)), (13, (230, 150, 90))):
         pygame.draw.circle(surf, col, (sx, sy), r)
     # рваные тучи
     for _ in range(9):
@@ -835,24 +927,8 @@ def make_castle_background(w=320, h=180, seed=21):
     ridge(92, 30, (58, 52, 76), 7, 7, snow=(150, 140, 160))  # дальние горы со снегом
     ridge(104, 16, (40, 36, 54), 5, 4)                        # ближние горы
 
-    # холм и замок впереди
-    pygame.draw.ellipse(surf, (34, 40, 34), (120, 96, 190, 46))
-    castle = (18, 14, 22)
-    pygame.draw.rect(surf, castle, (166, 80, 92, 34))                  # стена
-    for tx, tw, th in ((158, 14, 52), (196, 18, 70), (246, 14, 50)):   # башни
-        pygame.draw.rect(surf, castle, (tx, 114 - th, tw, th))
-        for bx in range(tx, tx + tw, 4):
-            pygame.draw.rect(surf, castle, (bx, 114 - th - 3, 2, 3))
-        pygame.draw.polygon(surf, castle, [(tx - 1, 114 - th - 3), (tx + tw // 2, 114 - th - 14), (tx + tw, 114 - th - 3)])
-    for bx in range(166, 258, 4):
-        pygame.draw.rect(surf, castle, (bx, 77, 2, 3))
-    pygame.draw.rect(surf, (8, 6, 10), (200, 98, 10, 16))              # ворота
-    pygame.draw.polygon(surf, (8, 6, 10), [(200, 98), (205, 94), (210, 98)])
-    for wx, wy in ((162, 76), (202, 56), (208, 70), (250, 80), (182, 92), (232, 90)):  # окна
-        pygame.draw.rect(surf, (255, 170, 70), (wx, wy, 2, 3))
-    for fx, fy in ((205, 33), (164, 49), (252, 51)):                   # флаги
-        pygame.draw.line(surf, castle, (fx, fy), (fx, fy - 7))
-        pygame.draw.rect(surf, (140, 24, 30), (fx + 1, fy - 7, 5, 3))
+    # далёкий холм и готический замок на нём
+    draw_gothic_castle(surf, 214, 100, rnd)
 
     # поле: тёмная трава с полосами и светлыми стебельками
     for y in range(horizon, h):
@@ -866,12 +942,12 @@ def make_castle_background(w=320, h=180, seed=21):
         length = 1 + int(t * 3)
         pygame.draw.line(surf, blade, (x, y), (x + rnd.choice((-1, 0, 1)), y - length))
     # дорога к воротам
-    road = [(198, 114), (212, 114), (250, 180), (150, 180)]
+    road = [(212, 112), (216, 112), (250, 180), (150, 180)]
     pygame.draw.polygon(surf, (62, 50, 40), road)
     for _ in range(80):
         x = rnd.randrange(150, 250)
         y = rnd.randrange(116, 180)
-        if 198 + (y - 114) * (-48 / 66) <= x <= 212 + (y - 114) * (38 / 66):
+        if 212 + (y - 114) * (-62 / 66) <= x <= 216 + (y - 114) * (34 / 66):
             surf.set_at((x, y), rnd.choice([(84, 70, 54), (48, 38, 30)]))
     # мёртвое дерево и вороны
     tree = (14, 10, 16)
@@ -948,12 +1024,12 @@ def make_chief_frames():
     raised = sprite_from_map(chief_map(CHIEF_ARM_RAISED))
     drink = sprite_from_map(chief_map(CHIEF_ARM_DRINK))
     return {
-        "idle": [idle, shifted_breath(idle, 16)],
+        "idle": [idle, shifted_breath(idle, 20)],
         "windup": [tinted(raised, (255, 90, 50), 0.35), raised],
         "attack": [sprite_from_map(chief_map(CHIEF_ARM_SWING))],
         "hurt": [tinted(idle, (255, 255, 255), 0.8)],
         "drink": [drink, tinted(drink, (255, 120, 120), 0.25)],
-        "enraged": [tinted(idle, (255, 40, 30), 0.25), tinted(shifted_breath(idle, 16), (255, 40, 30), 0.25)],
+        "enraged": [tinted(idle, (255, 40, 30), 0.25), tinted(shifted_breath(idle, 20), (255, 40, 30), 0.25)],
         "dead": [crouched(tinted(idle, (60, 50, 50), 0.5))],
     }
 
