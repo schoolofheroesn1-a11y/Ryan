@@ -48,3 +48,25 @@ def rewards(wave):
     if is_boss_wave(wave):
         return 2 * (80 + 40 * wave), 4 + wave // BOSS_EVERY, 1
     return 80 + 40 * wave, 2 + (wave - 1) // BOSS_EVERY, 0
+
+
+# --- Локации ---
+# После 3-го Костяного Рыцаря (раунд 15) открываются подступы к замку
+LOCATIONS = {
+    1: {"name": "Склеп", "bg": "arena_bg"},
+    2: {"name": "Подступы к замку", "bg": "castle_bg"},
+}
+CASTLE_FROM_WAVE = 16
+
+
+def location_for(wave):
+    return 2 if wave >= CASTLE_FROM_WAVE else 1
+
+
+def enemy_kind(wave):
+    """Кто ждёт на этой волне: skeleton / bandit / knight (босс склепа) / chief (босс замка)."""
+    if location_for(wave) == 1:
+        return "knight" if is_boss_wave(wave) else "skeleton"
+    if is_boss_wave(wave):
+        return "chief"
+    return "bandit" if wave % 2 == 0 else "skeleton"

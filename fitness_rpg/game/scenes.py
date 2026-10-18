@@ -8,7 +8,8 @@ from .art import SLASH_COLORS, tinted
 from .core import (COL_DIM, COL_GOLD, COL_GREEN, COL_RED, COL_SHADOW, COL_TEXT,
                    SCREEN_H, SCREEN_W, Particles, Scene)
 from .exercises import NAMES
-from .gear import RELICS, SHOP_ORDER, SWORDS, is_boss_wave, item, price_text, rewards
+from .gear import (CASTLE_FROM_WAVE, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemy_kind, is_boss_wave, item,
+                   location_for, price_text, rewards)
 from .player import STATS, Player
 
 GROUND_TITLE = 150
@@ -117,10 +118,11 @@ class TitleScene(Scene):
         g.text(s, "фитнес-RPG: тренируй тело, чтобы выжить во тьме", (SCREEN_W // 2, 62), 18, COL_DIM, center=True)
         self.menu.draw(g, s, 60, 150)
         p = g.player
-        foe = "БОСС" if is_boss_wave(p.wave) else "скелет"
-        g.text(s, f"Уровень {p.level}   Пепел: {p.souls}   Следующий враг: {foe} #{p.wave}",
+        foe = "БОСС" if is_boss_wave(p.wave) else Skeleton.NAMES[enemy_kind(p.wave)].lower()
+        land = LOCATIONS[location_for(p.wave)]["name"]
+        g.text(s, f"Ур. {p.level}   Пепел: {p.souls}   {land}: {foe} #{p.wave}",
                (12, SCREEN_H - 20), 16, COL_DIM)
-        g.text(s, "↑↓ Enter · тест: F2 камни, F3 босс", (SCREEN_W - 12, SCREEN_H - 20), 16, COL_DIM, right=True)
+        g.text(s, "↑↓ Enter · тест: F2 камни, F3 босс, F4 замок", (SCREEN_W - 12, SCREEN_H - 20), 16, COL_DIM, right=True)
 
 
 # ---------------------------------------------------------------- Костёр
@@ -288,31 +290,46 @@ ABSENT_PAUSE = 1.0   # пауза, если игрока нет в кадре д
 
 
 class Skeleton:
-    """Скелет-страж; каждый 5-й — босс Костяной Рыцарь."""
+    """Враг волны: скелет, разбойник или босс локации (Костяной Рыцарь / Глава разбойников)."""
+
+    NAMES = {"skeleton": "Скелет-страж", "bandit": "Разбойник", "knight": "Костяной Рыцарь",
+             "chief": "Глава разбойников"}
 
     def __init__(self, wave):
         self.wave = wave
-        self.boss = is_boss_wave(wave)
+        self.kind = enemy_kind(wave)
+        self.boss = self.kind in ("knight", "chief")
+        self.name = self.NAMES[self.kind]
         base_hp = 90 + 35 * (wave - 1)
         base_dmg = 16 + 4 * (wave - 1)
         self.windup_time = max(1.3, 1.9 - 0.05 * wave)  # время на реакцию (присед)
-        if self.boss:
-            self.name = "Костяной Рыцарь"
+        self.max_poise, self.combo_chance, self.max_combo = 3, (0.35 if wave >= 3 else 0.0), 1
+        self.max_hp, self.damage = base_hp, base_dmg
+        self.steal = 0            # сколько пепла крадёт удар
+        self.potion = False       # глава разбойников один раз пьёт зелье
+        self.home_x = 200.0
+        if self.kind == "bandit":  # быстрый и хлипкий, крадёт пепел
+            self.max_hp = int(base_hp * 0.8)
+            self.damage = int(base_dmg * 0.9)
+            self.windup_time = max(1.2, self.windup_time * 0.9)
+            self.combo_chance = 0.5
+            self.steal = 10 + wave
+        elif self.kind == "knight":
             self.max_hp = int(base_hp * 2.0)
             self.damage = int(base_dmg * 1.25)
             self.windup_time += 0.3       # тяжёлый двуручник замахивается дольше
             self.max_poise = 5
-            self.combo_chance = 0.6       # серии до трёх ударов
-            self.max_combo = 2
+            self.combo_chance, self.max_combo = 0.6, 2  # серии до трёх ударов
             self.home_x = 188.0
-        else:
-            self.name = "Скелет-страж"
-            self.max_hp = base_hp
-            self.damage = base_dmg
-            self.max_poise = 3
-            self.combo_chance = 0.35 if wave >= 3 else 0.0  # с 3-го скелета — двойной удар
-            self.max_combo = 1
-            self.home_x = 200.0
+        elif self.kind == "chief":
+            self.max_hp = int(base_hp * 2.0)
+            self.damage = int(base_dmg * 0.8)  # бьёт всегда дважды, поэтому каждый удар слабее
+            self.windup_time = max(1.3, self.windup_time)
+            self.max_poise = 5
+            self.combo_chance, self.max_combo = 1.0, 1  # две сабли — всегда двойной удар
+            self.steal = 20 + 2 * wave
+            self.potion = True
+            self.home_x = 184.0
         self.hp = self.max_hp
         self.poise = self.max_poise
         self.state = "idle"
@@ -320,6 +337,7 @@ class Skeleton:
         self.flash = 0.0
         self.combo_left = 0
         self.enraged = False
+        self.drink_hits = 0
         self.x = self.home_x
 
     def set(self, state, timer):
@@ -329,6 +347,10 @@ class Skeleton:
         return RECOVER_TIME * (0.8 if self.enraged else 1.0)
 
 
+DRINK_TIME = 2.5   # сколько глава разбойников пьёт зелье
+DRINK_HITS = 3     # ударов, чтобы выбить зелье
+
+
 class BattleScene(Scene):
     HERO_X = 86
 
@@ -336,6 +358,8 @@ class BattleScene(Scene):
         super().__init__(game)
         p = game.player
         self.enemy = Skeleton(p.wave)
+        self.location = location_for(p.wave)
+        self.new_land = p.wave == CASTLE_FROM_WAVE  # первый бой на новой земле
         # Здоровье и эстус переносятся между боями до отдыха у костра
         run = game.run or {"hp": p.max_hp, "estus": p.estus_max}
         self.hp = min(run["hp"], p.max_hp)
@@ -373,13 +397,13 @@ class BattleScene(Scene):
             dmg, crit = p.damage, en.state == "recover"
             if crit:
                 dmg = int(dmg * p.crit_mult)
-            elif en.boss:
-                dmg //= 2  # латы босса: вне окна уязвимости проходит половина урона
+            elif en.kind == "knight":
+                dmg //= 2  # латы рыцаря: вне окна уязвимости проходит половина урона
             en.hp -= dmg
             en.flash = 0.15
             self.game.shake = 0.12
             self.game.sfx.play("crit" if crit else "hit")
-            label = f"{dmg} КРИТ!" if crit else (f"{dmg} БРОНЯ" if en.boss else f"{dmg}")
+            label = f"{dmg} КРИТ!" if crit else (f"{dmg} БРОНЯ" if en.kind == "knight" else f"{dmg}")
             self.float(label, en.x + 12, 90, COL_GOLD if crit else COL_TEXT)
             if p.lifesteal and self.hp < p.max_hp:
                 self.hp = min(p.max_hp, self.hp + p.lifesteal)
@@ -389,10 +413,21 @@ class BattleScene(Scene):
                     en.combo_left = 0
                     en.set("recover", en.recover_time())
                     self.float("ПРЕРВАН!", en.x + 12, 74, COL_GOLD, 20)
-            if en.boss and not en.enraged and 0 < en.hp <= en.max_hp // 2:
+            if en.state == "drink":
+                en.drink_hits += 1
+                if en.drink_hits >= DRINK_HITS:
+                    en.set("recover", en.recover_time())
+                    self.float("ЗЕЛЬЕ ВЫБИТО!", en.x + 12, 60, COL_GOLD, 22)
+                    self.game.sfx.play("crit")
+            if en.kind == "knight" and not en.enraged and 0 < en.hp <= en.max_hp // 2:
                 en.enraged = True  # ярость: быстрее замах, короче окно уязвимости
                 en.windup_time *= 0.85
                 self.float("ЯРОСТЬ!", en.x + 12, 60, (255, 60, 40), 24)
+            if en.potion and 0 < en.hp <= en.max_hp // 2 and en.state != "windup":
+                en.potion = False  # глава разбойников тянется к зелью — выбей его ударами
+                en.drink_hits = 0
+                en.set("drink", DRINK_TIME)
+                self.float("ПЬЁТ ЗЕЛЬЕ!", en.x + 12, 60, (255, 90, 90), 22)
             if en.hp <= 0:
                 self.win()
         elif move in ("squat_down", "pushup_down"):
@@ -525,6 +560,13 @@ class BattleScene(Scene):
                 en.set("recover", en.recover_time())
         elif en.state == "recover" and en.timer <= 0:
             en.set("idle", random.uniform(1.6, 3.0))
+        elif en.state == "drink" and en.timer <= 0:
+            heal = int(en.max_hp * 0.3)
+            en.hp = min(en.max_hp, en.hp + heal)
+            self.float(f"+{heal} ЗЕЛЬЕ", en.x + 12, 70, (120, 220, 120), 20)
+            en.enraged = True  # подлечился и озверел
+            en.windup_time *= 0.9
+            en.set("idle", 1.0)
         target = self.HERO_X + 30 if en.state == "attack" else en.home_x
         en.x += (target - en.x) * min(1.0, dt * (18 if en.state == "attack" else 5))
 
@@ -540,21 +582,31 @@ class BattleScene(Scene):
         self.game.shake = 0.4 if en.boss else 0.3
         self.game.sfx.play("hurt")
         self.float(f"-{dmg}", self.HERO_X + 10, 86, COL_RED)
+        p = self.game.player
+        if en.steal and p.souls > 0:  # разбойники крадут пепел
+            stolen = min(p.souls, en.steal)
+            p.souls -= stolen
+            self.float(f"-{stolen} пепла", self.HERO_X + 10, 72, (200, 170, 120), 16)
         if self.hp <= 0:
             self.hp = 0
             self.die()
 
     def draw(self, c):
         a, t, en = self.game.art, self.game.time, self.enemy
-        c.blit(a.arena_bg, (0, 0))
-        for tx in (60, 252):
-            c.blit(anim(a.torch, t, 8), (tx, 56))
-        self.torch_l.draw(c)
-        self.torch_r.draw(c)
+        if self.location == 1:
+            c.blit(a.arena_bg, (0, 0))
+            for tx in (60, 252):
+                c.blit(anim(a.torch, t, 8), (tx, 56))
+            self.torch_l.draw(c)
+            self.torch_r.draw(c)
+        else:
+            c.blit(a.castle_bg, (0, 0))
 
         # Скелет или босс
-        frames = a.boss if en.boss else a.skeleton
-        if en.state == "dead":
+        frames = {"skeleton": a.skeleton, "bandit": a.bandit, "knight": a.boss, "chief": a.chief}[en.kind]
+        if en.state == "drink":
+            spr = anim(frames["drink"], t, 4)
+        elif en.state == "dead":
             spr = frames["dead"][0]
         elif en.flash > 0:
             spr = frames["hurt"][0]
@@ -612,7 +664,8 @@ class BattleScene(Scene):
         # полоска врага внизу экрана
         if en.boss:  # полоска босса — шире и в золотой рамке
             pygame.draw.rect(s, COL_GOLD, (117, SCREEN_H - 37, 406, 14), 1)
-            g.text(s, f"БОСС: {en.name}  #{en.wave}" + ("  — ЯРОСТЬ" if en.enraged else ""),
+            g.text(s, f"БОСС: {en.name}  #{en.wave}" + ("  — ЯРОСТЬ" if en.enraged else "") +
+                   (f"  — ЗЕЛЬЕ: бей! {en.drink_hits}/{DRINK_HITS}" if en.state == "drink" else ""),
                    (120, SCREEN_H - 54), 18, (255, 120, 80) if en.enraged else COL_GOLD)
         else:
             g.text(s, f"{en.name}  #{en.wave}", (120, SCREEN_H - 52), 18)
@@ -635,9 +688,15 @@ class BattleScene(Scene):
             g.text(s, "ПАУЗА: ВСТАНЬТЕ В КАДР", (SCREEN_W // 2, SCREEN_H // 2 - 20), 32, COL_GOLD, center=True)
             g.text(s, "Камера не видит вас, скелет ждёт", (SCREEN_W // 2, SCREEN_H // 2 + 8), 16, COL_DIM, center=True)
         elif self.ready > 0:
+            tips = {"knight": "латы держат удары — бей в окно уязвимости",
+                    "chief": "крадёт пепел; на половине здоровья пьёт зелье — выбей его 3 ударами",
+                    "bandit": "быстрый удар и крадёт пепел — не пропускай"}
+            if self.new_land:
+                g.text(s, "НОВАЯ ЗЕМЛЯ: ПОДСТУПЫ К ЗАМКУ", (SCREEN_W // 2, 8), 24, (150, 200, 140), center=True)
             if en.boss:
-                g.text(s, "БОСС: КОСТЯНОЙ РЫЦАРЬ", (SCREEN_W // 2, 30), 28, (255, 90, 60), center=True)
-                g.text(s, "латы держат удары — бей в окно уязвимости", (SCREEN_W // 2, 150), 16, COL_DIM, center=True)
+                g.text(s, f"БОСС: {en.name.upper()}", (SCREEN_W // 2, 30), 28, (255, 90, 60), center=True)
+            if en.kind in tips:
+                g.text(s, tips[en.kind], (SCREEN_W // 2, 150), 16, COL_DIM, center=True)
             g.text(s, "ПРИГОТОВЬТЕСЬ", (SCREEN_W // 2, 56), 36, COL_GOLD, center=True)
             g.text(s, f"{math.ceil(self.ready)}", (SCREEN_W // 2, 84), 56, COL_TEXT, center=True)
             g.text(s, "Отойдите, чтобы тело было в кадре", (SCREEN_W // 2, 128), 16, COL_DIM, center=True)
@@ -646,10 +705,13 @@ class BattleScene(Scene):
             pulse = 0.5 + 0.5 * math.sin(g.time * 14)
             g.text(s, "ОПУСТИСЬ!" if plank else "ПРИСЕДАЙ!", (SCREEN_W // 2, 62), 44, (255, int(60 + 120 * pulse), 40), center=True)
             g.bar(s, (SCREEN_W // 2 - 80, 106, 160, 5), k, (255, 90, 50))
-            top = GROUND_ARENA - (56 if en.boss else 44)
-            g.text(s, "!", (int(en.x + (30 if en.boss else 12)) * 2, 2 * top), 36, (255, 200, 60), center=True)
+            top = GROUND_ARENA - {"knight": 56, "chief": 46}.get(en.kind, 44)
+            g.text(s, "!", (int(en.x + {"knight": 30, "chief": 24}.get(en.kind, 12)) * 2, 2 * top), 36, (255, 200, 60), center=True)
         elif en.state == "recover" and not self.result:
             g.text(s, "Окно для удара — ОТЖИМАЙСЯ!", (SCREEN_W // 2, 76), 22, COL_GOLD, center=True)
+        elif en.state == "drink" and not self.result:
+            g.text(s, f"ВЫБЕЙ ЗЕЛЬЕ! {en.drink_hits}/{DRINK_HITS}", (SCREEN_W // 2, 64), 36, (255, 120, 90), center=True)
+            g.bar(s, (SCREEN_W // 2 - 80, 104, 160, 5), en.timer / DRINK_TIME, (120, 220, 120))
 
         for ft in self.texts:
             g.text(s, ft.text, (int(ft.x * 2), int(ft.y * 2)), ft.size, ft.color, center=True)

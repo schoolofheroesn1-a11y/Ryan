@@ -34,3 +34,16 @@ export function rewards(wave) {
   if (isBossWave(wave)) return [2 * (80 + 40 * wave), 4 + Math.floor(wave / BOSS_EVERY), 1];
   return [80 + 40 * wave, 2 + Math.floor((wave - 1) / BOSS_EVERY), 0];
 }
+
+// --- Локации ---
+// После 3-го Костяного Рыцаря (раунд 15) открываются подступы к замку
+export const LOCATIONS = { 1: { name: "Склеп", bg: "arena_bg" }, 2: { name: "Подступы к замку", bg: "castle_bg" } };
+export const CASTLE_FROM_WAVE = 16;
+export const locationFor = (wave) => (wave >= CASTLE_FROM_WAVE ? 2 : 1);
+
+/** Кто ждёт на этой волне: skeleton / bandit / knight (босс склепа) / chief (босс замка). */
+export function enemyKind(wave) {
+  if (locationFor(wave) === 1) return isBossWave(wave) ? "knight" : "skeleton";
+  if (isBossWave(wave)) return "chief";
+  return wave % 2 === 0 ? "bandit" : "skeleton";
+}

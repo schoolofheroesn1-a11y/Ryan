@@ -129,3 +129,13 @@ test("old saves without gear load safely", () => {
   const p = new Player({ strength: 3, sword: "bogus", owned: "junk" });
   assert.deepEqual([p.sword, p.owned, p.redGems], ["rusty", ["rusty"], 0]);
 });
+
+import { enemyKind, locationFor } from "../js/gear.js";
+
+test("castle location after the 3rd knight: bandits, skeletons and the bandit chief", () => {
+  assert.deepEqual([4, 5, 15].map(enemyKind), ["skeleton", "knight", "knight"]);
+  assert.deepEqual([locationFor(15), locationFor(16)], [1, 2]);
+  const kinds = new Set([...Array(14).keys()].map((i) => enemyKind(16 + i)));
+  assert.deepEqual([...kinds].sort(), ["bandit", "chief", "skeleton"]);
+  assert.equal(enemyKind(20), "chief");
+});

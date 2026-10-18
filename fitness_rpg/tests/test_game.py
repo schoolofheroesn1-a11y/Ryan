@@ -420,3 +420,66 @@ class SkinsTest(unittest.TestCase):
         self.assertEqual(len(set(attack.values())), len(attack))
         self.assertEqual(hero_look(["rusty", "armor"]), "armor")
         self.assertEqual(hero_look(["rusty", "armor", "amulet"]), "both")
+
+
+class CastleTest(unittest.TestCase):
+    """Вторая локация: разбойники и Глава разбойников."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = shared_game()
+
+    def battle(self, wave, **kw):
+        from game.scenes import BattleScene
+        p = Player(wave=wave, strength=8, vigor=6, endurance=6, **kw)
+        p.save = lambda *a, **k: None
+        self.game.player = p
+        self.game.run = None
+        s = BattleScene(self.game)
+        s.ready = 0
+        self.game.change(s)
+        return s
+
+    def test_locations_and_enemies(self):
+        from game.gear import enemy_kind, location_for
+        self.assertEqual([enemy_kind(w) for w in (4, 5, 15)], ["skeleton", "knight", "knight"])
+        self.assertEqual((location_for(15), location_for(16)), (1, 2))
+        kinds = {enemy_kind(w) for w in range(16, 30)}
+        self.assertEqual(kinds, {"skeleton", "bandit", "chief"})
+        self.assertEqual(enemy_kind(20), "chief")
+        self.assertEqual(self.battle(16).location, 2)
+
+    def test_bandit_steals_ash(self):
+        s = self.battle(16, souls=200)
+        self.assertEqual(s.enemy.kind, "bandit")
+        s.enemy.set("windup", 0.01)
+        for _ in range(5):
+            s.update(1 / 60)
+        self.assertEqual(self.game.player.souls, 200 - s.enemy.steal)
+
+    def test_chief_potion_can_be_knocked_out(self):
+        s = self.battle(20)
+        en = s.enemy
+        self.assertEqual(en.kind, "chief")
+        en.hp = en.max_hp // 2 + 1
+        en.set("idle", 99)
+        s.act("pushup")
+        self.assertEqual(en.state, "drink")
+        hp = en.hp
+        for _ in range(3):
+            s.stamina = 999
+            s.act("pushup")
+        self.assertEqual(en.state, "recover")
+        self.assertLess(en.hp, hp)
+
+    def test_chief_heals_if_not_interrupted(self):
+        s = self.battle(20)
+        en = s.enemy
+        en.hp = en.max_hp // 2 + 1
+        en.set("idle", 99)
+        s.act("pushup")
+        hp = en.hp
+        for _ in range(int(3 * 60)):
+            s.update(1 / 60)
+        self.assertGreater(en.hp, hp)
+        self.assertTrue(en.enraged)

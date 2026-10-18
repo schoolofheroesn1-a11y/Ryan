@@ -95,6 +95,28 @@ def take_screenshots(out_dir):
         s.enemy.set("recover", 99)
         s.act("pushup")
     shot(scenes.BattleScene(g), "11_ash_blade", 0.06, ash_attack)
+
+    g.player.wave = 16
+    g.run = None
+
+    def bandit(s):
+        s.ready = 0
+        s.enemy.set("windup", 99)
+        s.enemy.windup_time = 99.6
+    shot(scenes.BattleScene(g), "12_castle_bandit", 0.5, bandit)
+    g.player.wave = 20
+    g.run = None
+
+    def chief_drink(s):
+        s.ready = 0
+        s.enemy.hp = s.enemy.max_hp // 2 + 1
+        s.enemy.set("idle", 99)
+        s.act("pushup")
+        s.stamina = 999
+        s.act("pushup")
+    shot(scenes.BattleScene(g), "13_chief_potion", 0.4, chief_drink)
+    g.player.wave = 16
+    shot(scenes.BattleScene(g), "14_new_land", 0.5)
     shot(scenes.CameraScene(g), "06_camera", 0.3)
     pygame.quit()
     print("Скриншоты сохранены в", os.path.abspath(out_dir))

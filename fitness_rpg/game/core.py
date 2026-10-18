@@ -172,7 +172,7 @@ class Game:
         return bool(self.held & HOLD_LOW_KEYS)
 
     def test_keys(self, keys):
-        """Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом."""
+        """Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом, F4 — к замку."""
         from .gear import BOSS_EVERY
         for e in keys:
             if e.key == pygame.K_F2:
@@ -180,6 +180,10 @@ class Game:
                 self.player.blue_gems += 1
                 self.player.souls += 300
                 self.say("Тест: +10 алых, +1 синий, +300 пепла")
+            elif e.key == pygame.K_F4:
+                from .gear import CASTLE_FROM_WAVE
+                self.player.wave = max(self.player.wave, CASTLE_FROM_WAVE)
+                self.say(f"Тест: подступы к замку (#{self.player.wave})")
             elif e.key == pygame.K_F3:
                 self.player.wave = -(-self.player.wave // BOSS_EVERY) * BOSS_EVERY
                 self.say(f"Тест: следующий бой — босс (#{self.player.wave})")

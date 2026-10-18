@@ -26,7 +26,7 @@ def main():
     def save(surf, name):
         pygame.image.save(surf, os.path.join(OUT, name + ".png"))
 
-    sets = [("skeleton", a.skeleton), ("boss", a.boss)]
+    sets = [("skeleton", a.skeleton), ("boss", a.boss), ("bandit", a.bandit), ("chief", a.chief)]
     sets += [(f"hero_{sword}_{look}", frames) for (sword, look), frames in a.heroes.items()]
     for who, frames in sets:
         for anim_name, surfs in frames.items():
@@ -38,6 +38,7 @@ def main():
         save(s, f"torch_{i}")
     save(a.title_bg, "title_bg")
     save(a.arena_bg, "arena_bg")
+    save(a.castle_bg, "castle_bg")
     save(art.tinted(a.skeleton["idle"][0], (20, 10, 24), 0.55), "skeleton_dark_0")
 
     # Иконки приложения: рыцарь у костра на тёмном фоне

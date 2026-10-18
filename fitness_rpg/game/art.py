@@ -35,6 +35,12 @@ PALETTE = {
     "h": (138, 130, 150),  # блик доспеха
     "c": (110, 18, 24),    # тёмно-алая ткань
     "C": (170, 36, 36),    # алая ткань
+    "v": (30, 38, 32),     # тёмный капюшон разбойника
+    "V": (52, 66, 50),     # капюшон
+    "u": (112, 84, 66),    # кожа в тени
+    "U": (164, 124, 96),   # кожа
+    "f": (96, 82, 70),     # мех
+    "F": (146, 128, 108),  # светлый мех
 }
 
 # --- Главный герой: Негасимый рыцарь (смотрит вправо) ---
@@ -269,6 +275,139 @@ BOSS_ARM_RAISED = {
     10: (20, "kkggggggk"), 11: (23, "kbBk"), 12: (23, "kWWk"), 13: (24, "kOk"),
     14: (24, "kOOk"), 15: (25, "kOk"), 16: (25, "kOOk"), 17: (26, "kOk"), 18: (26, "kOk"),
 }
+
+
+# --- Разбойник: капюшон, алая повязка на лице, кинжал (смотрит влево) ---
+BANDIT_IDLE = [
+    "..........kkkkk.........",
+    ".........kvVVVvk........",
+    "........kvVVVVVvk.......",
+    "........kvVkkkkVvk......",
+    "........kvkuUUukVk......",
+    "........kvkEuukEVk......",
+    "........kvkCCCCkvk......",
+    "........kvkcCCCkvk......",
+    ".......kkvvkcckvvkk.....",
+    "......kbBvvVVVVvvBbk....",
+    ".....kbBBkbBBBBbkBBbk...",
+    ".....kbBkkbBgBBbkkBbk...",
+    "....kbBk.kbBBBBbk.kBbk..",
+    "....kUuk.kbbbbbbk.kUuk..",
+    "....kUUk.kgkkkkgk.kUUk..",
+    "...kkkk..kbBBBBbk..kk...",
+    "...kwk...kbBkkBbk.......",
+    "..kwlk...kvVk.kVvk......",
+    "..kwk....kvVk.kVvk......",
+    ".kwk.....kvVk.kVvk......",
+    ".kk......kvvk.kvvk......",
+    ".........kbBk.kBbk......",
+    ".........kbBk.kBbk......",
+    "........kbbBk.kBbbk.....",
+    "........kkkkk.kkkkk.....",
+]
+BANDIT_ATTACK = [
+    "..................kkkkk.........",
+    ".................kvVVVvk........",
+    "................kvVVVVVvk.......",
+    "................kvVkkkkVvk......",
+    "................kvkuUUukVk......",
+    "................kvkEuukEVk......",
+    "................kvkCCCCkvk......",
+    "................kvkcCCCkvk......",
+    "...............kkvvkcckvvkk.....",
+    "..............kbBvvVVVVvvBbk....",
+    "kkkk.....kkkkkbBBkbBBBBbkBBbk...",
+    "kwwlkkkkkUUuukbBkkbBgBBbkkBbk...",
+    ".kkkkkkkkkkkkkkk.kbBBBBbk.kBbk..",
+    ".................kbbbbbbk.kUuk..",
+    ".................kgkkkkgk.kUUk..",
+    ".................kbBBBBbk..kk...",
+    "................kbBkkkBbk.......",
+    "...............kvVk...kVvk......",
+    "..............kvVk.....kVvk.....",
+    ".............kvVk.......kVvk....",
+    ".............kvvk.......kvvk....",
+    ".............kbBk.......kBbk....",
+    ".............kbBk.......kBbk....",
+    "............kbbBk.......kBbbk...",
+    "............kkkkk.......kkkkk...",
+]
+
+# --- Глава разбойников: меховой плащ, повязка на глазу, две сабли (смотрит влево) ---
+CHIEF_IDLE = [
+    "..............kkkkkkk.........",
+    ".............kvVVVVVvk........",
+    "............kvVVVVVVVvk.......",
+    "............kvVkkkkkVvk.......",
+    "............kvkuUUUukVk.......",
+    "............kvkkkUUEkVk.......",
+    "............kvkuUUUUkVk.......",
+    "............kvkfFFFfkvk.......",
+    "...........kkvkfFFFfkvkk......",
+    ".........kkfFfkkfffkkfFfkk....",
+    "........kfFFFfFfkkkfFfFFFfk...",
+    ".......kfFFfkcCCCCCCCckfFFfk..",
+    ".......kfFfkbBcCCCCCcBbkfFfk..",
+    ".......kffkbBBBcCCCcBBBbkffk..",
+    "......kfFk.kbBBgCCCgBBbk.kFfk.",
+    "......kffk.kbBBBcCcBBBbk.kffk.",
+    "......kUuk.kbbbbbbbbbbbk.kUuk.",
+    ".....kkUUkkkgkkkkkkkkkgk.kUUk.",
+    "....kwkkkk.kcCCCCCCCCCck..kk..",
+    "...kwlk....kcCCCcccCCCck..kwk.",
+    "..kwlk.....kcCCck.kcCCck..kwk.",
+    ".kwlk.....kvVVk...kVVvk...kwk.",
+    "kwlk......kvVVk...kVVvk...kwk.",
+    "kwk.......kvVVk...kVVvk...klk.",
+    "kk........kvvvk...kvvvk...kk..",
+    "..........kbBBk...kBBbk.......",
+    "..........kbBBk...kBBbk.......",
+    ".........kbbBBk...kBBbbk......",
+    ".........kkkkkk...kkkkkk......",
+]
+
+
+# Глава крупнее: тело вытягивается (ещё ряд торса и длиннее ноги), передняя рука — накладка
+CHIEF_W, CHIEF_X = 44, 12
+
+
+def _chief_body():
+    raw = [r.ljust(30, ".") for r in CHIEF_IDLE]
+    for y in range(16, 25):  # убираем переднюю руку с саблей — её рисуют накладки
+        raw[y] = "." * 11 + raw[y][11:]
+    peak = "................kkk..........."
+    return [peak] + raw[:14] + [raw[13]] + raw[14:22] + [raw[21]] * 3 + raw[22:]
+
+
+CHIEF_ARM_DOWN = {
+    18: (6, "kUuk"), 19: (5, "kkUUk"), 20: (4, "kwk"), 21: (3, "kwlk"), 22: (2, "kwlk"),
+    23: (1, "kwlk"), 24: (0, "kwlk"), 25: (0, "kwk"), 26: (0, "kk"),
+}
+CHIEF_ARM_RAISED = {
+    14: (7, "kUk"), 13: (7, "kUk"), 12: (6, "kUk"), 11: (6, "kUuk"), 10: (5, "kUUk"),
+    9: (4, "kwk"), 8: (3, "kwlk"), 7: (2, "kwlk"), 6: (1, "kwlk"), 5: (0, "kwlk"), 4: (0, "kwk"), 3: (0, "kk"),
+}
+CHIEF_ARM_SWING = {
+    15: (-3, "kgk"), 16: (-12, "kkkkkkkkkkkgkkkkkk"), 17: (-12, "kwwwwwwwwlkgUUUUUUk"),
+    18: (-12, "kkkkkkkkkkkgkkkkkk"), 19: (-3, "kgk"),
+}
+CHIEF_ARM_DRINK = {
+    15: (7, "kUk"), 14: (8, "kUk"), 13: (8, "kUk"), 12: (9, "kUuk"), 11: (9, "kUUk"),
+    10: (10, "kUUk"), 9: (10, "kRCk"), 8: (10, "kCCk"), 7: (10, "kCwk"), 6: (11, "kk"),
+}
+
+
+def chief_map(arm):
+    rows = [list("." * CHIEF_W) for _ in range(34)]
+    for y, row in enumerate(_chief_body()):
+        for x, ch in enumerate(row):
+            if ch != ".":
+                rows[y][CHIEF_X + x] = ch
+    for y, (x0, seg) in arm.items():
+        for i, ch in enumerate(seg):
+            if ch != "." and 0 <= CHIEF_X + x0 + i < CHIEF_W:
+                rows[y][CHIEF_X + x0 + i] = ch
+    return ["".join(r) for r in rows]
 
 
 def boss_map(arm):
@@ -650,6 +789,105 @@ def make_arena_background(w=320, h=180, seed=7):
     return surf
 
 
+def make_castle_background(w=320, h=180, seed=21):
+    """Подступы к замку: травяное поле, горы и тёмный замок на холме под багровым закатом."""
+    rnd = random.Random(seed)
+    surf = pygame.Surface((w, h))
+    horizon = 112
+    # небо: ночь сверху, багровый закат у горизонта (ступенчатый градиент)
+    stops = [(0.0, (14, 12, 28)), (0.45, (52, 30, 54)), (0.8, (128, 56, 50)), (1.0, (196, 104, 62))]
+    bands = 20
+    for i in range(bands):
+        t = i / (bands - 1)
+        for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+            if t0 <= t <= t1:
+                col = _lerp(c0, c1, (t - t0) / (t1 - t0))
+                break
+        y0 = int(i * horizon / bands)
+        pygame.draw.rect(surf, col, (0, y0, w, horizon // bands + 2))
+    for _ in range(40):  # редкие звёзды наверху
+        surf.set_at((rnd.randrange(w), rnd.randrange(40)), rnd.choice([(170, 160, 190), (110, 100, 130)]))
+    # тусклое солнце садится за замок
+    sx, sy = 214, 92
+    for r, col in ((24, (150, 70, 52)), (19, (190, 96, 60)), (15, (230, 150, 90))):
+        pygame.draw.circle(surf, col, (sx, sy), r)
+    # рваные тучи
+    for _ in range(9):
+        cx, cy = rnd.randrange(-20, w), rnd.randrange(14, 70)
+        cw = rnd.randint(30, 80)
+        pygame.draw.rect(surf, (36, 24, 44), (cx, cy, cw, 3))
+        pygame.draw.rect(surf, (44, 30, 52), (cx + 6, cy - 2, cw - 14, 2))
+
+    def ridge(base_y, amp, col, step, jag, snow=None):
+        pts, y = [(0, h)], base_y
+        tops = []
+        for x in range(0, w + step, step):
+            y = max(base_y - amp, min(base_y + amp // 3, y + rnd.randint(-jag, jag)))
+            pts.append((x, y))
+            tops.append((x, y))
+        pts.append((w, h))
+        pygame.draw.polygon(surf, col, pts)
+        if snow:
+            for x, y in tops:
+                if y < base_y - amp * 0.55:
+                    pygame.draw.line(surf, snow, (x - 2, y + 1), (x + 3, y + 1))
+
+    ridge(92, 30, (58, 52, 76), 7, 7, snow=(150, 140, 160))  # дальние горы со снегом
+    ridge(104, 16, (40, 36, 54), 5, 4)                        # ближние горы
+
+    # холм и замок впереди
+    pygame.draw.ellipse(surf, (34, 40, 34), (120, 96, 190, 46))
+    castle = (18, 14, 22)
+    pygame.draw.rect(surf, castle, (166, 80, 92, 34))                  # стена
+    for tx, tw, th in ((158, 14, 52), (196, 18, 70), (246, 14, 50)):   # башни
+        pygame.draw.rect(surf, castle, (tx, 114 - th, tw, th))
+        for bx in range(tx, tx + tw, 4):
+            pygame.draw.rect(surf, castle, (bx, 114 - th - 3, 2, 3))
+        pygame.draw.polygon(surf, castle, [(tx - 1, 114 - th - 3), (tx + tw // 2, 114 - th - 14), (tx + tw, 114 - th - 3)])
+    for bx in range(166, 258, 4):
+        pygame.draw.rect(surf, castle, (bx, 77, 2, 3))
+    pygame.draw.rect(surf, (8, 6, 10), (200, 98, 10, 16))              # ворота
+    pygame.draw.polygon(surf, (8, 6, 10), [(200, 98), (205, 94), (210, 98)])
+    for wx, wy in ((162, 76), (202, 56), (208, 70), (250, 80), (182, 92), (232, 90)):  # окна
+        pygame.draw.rect(surf, (255, 170, 70), (wx, wy, 2, 3))
+    for fx, fy in ((205, 33), (164, 49), (252, 51)):                   # флаги
+        pygame.draw.line(surf, castle, (fx, fy), (fx, fy - 7))
+        pygame.draw.rect(surf, (140, 24, 30), (fx + 1, fy - 7, 5, 3))
+
+    # поле: тёмная трава с полосами и светлыми стебельками
+    for y in range(horizon, h):
+        t = (y - horizon) / (h - horizon)
+        col = _lerp((44, 54, 40), (30, 40, 28), t)
+        pygame.draw.line(surf, col, (0, y), (w, y))
+    for _ in range(int(w * (h - horizon) * 0.12)):
+        x, y = rnd.randrange(w), rnd.randrange(horizon + 2, h)
+        t = (y - horizon) / (h - horizon)
+        blade = rnd.choice([(70, 86, 56), (88, 100, 62), (120, 112, 66), (56, 70, 46)])
+        length = 1 + int(t * 3)
+        pygame.draw.line(surf, blade, (x, y), (x + rnd.choice((-1, 0, 1)), y - length))
+    # дорога к воротам
+    road = [(198, 114), (212, 114), (250, 180), (150, 180)]
+    pygame.draw.polygon(surf, (62, 50, 40), road)
+    for _ in range(80):
+        x = rnd.randrange(150, 250)
+        y = rnd.randrange(116, 180)
+        if 198 + (y - 114) * (-48 / 66) <= x <= 212 + (y - 114) * (38 / 66):
+            surf.set_at((x, y), rnd.choice([(84, 70, 54), (48, 38, 30)]))
+    # мёртвое дерево и вороны
+    tree = (14, 10, 16)
+    pygame.draw.line(surf, tree, (28, 150), (34, 96), 3)
+    for x1, y1, x2, y2 in ((33, 110, 18, 92), (34, 102, 48, 86), (40, 94, 52, 92), (24, 100, 16, 96)):
+        pygame.draw.line(surf, tree, (x1, y1), (x2, y2))
+    for cx, cy in ((70, 40), (82, 46), (96, 38)):
+        pygame.draw.lines(surf, tree, False, [(cx - 3, cy), (cx, cy + 1), (cx + 3, cy)])
+    # туман у подножия холма
+    fog = pygame.Surface((w, h), pygame.SRCALPHA)
+    for _ in range(20):
+        pygame.draw.rect(fog, (170, 140, 150, 30), (rnd.randrange(-30, w), rnd.randrange(104, 124), rnd.randint(30, 80), 2))
+    surf.blit(fog, (0, 0))
+    return surf
+
+
 def make_torch_frames(n=4):
     frames = []
     for i in range(n):
@@ -694,6 +932,32 @@ def make_boss_frames():
     }
 
 
+def make_bandit_frames():
+    idle = sprite_from_map(BANDIT_IDLE)
+    return {
+        "idle": [idle, shifted_breath(idle, 10)],
+        "windup": [tinted(idle, (255, 90, 50), 0.35), idle],
+        "attack": [sprite_from_map(BANDIT_ATTACK)],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "dead": [crouched(tinted(idle, (60, 50, 50), 0.5))],
+    }
+
+
+def make_chief_frames():
+    idle = sprite_from_map(chief_map(CHIEF_ARM_DOWN))
+    raised = sprite_from_map(chief_map(CHIEF_ARM_RAISED))
+    drink = sprite_from_map(chief_map(CHIEF_ARM_DRINK))
+    return {
+        "idle": [idle, shifted_breath(idle, 16)],
+        "windup": [tinted(raised, (255, 90, 50), 0.35), raised],
+        "attack": [sprite_from_map(chief_map(CHIEF_ARM_SWING))],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "drink": [drink, tinted(drink, (255, 120, 120), 0.25)],
+        "enraged": [tinted(idle, (255, 40, 30), 0.25), tinted(shifted_breath(idle, 16), (255, 40, 30), 0.25)],
+        "dead": [crouched(tinted(idle, (60, 50, 50), 0.5))],
+    }
+
+
 class Art:
     """Набор всех спрайтов игры, создаётся один раз после pygame.init()."""
 
@@ -714,6 +978,9 @@ class Art:
         self.torch = make_torch_frames()
         self.title_bg = make_title_background()
         self.arena_bg = make_arena_background()
+        self.castle_bg = make_castle_background()
+        self.bandit = make_bandit_frames()
+        self.chief = make_chief_frames()
 
     def hero_for(self, sword, owned):
         """Кадры героя с этим мечом и обликом по реликвиям из owned."""

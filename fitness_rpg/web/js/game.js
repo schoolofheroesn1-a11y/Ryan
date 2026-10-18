@@ -3,7 +3,9 @@
 // В портретной ориентации под игрой появляется большая панель камеры.
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
-import { BOSS_EVERY, RELICS, SHOP_ORDER, SWORDS, isBossWave, item, priceText, rewards } from "./gear.js";
+import {
+  BOSS_EVERY, CASTLE_FROM_WAVE, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item, locationFor, priceText, rewards,
+} from "./gear.js";
 import { Player, STATS } from "./player.js";
 import { initAudio, sfx } from "./sfx.js";
 
@@ -20,6 +22,8 @@ const COL = {
 const FRAMES = {
   skeleton: { idle: 2, windup: 2, attack: 1, hurt: 1, dead: 1 },
   boss: { idle: 2, windup: 2, attack: 1, hurt: 1, enraged: 2, dead: 1 },
+  bandit: { idle: 2, windup: 2, attack: 1, hurt: 1, dead: 1 },
+  chief: { idle: 2, windup: 2, attack: 1, hurt: 1, drink: 2, enraged: 2, dead: 1 },
   hero: { idle: 2, attack: 1, dodge: 1, hurt: 1, heal: 1, dead: 1 },
 };
 // Облик героя по реликвиям: доспех Костяного Рыцаря (рога, тёмные латы) и/или Амулет Углей
@@ -57,7 +61,7 @@ function drawSlash(c, x, y, sword, k) {
 }
 
 const SPRITES = [
-  "title_bg", "arena_bg", "skeleton_dark_0",
+  "title_bg", "arena_bg", "castle_bg", "skeleton_dark_0",
   "bonfire_0", "bonfire_1", "bonfire_2", "bonfire_3", "torch_0", "torch_1", "torch_2", "torch_3",
 ];
 for (const [who, anims] of Object.entries(FRAMES)) {
@@ -136,7 +140,7 @@ class Game {
     this.toast = "";
     this.toastT = 0;
     addEventListener("keydown", (e) => {
-      if (["F2", "F3", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
+      if (["F2", "F3", "F4", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
       this.held.add(e.code);
       if (e.repeat) return; // автоповтор не считается новым повторением упражнения
       this.keys.push({ KeyW: "ArrowUp", KeyS: "ArrowDown" }[e.code] || e.key);
@@ -239,7 +243,7 @@ class Game {
     return ["KeyK", "Digit2", "Numpad2"].some((c) => this.held.has(c));
   }
 
-  /** Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом. */
+  /** Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом, F4 — к замку. */
   testKeys() {
     const p = this.player;
     if (this.codes.includes("F2")) {
@@ -252,7 +256,11 @@ class Game {
       p.wave = Math.ceil(p.wave / BOSS_EVERY) * BOSS_EVERY;
       this.say(`Тест: следующий бой - босс (#${p.wave})`);
     }
-    if (this.codes.includes("F2") || this.codes.includes("F3")) p.save();
+    if (this.codes.includes("F4")) {
+      p.wave = Math.max(p.wave, CASTLE_FROM_WAVE);
+      this.say(`Тест: подступы к замку (#${p.wave})`);
+    }
+    if (["F2", "F3", "F4"].some((k) => this.codes.includes(k))) p.save();
   }
 
   say(text, t = 2.5) {
@@ -472,8 +480,9 @@ class TitleScene extends Scene {
       const confirm = i === 3 && this.confirmT > 0;
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
     });
-    g.text(`Ур. ${p.level}  Пепел: ${p.souls}  Враг: ${isBossWave(p.wave) ? "БОСС" : "скелет"} #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
-    if (!g.portrait) g.text("ПК: J K L, тест F2 F3", W - 12, GAME_H - 16, 8, COL.dim, "right");
+    const foe = isBossWave(p.wave) ? "БОСС" : Skeleton.NAMES[enemyKind(p.wave)].toLowerCase();
+    g.text(`Ур.${p.level} Пепел:${p.souls} ${LOCATIONS[locationFor(p.wave)].name}: ${foe} #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
+    if (!g.portrait) g.text("ПК: J K L, тест F2-F4", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
 }
 
@@ -605,16 +614,33 @@ class BonfireScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Бой
-/** Скелет-страж; каждый 5-й — босс Костяной Рыцарь. */
+/** Враг волны: скелет, разбойник или босс локации (Костяной Рыцарь / Глава разбойников). */
 class Skeleton {
+  static NAMES = { skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников" };
+
   constructor(wave) {
     this.wave = wave;
-    this.boss = isBossWave(wave);
+    this.kind = enemyKind(wave);
+    this.boss = this.kind === "knight" || this.kind === "chief";
+    this.name = Skeleton.NAMES[this.kind];
     const baseHp = 90 + 35 * (wave - 1);
     const baseDmg = 16 + 4 * (wave - 1);
     this.windupTime = Math.max(1.3, 1.9 - 0.05 * wave); // время на реакцию (присед)
-    if (this.boss) {
-      this.name = "Костяной Рыцарь";
+    this.maxPoise = 3;
+    this.comboChance = wave >= 3 ? 0.35 : 0;
+    this.maxCombo = 1;
+    this.maxHp = baseHp;
+    this.damage = baseDmg;
+    this.steal = 0; // сколько пепла крадёт удар
+    this.potion = false; // глава разбойников один раз пьёт зелье
+    this.homeX = 200;
+    if (this.kind === "bandit") { // быстрый и хлипкий, крадёт пепел
+      this.maxHp = Math.floor(baseHp * 0.8);
+      this.damage = Math.floor(baseDmg * 0.9);
+      this.windupTime = Math.max(1.2, this.windupTime * 0.9);
+      this.comboChance = 0.5;
+      this.steal = 10 + wave;
+    } else if (this.kind === "knight") {
       this.maxHp = Math.floor(baseHp * 2.0);
       this.damage = Math.floor(baseDmg * 1.25);
       this.windupTime += 0.3; // тяжёлый двуручник замахивается дольше
@@ -622,14 +648,14 @@ class Skeleton {
       this.comboChance = 0.6; // серии до трёх ударов
       this.maxCombo = 2;
       this.homeX = 188;
-    } else {
-      this.name = "Скелет-страж";
-      this.maxHp = baseHp;
-      this.damage = baseDmg;
-      this.maxPoise = 3;
-      this.comboChance = wave >= 3 ? 0.35 : 0; // с 3-го скелета — двойной удар
-      this.maxCombo = 1;
-      this.homeX = 200;
+    } else if (this.kind === "chief") {
+      this.maxHp = Math.floor(baseHp * 2.0);
+      this.damage = Math.floor(baseDmg * 0.8); // бьёт всегда дважды, поэтому каждый удар слабее
+      this.maxPoise = 5;
+      this.comboChance = 1; // две сабли — всегда двойной удар
+      this.steal = 20 + 2 * wave;
+      this.potion = true;
+      this.homeX = 184;
     }
     this.hp = this.maxHp;
     this.poise = this.maxPoise;
@@ -638,6 +664,7 @@ class Skeleton {
     this.flash = 0;
     this.comboLeft = 0;
     this.enraged = false;
+    this.drinkHits = 0;
     this.x = this.homeX;
   }
   set(state, timer) {
@@ -649,6 +676,8 @@ class Skeleton {
   }
 }
 
+const DRINK_TIME = 2.5; // сколько глава разбойников пьёт зелье
+const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const RECOVER_TIME = 1.6; // окно для удара после атаки скелета
 const ABSENT_PAUSE = 1.0; // пауза, если игрока нет в кадре дольше этого
@@ -660,6 +689,8 @@ class BattleScene extends Scene {
     const p = game.player;
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
+    this.location = locationFor(p.wave);
+    this.newLand = p.wave === CASTLE_FROM_WAVE; // первый бой на новой земле
     // Здоровье и эстус переносятся между боями до отдыха у костра
     const run = game.run || { hp: p.maxHp, estus: p.estusMax };
     this.hp = Math.min(run.hp, p.maxHp);
@@ -703,12 +734,12 @@ class BattleScene extends Scene {
       const crit = en.state === "recover";
       let dmg = p.damage;
       if (crit) dmg = Math.floor(dmg * p.critMult);
-      else if (en.boss) dmg = Math.floor(dmg / 2); // латы босса: вне окна уязвимости — половина урона
+      else if (en.kind === "knight") dmg = Math.floor(dmg / 2); // латы рыцаря: вне окна уязвимости — половина урона
       en.hp -= dmg;
       en.flash = 0.15;
       this.game.shake = 0.12;
       crit ? sfx.crit() : sfx.hit();
-      const label = crit ? `${dmg} КРИТ!` : en.boss ? `${dmg} БРОНЯ` : `${dmg}`;
+      const label = crit ? `${dmg} КРИТ!` : en.kind === "knight" ? `${dmg} БРОНЯ` : `${dmg}`;
       this.float(label, en.x + 12, 90, crit ? COL.gold : COL.text);
       if (p.lifesteal && this.hp < p.maxHp) this.hp = Math.min(p.maxHp, this.hp + p.lifesteal);
       if (en.state === "windup") {
@@ -719,10 +750,21 @@ class BattleScene extends Scene {
           this.float("ПРЕРВАН!", en.x + 12, 74, COL.gold);
         }
       }
-      if (en.boss && !en.enraged && en.hp > 0 && en.hp <= en.maxHp / 2) {
+      if (en.state === "drink" && ++en.drinkHits >= DRINK_HITS) {
+        en.set("recover", en.recoverTime());
+        this.float("ЗЕЛЬЕ ВЫБИТО!", en.x + 12, 60, COL.gold);
+        sfx.crit();
+      }
+      if (en.kind === "knight" && !en.enraged && en.hp > 0 && en.hp <= en.maxHp / 2) {
         en.enraged = true; // ярость: быстрее замах, короче окно уязвимости
         en.windupTime *= 0.85;
         this.float("ЯРОСТЬ!", en.x + 12, 60, "rgb(255,60,40)");
+      }
+      if (en.potion && en.hp > 0 && en.hp <= en.maxHp / 2 && en.state !== "windup") {
+        en.potion = false; // глава разбойников тянется к зелью — выбей его ударами
+        en.drinkHits = 0;
+        en.set("drink", DRINK_TIME);
+        this.float("ПЬЁТ ЗЕЛЬЕ!", en.x + 12, 60, "rgb(255,90,90)");
       }
       if (en.hp <= 0) this.win();
     } else if (move === "squat_down" || move === "pushup_down") {
@@ -862,6 +904,13 @@ class BattleScene extends Scene {
       }
     } else if (en.state === "recover" && en.timer <= 0) {
       en.set("idle", rand(1.6, 3));
+    } else if (en.state === "drink" && en.timer <= 0) {
+      const heal = Math.floor(en.maxHp * 0.3);
+      en.hp = Math.min(en.maxHp, en.hp + heal);
+      this.float(`+${heal} ЗЕЛЬЕ`, en.x + 12, 70, "rgb(120,220,120)");
+      en.enraged = true; // подлечился и озверел
+      en.windupTime *= 0.9;
+      en.set("idle", 1);
     }
     const target = en.state === "attack" ? this.HERO_X + 30 : en.homeX;
     en.x += (target - en.x) * Math.min(1, dt * (en.state === "attack" ? 18 : 5));
@@ -880,6 +929,12 @@ class BattleScene extends Scene {
     sfx.hurt();
     if (navigator.vibrate) navigator.vibrate(en.boss ? 250 : 150);
     this.float(`-${dmg}`, this.HERO_X + 10, 86, COL.red);
+    const p = this.game.player;
+    if (en.steal && p.souls > 0) { // разбойники крадут пепел
+      const stolen = Math.min(p.souls, en.steal);
+      p.souls -= stolen;
+      this.float(`-${stolen} пепла`, this.HERO_X + 10, 72, "rgb(200,170,120)", 8);
+    }
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
@@ -888,18 +943,23 @@ class BattleScene extends Scene {
 
   draw(c) {
     const t = this.game.time, en = this.enemy;
-    c.drawImage(IMG.arena_bg, 0, 0);
-    for (const tx of [60, 252]) c.drawImage(anim("torch", t, 8, 4), tx, 56);
-    this.torchL.draw(c);
-    this.torchR.draw(c);
+    if (this.location === 1) {
+      c.drawImage(IMG.arena_bg, 0, 0);
+      for (const tx of [60, 252]) c.drawImage(anim("torch", t, 8, 4), tx, 56);
+      this.torchL.draw(c);
+      this.torchR.draw(c);
+    } else {
+      c.drawImage(IMG.castle_bg, 0, 0);
+    }
 
     let spr;
-    const kind = en.boss ? "boss" : "skeleton";
-    if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
+    const kind = { skeleton: "skeleton", bandit: "bandit", knight: "boss", chief: "chief" }[en.kind];
+    if (en.state === "drink") spr = anim("chief_drink", t, 4, 2);
+    else if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
     else if (en.flash > 0) spr = IMG[`${kind}_hurt_0`];
     else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
     else if (en.state === "attack") spr = IMG[`${kind}_attack_0`];
-    else if (en.boss && en.enraged) spr = anim("boss_enraged", t, 1.5, 2);
+    else if (en.boss && en.enraged) spr = anim(`${kind}_enraged`, t, 1.5, 2);
     else spr = anim(`${kind}_idle`, t, 1.5, 2);
     const ex = Math.round(en.x) - (en.state === "attack" ? 8 : 0);
     c.drawImage(spr, ex, GROUND_ARENA - spr.height);
@@ -948,7 +1008,8 @@ class BattleScene extends Scene {
     if (en.boss) { // полоска босса — в золотой рамке
       g.ctx.strokeStyle = COL.gold;
       g.ctx.strokeRect(137.5, GAME_H - 34.5, 345, 11);
-      g.text(`БОСС: ${en.name} #${en.wave}${en.enraged ? " - ЯРОСТЬ" : ""}`, 140, GAME_H - 48, 8, en.enraged ? "rgb(255,120,80)" : COL.gold);
+      const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.enraged ? " - ЯРОСТЬ" : "";
+      g.text(`БОСС: ${en.name} #${en.wave}${extra}`, 140, GAME_H - 48, 8, en.enraged || en.state === "drink" ? "rgb(255,120,80)" : COL.gold);
     } else {
       g.text(`${en.name} #${en.wave}`, 140, GAME_H - 46, 8);
     }
@@ -967,10 +1028,14 @@ class BattleScene extends Scene {
       g.text("ПАУЗА: ВСТАНЬТЕ В КАДР", W / 2, GAME_H / 2 - 12, 16, COL.gold, "center");
       g.text("Камера не видит вас, скелет ждёт", W / 2, GAME_H / 2 + 10, 8, COL.dim, "center");
     } else if (this.ready > 0) {
-      if (en.boss) {
-        g.text("БОСС: КОСТЯНОЙ РЫЦАРЬ", W / 2, 34, 16, "rgb(255,90,60)", "center");
-        g.text("Латы держат удары: бей в окно уязвимости", W / 2, 140, 8, COL.dim, "center");
-      }
+      const tips = {
+        knight: "Латы держат удары: бей в окно уязвимости",
+        chief: "Крадёт пепел. На половине здоровья пьёт зелье: выбей 3 ударами",
+        bandit: "Быстрый удар и крадёт пепел: не пропускай",
+      };
+      if (this.newLand) g.text("НОВАЯ ЗЕМЛЯ: ПОДСТУПЫ К ЗАМКУ", W / 2, 44, 8, "rgb(150,200,140)", "center");
+      if (en.boss) g.text(`БОСС: ${en.name.toUpperCase()}`, W / 2, 34, 16, "rgb(255,90,60)", "center");
+      if (tips[en.kind]) g.text(tips[en.kind], W / 2, 140, 8, COL.dim, "center");
       g.text("ПРИГОТОВЬТЕСЬ", W / 2, 60, 16, COL.gold, "center");
       g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
       g.text("Отойдите, чтобы тело было в кадре", W / 2, 124, 8, COL.dim, "center");
@@ -979,10 +1044,13 @@ class BattleScene extends Scene {
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
       g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
-      const top = GROUND_ARENA - (en.boss ? 58 : 44);
-      g.text("!", Math.round(en.x + (en.boss ? 30 : 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
+      const top = GROUND_ARENA - ({ knight: 58, chief: 48 }[en.kind] || 44);
+      g.text("!", Math.round(en.x + ({ knight: 30, chief: 24 }[en.kind] || 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text("Окно для удара: ОТЖИМАЙСЯ!", W / 2, 70, 8, COL.gold, "center");
+    } else if (en.state === "drink" && !this.result) {
+      g.text(`ВЫБЕЙ ЗЕЛЬЕ! ${en.drinkHits}/${DRINK_HITS}`, W / 2, 60, 16, "rgb(255,120,90)", "center");
+      g.bar(W / 2 - 80, 86, 160, 5, en.timer / DRINK_TIME, "rgb(120,220,120)");
     }
 
     for (const ft of this.texts) g.text(ft.text, Math.round(ft.x * 2), Math.round(ft.y * 2), ft.size, ft.color, "center");
