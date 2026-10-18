@@ -1799,6 +1799,8 @@ const SET_ROWS = [60, 108, 156]; // громкость, сигнал, вибра
 const SET_MINUS = (y) => [300, y, 44, 36];
 const SET_PLUS = (y) => [556, y, 44, 36];
 const SET_TEST = [40, 204, 260, 34];
+const SET_TG = [320, 204, 280, 34];
+const TELEGRAM_URL = "https://t.me/melnikovdania";
 const SET_CAMERA = [40, 256, 270, 36];
 const SET_SUPPORT = [330, 256, 270, 36];
 const SET_BACK = [W / 2 - 90, 308, 180, 34];
@@ -1820,6 +1822,10 @@ class SettingsScene extends Scene {
     if (g.tapped(SET_PLUS(SET_ROWS[1]))) { this.set("alert", step(ai, 1)); sfx.alert(); }
     if (g.tapped([300, SET_ROWS[2], 300, 36])) { this.set("vibrate", !st.vibrate); sfx.click(); }
     if (g.tapped(SET_TEST)) sfx.alert();
+    if (g.tapped(SET_TG)) {
+      sfx.click();
+      window.open(TELEGRAM_URL, "_blank", "noopener"); // на телефоне откроется приложение Telegram
+    }
     if (g.tapped(SET_CAMERA)) return g.change(new CameraScene(g));
     if (g.tapped(SET_SUPPORT)) return g.change(new SupportScene(g));
     if (g.key("Escape") || g.tapped(SET_BACK)) g.change(new TitleScene(g));
@@ -1852,7 +1858,7 @@ class SettingsScene extends Scene {
     g.text("Вибрация (Android)", 40, SET_ROWS[2] + 12, 12);
     g.button([300, SET_ROWS[2], 300, 36], st.vibrate ? "ВКЛ" : "ВЫКЛ", { size: 12, selected: st.vibrate });
     g.button(SET_TEST, "ПРОВЕРИТЬ СИГНАЛ", { size: 12 });
-    g.text("Сигнал звучит, когда враг замахнулся", 316, SET_TEST[1] + 13, 8, COL.dim);
+    g.button(SET_TG, "Наш Telegram", { size: 12, color: "rgb(120,200,255)", border: "rgb(70,140,200)" });
     g.button(SET_CAMERA, "Камера и советы", { size: 12 });
     g.button(SET_SUPPORT, "Поддержать проект", { size: 12, color: "rgb(255,150,150)" });
     g.button(SET_BACK, "НАЗАД", { size: 12 });
