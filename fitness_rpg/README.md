@@ -108,13 +108,12 @@ game/player.py          характеристики, цены уровней, �
 game/scenes.py          главный экран, костёр, бой, калибровка
 game/core.py            окно 640×360 (мир 320×180 ×2), цикл, текст, виджеты
 tools/generate_art.py   выгрузка арта в assets/*.png (+ увеличенные превью *_x6/x8)
-tools/make_menu_bg.py   фон главного меню и костра из assets/menu_source.jpg (полоса 16:9, 640×360)
 tests/test_game.py      тесты распознавания и боевой логики
 web/                    мобильная версия (HTML5 + JS, PWA): js/, assets/, sw.js, manifest
 mobile/                 Android-обёртка Capacitor (build_android.sh)
 ```
 
-Фон главного меню и костра — картинка `assets/menu_source.jpg`, остальной арт рисуется кодом на Python: каждый спрайт задан строками символов, один символ — один
+Арт рисуется кодом на Python: каждый спрайт задан строками символов, один символ — один
 пиксель (см. `HERO_IDLE`, `SKELETON_IDLE` в `game/art.py`). Чтобы поправить персонажа,
 отредактируйте карту и запустите `python tools/generate_art.py`.
 

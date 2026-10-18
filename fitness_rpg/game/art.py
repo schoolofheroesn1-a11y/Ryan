@@ -5,7 +5,6 @@
 прямо в коде, а tools/generate_art.py выгружает его в PNG.
 """
 import math
-import os
 import random
 
 import pygame
@@ -403,17 +402,6 @@ def make_torch_frames(n=4):
     return frames
 
 
-MENU_BG_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "menu_bg.png")
-
-
-def load_menu_background(fallback):
-    """Фон главного меню и костра 640×360 (tools/make_menu_bg.py); без файла — процедурный фон ×2."""
-    try:
-        return pygame.image.load(MENU_BG_PATH).convert()
-    except (pygame.error, FileNotFoundError):
-        return pygame.transform.scale(fallback, (fallback.get_width() * 2, fallback.get_height() * 2))
-
-
 class Art:
     """Набор всех спрайтов игры, создаётся один раз после pygame.init()."""
 
@@ -440,4 +428,3 @@ class Art:
         self.torch = make_torch_frames()
         self.title_bg = make_title_background()
         self.arena_bg = make_arena_background()
-        self.menu_bg = load_menu_background(self.title_bg)

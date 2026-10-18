@@ -57,9 +57,6 @@ class Scene:
     def update(self, dt):
         pass
 
-    def draw_backdrop(self, screen):
-        """Фон в разрешении экрана под пиксельным миром (по умолчанию нет)."""
-
     def draw(self, canvas):
         pass
 
@@ -72,8 +69,7 @@ class Game:
         pygame.init()
         pygame.display.set_caption("Ash & Iron — фитнес-RPG")
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.SCALED | pygame.RESIZABLE)
-        # Прозрачный холст: сцена может подложить под пиксельный мир фон в полном разрешении
-        self.canvas = pygame.Surface((CANVAS_W, CANVAS_H), pygame.SRCALPHA)
+        self.canvas = pygame.Surface((CANVAS_W, CANVAS_H))
         self.clock = pygame.time.Clock()
         self.fonts = {}
         self.art = Art()
@@ -153,14 +149,13 @@ class Game:
         self.time += dt
         self.scene.handle(keys, moves)
         self.scene.update(dt)
-        self.canvas.fill((0, 0, 0, 0))
+        self.canvas.fill((0, 0, 0))
         self.scene.draw(self.canvas)
         ox = oy = 0
         if self.shake > 0:
             self.shake = max(0.0, self.shake - dt)
             ox, oy = random.randint(-2, 2), random.randint(-2, 2)
         self.screen.fill((0, 0, 0))
-        self.scene.draw_backdrop(self.screen)
         self.screen.blit(pygame.transform.scale(self.canvas, (SCREEN_W, SCREEN_H)), (ox * 2, oy * 2))
         self.scene.draw_ui(self.screen)
 

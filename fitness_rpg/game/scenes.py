@@ -10,7 +10,7 @@ from .core import (COL_DIM, COL_GOLD, COL_GREEN, COL_RED, COL_SHADOW, COL_TEXT,
 from .exercises import NAMES
 from .player import ESTUS_MAX, STATS, Player
 
-GROUND_TITLE = 158   # каменный уступ на фоне главного меню (assets/menu_bg.png)
+GROUND_TITLE = 150
 GROUND_ARENA = 140
 
 MOVE_HINTS = [
@@ -55,7 +55,7 @@ class TitleScene(Scene):
     def __init__(self, game):
         super().__init__(game)
         g = game
-        self.embers = Particles(176, 140, rate=22)
+        self.embers = Particles(208, 132, rate=22)
         self.skel_dark = tinted(g.art.skeleton["idle"][0], (20, 10, 24), 0.55)
         self.menu = Menu([
             ("Продолжить путь", lambda: g.change(BattleScene(g))),
@@ -90,20 +90,18 @@ class TitleScene(Scene):
             if self.confirm_t <= 0:
                 self.menu.items[3] = ("Новая игра", self.new_game)
 
-    def draw_backdrop(self, screen):
-        screen.blit(self.game.art.menu_bg, (0, 0))
-
     def draw(self, c):
         a, t = self.game.art, self.game.time
-        # отблеск костра на камнях уступа
+        c.blit(a.title_bg, (0, 0))
+        # отблеск костра на земле
         glow = pygame.Surface((80, 20), pygame.SRCALPHA)
-        r = 30 + int(math.sin(t * 6) * 2)
-        pygame.draw.ellipse(glow, (255, 120, 40, 48), (40 - r, 2, r * 2, 16))
-        c.blit(glow, (136, GROUND_TITLE - 10))
-        c.blit(anim(a.bonfire, t, 8), (168, GROUND_TITLE - 22))
-        c.blit(anim(a.hero["idle"], t, 1.5), (140, GROUND_TITLE - 32))
-        # скелет крадётся из тьмы у края уступа — глаза мерцают
-        sx, sy = 196, GROUND_TITLE - 32
+        r = 34 + int(math.sin(t * 6) * 2)
+        pygame.draw.ellipse(glow, (255, 120, 40, 40), (40 - r, 2, r * 2, 16))
+        c.blit(glow, (168, GROUND_TITLE - 10))
+        c.blit(anim(a.bonfire, t, 8), (200, GROUND_TITLE - 22))
+        c.blit(anim(a.hero["idle"], t, 1.5), (172, GROUND_TITLE - 32))
+        # скелет крадётся из тьмы — глаза мерцают
+        sx, sy = 270, GROUND_TITLE - 32
         c.blit(self.skel_dark, (sx, sy))
         if int(t * 1.3) % 5 != 0:
             for ex in (9, 14):
@@ -115,13 +113,6 @@ class TitleScene(Scene):
         g.text(s, "ASH & IRON", (SCREEN_W // 2, 18), 56, (120, 30, 26), center=True, shadow=False)
         g.text(s, "ASH & IRON", (SCREEN_W // 2 - 2, 16), 56, (232, 206, 160), center=True, shadow=False)
         g.text(s, "фитнес-RPG: тренируй тело, чтобы выжить во тьме", (SCREEN_W // 2, 62), 18, COL_DIM, center=True)
-        # тёмные плашки, чтобы текст читался поверх детального фона
-        shade = pygame.Surface((262, 128), pygame.SRCALPHA)
-        shade.fill((8, 4, 10, 165))
-        s.blit(shade, (34, 142))
-        strip = pygame.Surface((SCREEN_W, 24), pygame.SRCALPHA)
-        strip.fill((8, 4, 10, 185))
-        s.blit(strip, (0, SCREEN_H - 24))
         self.menu.draw(g, s, 60, 150)
         p = g.player
         g.text(s, f"Уровень {p.level}   Пепел: {p.souls}   Следующий враг: скелет #{p.wave}",
@@ -136,7 +127,7 @@ class BonfireScene(Scene):
     def __init__(self, game):
         super().__init__(game)
         g = game
-        self.embers = Particles(208, 124, rate=26)
+        self.embers = Particles(216, 116, rate=26)
         self.ritual = None      # (stat, exercise, need, done)
         self.message, self.msg_t = "Костёр зажжён. Здоровье и эстус восстановлены.", 3.0
         game.run = None  # отдых у костра
@@ -187,22 +178,20 @@ class BonfireScene(Scene):
         self.embers.rate += (26 - self.embers.rate) * min(1.0, dt * 1.5)
         self.msg_t -= dt
 
-    def draw_backdrop(self, screen):
-        screen.blit(self.game.art.menu_bg, (0, 0))
-        dark = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        dark.fill((0, 0, 0, 110))
-        screen.blit(dark, (0, 0))
-
     def draw(self, c):
         a, t = self.game.art, self.game.time
+        c.blit(a.title_bg, (0, 0))
+        dark = pygame.Surface(c.get_size(), pygame.SRCALPHA)
+        dark.fill((0, 0, 0, 120))
+        c.blit(dark, (0, 0))
         glow = pygame.Surface((120, 40), pygame.SRCALPHA)
         r = 46 + int(math.sin(t * 5) * 3)
         pygame.draw.ellipse(glow, (255, 120, 40, 50), (60 - r, 6, r * 2, 28))
-        c.blit(glow, (148, GROUND_TITLE - 24))
+        c.blit(glow, (156, GROUND_TITLE - 24))
         fire = pygame.transform.scale(anim(a.bonfire, t, 8), (32, 44))
-        c.blit(fire, (192, GROUND_TITLE - 44))
+        c.blit(fire, (200, GROUND_TITLE - 44))
         hero = a.hero["attack"][0] if self.ritual and self.ritual[3] % 2 else a.hero["idle"][0]
-        c.blit(hero, (164, GROUND_TITLE - 32))
+        c.blit(hero, (168, GROUND_TITLE - 32))
         self.embers.draw(c)
 
     def draw_ui(self, s):
@@ -245,14 +234,12 @@ class BonfireScene(Scene):
 
         if self.ritual:
             stat, ex, need, done = self.ritual
-            # плашка ритуала — только в левой колонке, чтобы рыцарь у костра оставался виден
-            cx = 166
-            box = pygame.Surface((332, 80), pygame.SRCALPHA)
-            box.fill((0, 0, 0, 215))
-            s.blit(box, (0, SCREEN_H - 80))
-            g.text(s, f"Ритуал: {STATS[stat][0]}   (Esc — прервать)", (cx, SCREEN_H - 74), 16, COL_DIM, center=True)
-            g.text(s, f"{NAMES[ex]}: {done} / {need}", (cx, SCREEN_H - 56), 36, COL_GOLD, center=True)
-            g.bar(s, (cx - 140, SCREEN_H - 18, 280, 8), done / need, (230, 140, 50))
+            box = pygame.Surface((SCREEN_W, 78), pygame.SRCALPHA)
+            box.fill((0, 0, 0, 210))
+            s.blit(box, (0, SCREEN_H - 78))
+            g.text(s, f"Ритуал: {STATS[stat][0]}   (Esc — прервать)", (SCREEN_W // 2, SCREEN_H - 72), 16, COL_DIM, center=True)
+            g.text(s, f"{NAMES[ex]}: {done} / {need}", (SCREEN_W // 2, SCREEN_H - 54), 36, COL_GOLD, center=True)
+            g.bar(s, (SCREEN_W // 2 - 150, SCREEN_H - 18, 300, 8), done / need, (230, 140, 50))
         elif self.msg_t > 0:
             g.text(s, self.message, (SCREEN_W // 2, SCREEN_H - 30), 18, COL_GOLD, center=True)
 
