@@ -13,6 +13,7 @@ import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
+import { isNative, keepAwake, openAppSettings, openUrl, restoreBackup, vibrate } from "./platform.js";
 import { confirmDialog, modalOpen, promptName } from "./ui.js";
 
 const CW = 320, CH = 180;
@@ -128,6 +129,7 @@ class Game {
     this.player = Player.load();
     this.profile = Profile.load(); // имя в рейтинге, рекорд и облик — переживают «Новую игру»
     this.store = new Store(confirmDialog);
+    this.store.init(); // RevenueCat в iOS-приложении (если сборка подставила ключ); иначе — тестовый режим
     this.leaderboard = new Leaderboard();
     this.settings = { volume: 0.8, alert: 1, vibrate: true, ...loadJSON(SETTINGS_KEY, {}) };
     setAudio(this.settings);
@@ -260,6 +262,7 @@ class Game {
 
   /** Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом, F4 — к замку. */
   testKeys() {
+    if (isNative()) return; // клавиши тестировщика только в браузерной версии
     const p = this.player;
     if (this.codes.includes("F2")) {
       p.redGems += 10;
@@ -544,7 +547,7 @@ class TitleScene extends Scene {
     const status = `Ур.${p.level} Пепел:${p.souls} ${LOCATIONS[locationFor(p.wave)].name}: ${foe} #${p.wave}`;
     if (g.portrait) g.text(status, W / 2, GAME_H + 14, status.length * 12 <= W - 24 ? 12 : 8, COL.text, "center");
     else g.text(status, 12, GAME_H - 16, 8, COL.dim);
-    if (!g.portrait) g.text("ПК: J K L, тест F2-F4", W - 12, GAME_H - 16, 8, COL.dim, "right");
+    if (!g.portrait && !isNative()) g.text("ПК: J K L, тест F2-F4", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
 }
 
@@ -619,7 +622,7 @@ class BonfireScene extends Scene {
         this.say(`${STATS[st][0]} повышена до ${p[st]}!`, 4);
         this.embers.rate = 120;
         sfx.level();
-        if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+        vibrate([60, 40, 120]);
       }
       return;
     }
@@ -985,7 +988,7 @@ class BattleScene extends Scene {
     } else {
       sfx.win();
     }
-    if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+    vibrate([40, 30, 40]);
   }
 
   die() {
@@ -1110,7 +1113,7 @@ class BattleScene extends Scene {
     this.hurtT = 0.3;
     this.game.shake = en.boss ? 0.4 : 0.3;
     sfx.hurt();
-    if (navigator.vibrate) navigator.vibrate(en.boss ? 250 : 150);
+    vibrate(en.boss ? 250 : 150);
     this.float(`-${dmg}`, this.HERO_X + 10, 86, COL.red);
     const p = this.game.player;
     if (en.steal && p.souls > 0) { // разбойники крадут пепел
@@ -1508,7 +1511,7 @@ class CosmeticsScene extends Scene {
       this.busy = true;
       const bought = await g.store.buy(it);
       this.busy = false;
-      if (!bought) return;
+      if (!bought) return g.store.lastError && this.say(g.store.lastError, 4);
       sfx.buy();
       g.profile.style[it.kind] = it.id; // купленное сразу надевается
       g.profile.save();
@@ -1522,7 +1525,7 @@ class CosmeticsScene extends Scene {
   }
   async restore() {
     const ids = await this.game.store.restore();
-    this.say(ids.length ? `Покупки восстановлены: ${ids.length}` : "Покупок пока нет");
+    this.say(this.game.store.lastError || (ids.length ? `Покупки восстановлены: ${ids.length}` : "Покупок пока нет"));
   }
   handle() {
     const g = this.game, n = COS_ITEMS.length, L = this.layout();
@@ -1595,7 +1598,7 @@ class CosmeticsScene extends Scene {
     const [px, py, pw] = L.preview;
     g.rect([px, py, pw, 30], "rgba(10,6,14,0.75)");
     g.text("ЛАВКА ОБРАЗОВ", px + 10, py + 7, 16, COL.gold);
-    g.text("ТЕСТ: без оплаты", px + pw - 10, py + 11, 8, "rgb(120,220,255)", "right");
+    if (g.store.badge) g.text(g.store.badge, px + pw - 10, py + 11, 8, "rgb(120,220,255)", "right");
     // выбранная вещь — под «чёлкой» с превью
     g.text(it.name, 16, GAME_H + 8, 24, `rgb(${it.color.join(",")})`);
     g.text(this.msgT > 0 ? this.message : `${it.desc} · только облик`, 16, GAME_H + 40, 12, this.msgT > 0 ? COL.gold : COL.dim);
@@ -1623,7 +1626,7 @@ class CosmeticsScene extends Scene {
     if (this.game.portrait) return this.drawTall();
     const g = this.game, it = this.item, owned = g.store.owns(it.id);
     g.text("ЛАВКА ОБРАЗОВ", 14, 14, 16, COL.gold);
-    g.text("ТЕСТ: оплата не списывается", W - 12, 18, 8, "rgb(120,220,255)", "right");
+    if (g.store.badge) g.text(g.store.badge, W - 12, 18, 8, "rgb(120,220,255)", "right");
     for (const row of COS_LAYOUT) {
       if (row.head) {
         g.text(row.head, 14, row.y + 3, 8, COL.dim);
@@ -1749,7 +1752,8 @@ class LeaderboardScene extends Scene {
       else if (r.source === "cache") {
         const when = r.at ? new Date(r.at).toLocaleDateString("ru-RU") : "";
         [status, scol] = [`Нет сети: сохранённая таблица ${when}`.trim(), "rgb(230,180,90)"];
-      } else [status, scol] = ["Сервер рейтинга не подключён: показан ваш результат", "rgb(230,180,90)"];
+      } else if (g.leaderboard.offline) [status, scol] = ["Онлайн-рейтинг появится в следующей версии: показан ваш результат", "rgb(230,180,90)"];
+      else [status, scol] = ["Сервер рейтинга не подключён: показан ваш результат", "rgb(230,180,90)"];
       if (r.pending) status += " · ваш результат отправится при появлении сети";
     }
     const [sy, swrap, sstep, ssize] = L.status;
@@ -1798,7 +1802,11 @@ class CameraScene extends Scene {
     const g = this.game;
     if (moves.some((m) => m === "pushup" || m === "squat" || m === "jack")) sfx.rep();
     if (g.key("Escape", "Enter") || g.tapped([W / 2 - 60, GAME_H - 30, 120, 22])) g.change(new SettingsScene(g));
-    if (!g.motion.ok && !g.motion.starting && g.tapped([20, 300, 200, 24])) g.motion.start();
+    if (g.tapped([20, 300, 200, 24])) {
+      if (g.motion.denied && isNative()) openAppSettings(); // доступ запрещён — включается только в Настройках iOS
+      else if (!g.motion.ok && !g.motion.starting) g.motion.start();
+      else if (g.motion.ok && g.motion.status !== "камера активна") g.motion.resume();
+    }
   }
   draw(c) {
     c.drawImage(IMG.arena_bg, 0, 0);
@@ -1824,7 +1832,10 @@ class CameraScene extends Scene {
     ];
     let y = 140;
     for (const tip of tips) for (const l of g.wrap(tip, g.portrait ? 74 : 56)) { g.text(l, x, y, 8, COL.dim); y += 12; }
-    if (!g.motion.ok && !g.motion.starting) g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
+    if (g.motion.denied && isNative()) g.button([20, 300, 200, 24], "РАЗРЕШИТЬ В НАСТРОЙКАХ");
+    else if ((!g.motion.ok && !g.motion.starting) || (g.motion.ok && g.motion.status !== "камера активна")) {
+      g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
+    }
     g.button([W / 2 - 60, GAME_H - 30, 120, 22], "НАЗАД");
     if (!g.portrait) {
       g.cameraWidget();
@@ -1881,7 +1892,7 @@ class SettingsScene extends Scene {
     if (g.tapped(L.test)) sfx.alert();
     if (g.tapped(L.tg)) {
       sfx.click();
-      window.open(TELEGRAM_URL, "_blank", "noopener"); // на телефоне откроется приложение Telegram
+      openUrl(TELEGRAM_URL); // на телефоне откроется приложение Telegram
     }
     if (g.tapped(L.camera)) return g.change(new CameraScene(g));
     if (g.tapped(L.support)) return g.change(new SupportScene(g));
@@ -1912,7 +1923,7 @@ class SettingsScene extends Scene {
     this.slider(L.volume, fs, "Громкость", st.volume, `${Math.round(st.volume * 100)}%`);
     const al = ALERT_LEVELS.find(([v]) => v === st.alert) || ALERT_LEVELS[2];
     this.slider(L.alert, fs, "Сигнал «приседай»", st.alert / 1.5, al[1]);
-    g.text("Вибрация (Android)", L.vibLabel[0], L.vibLabel[1], fs.label);
+    g.text(isNative() ? "Вибрация" : "Вибрация (Android)", L.vibLabel[0], L.vibLabel[1], fs.label);
     g.button(L.vib, st.vibrate ? "ВКЛ" : "ВЫКЛ", { size: fs.btn, selected: st.vibrate });
     g.button(L.test, "ПРОВЕРИТЬ СИГНАЛ", { size: fs.btn });
     g.button(L.tg, "Наш Telegram", { size: fs.btn, color: "rgb(120,200,255)", border: "rgb(70,140,200)" });
@@ -1993,7 +2004,7 @@ class SupportScene extends Scene {
       g.button(r, "", { selected: i === 0 });
       g.text(tip.name, r[0] + 16, r[1] + r[3] / 2 - fs.name - 2, fs.name, COL.gold);
       g.text(tip.desc, r[0] + 16, r[1] + r[3] / 2 + 6, fs.desc, COL.dim);
-      g.text(tip.price, r[0] + r[2] - 16, r[1] + (r[3] - fs.price) / 2, fs.price, "rgb(120,220,255)", "right");
+      g.text(g.store.tipPrice(tip), r[0] + r[2] - 16, r[1] + (r[3] - fs.price) / 2, fs.price, "rgb(120,220,255)", "right");
     });
     const [my, msize] = L.msg;
     if (this.msgT > 0) g.text("Спасибо, рыцарь! Костёр горит ярче.", W / 2, my, msize, COL.gold, "center");
@@ -2008,7 +2019,8 @@ export async function boot() {
   const gate = document.getElementById("gate");
   const gateStatus = document.getElementById("gate-status");
   try {
-    await Promise.all([loadImages(), document.fonts.load(`16px ${FONT}`, "АБВ")]);
+    // в приложении: вернуть сохранения из нативной копии, если данные браузера очищены
+    await Promise.all([loadImages(), document.fonts.load(`16px ${FONT}`, "АБВ"), restoreBackup()]);
   } catch (e) {
     gateStatus.textContent = "Не удалось загрузить графику. Обновите страницу.";
     return;
@@ -2024,11 +2036,7 @@ export async function boot() {
     } catch (e) { /* iOS Safari не умеет — не страшно */ }
     initAudio();
     // Экран не гаснет на тренировке; после сворачивания блокировку нужно взять заново
-    const lockScreen = async () => {
-      try {
-        if (navigator.wakeLock && document.visibilityState === "visible") await navigator.wakeLock.request("screen");
-      } catch (e) { /* не поддерживается */ }
-    };
+    const lockScreen = () => keepAwake();
     lockScreen();
     document.addEventListener("visibilitychange", lockScreen);
     const game = new Game(canvas, useCamera);

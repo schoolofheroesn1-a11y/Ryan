@@ -2,6 +2,7 @@
 // Порт game/player.py.
 
 import { RELICS, SWORDS, item } from "./gear.js";
+import { loadJSON, saveJSON } from "./storage.js";
 
 const SAVE_KEY = "ash-and-iron-save";
 
@@ -82,15 +83,12 @@ export class Player {
   }
 
   save() {
-    try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(this));
-    } catch (e) { /* приватный режим браузера — играем без сохранения */ }
+    saveJSON(SAVE_KEY, this); // в приватном режиме браузера — играем без сохранения
   }
 
   static load() {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      return new Player(raw ? JSON.parse(raw) : {});
+      return new Player(loadJSON(SAVE_KEY, {}));
     } catch (e) {
       return new Player();
     }

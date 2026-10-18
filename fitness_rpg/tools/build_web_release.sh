@@ -19,7 +19,7 @@ python3 tools/flatten_release.py "$OUT" dist/ash-and-iron-web
 rm -rf "$OUT"
 OUT=dist/ash-and-iron-web
 touch "$OUT/.nojekyll"  # GitHub Pages отдаёт файлы как есть, без Jekyll
-cp deploy/README_DEPLOY.md deploy/supabase.sql "$OUT/"
+cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html "$OUT/"
 (cd dist && zip -qr ash-and-iron-web.zip ash-and-iron-web)
 echo "Готово: $(pwd)/dist/ash-and-iron-web.zip ($(du -h dist/ash-and-iron-web.zip | cut -f1))"
 find "$OUT" -type f | wc -l | xargs echo "файлов:"

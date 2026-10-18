@@ -1,5 +1,7 @@
 // Ретро-звуки, синтезированные WebAudio: файлы не нужны, работает офлайн.
 // Браузеры разрешают звук только после касания — контекст создаётся при старте игры.
+import { vibrate } from "./platform.js";
+
 let ctx = null;
 let master = null; // общая громкость
 let alertGain = null; // отдельная громкость сигнала «приседай»
@@ -10,6 +12,10 @@ export function initAudio() {
     ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === "suspended") ctx.resume();
     if (!master) {
+      // iOS приостанавливает звук при сворачивании и звонке — возобновляем при возврате и касании
+      const wake = () => { if (ctx && ctx.state !== "running") ctx.resume().catch(() => {}); };
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
+      document.addEventListener("pointerdown", wake);
       master = ctx.createGain();
       master.connect(ctx.destination);
       alertGain = ctx.createGain();
@@ -76,9 +82,7 @@ export const sfx = {
       tone(f, len, { type: "square", delay: d, vol: 0.24, out: alertGain });
       tone(f * 2, len * 0.7, { type: "triangle", delay: d, vol: 0.12, out: alertGain });
     });
-    try {
-      if (levels.vibrate && navigator.vibrate) navigator.vibrate([120, 40, 120]); // Android
-    } catch (e) { /* нет вибрации */ }
+    if (levels.vibrate) vibrate([120, 40, 120]); // Android — браузер, iOS — нативно
   },
   rep: () => tone(660, 0.06, { type: "triangle", vol: 0.08 }),
   level: () => [0, 0.1, 0.2, 0.3].forEach((d, i) => tone([392, 494, 587, 784][i], 0.22, { type: "triangle", delay: d })),

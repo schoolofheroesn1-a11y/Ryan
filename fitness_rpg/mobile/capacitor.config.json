@@ -4,5 +4,11 @@
   "webDir": "www",
   "android": {
     "backgroundColor": "#0a060c"
+  },
+  "ios": {
+    "backgroundColor": "#0a060c",
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "limitsNavigationsToAppBoundDomains": false
   }
 }

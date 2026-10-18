@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Манифест приватности приложения Ash & Iron (первая iOS-сборка).
+  Видео с камеры обрабатывается только на устройстве и не сохраняется; прогресс хранится на телефоне;
+  онлайн-рейтинг в этой сборке выключен. Плагины (Capacitor, Preferences, RevenueCat) несут свои манифесты.
+  При включении онлайн-рейтинга сюда нужно добавить собираемые данные (имя игрока, идентификатор, результаты).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

@@ -95,3 +95,23 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Проверка, что iOS-проект компилируется: сборка для симулятора без подписи.
+  # Не нужен аккаунт Apple, ничего не подписывается и не отправляется в TestFlight/App Store.
+  ios-check:
+    needs: test
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Самый новый Xcode на образе
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+      - name: Сборка для симулятора (без подписи)
+        run: sh fitness_rpg/mobile/build_ios.sh --simulator
