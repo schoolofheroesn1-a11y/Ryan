@@ -23,6 +23,14 @@ KEYBOARD_EXERCISES = {
     pygame.K_2: ("squat_down", "squat"),
     pygame.K_3: ("jack",),
 }
+# J / K / L по физическому положению клавиши — работают и на русской раскладке
+SCAN_EXERCISES = {
+    pygame.KSCAN_J: ("pushup",),
+    pygame.KSCAN_K: ("squat_down", "squat"),
+    pygame.KSCAN_L: ("jack",),
+}
+# Пока зажата клавиша уворота, герой «внизу» — как игрок, удерживающий присед перед камерой
+HOLD_LOW_KEYS = {pygame.KSCAN_K, pygame.KSCAN_2}
 
 # Пары точек для рисования «скелета» поверх кадра камеры
 POSE_LINKS = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24),
@@ -142,7 +150,8 @@ class MotionInput:
                 except queue.Empty:
                     break
         for e in key_events:
-            for ev in KEYBOARD_EXERCISES.get(e.key, ()):
+            evs = KEYBOARD_EXERCISES.get(e.key) or SCAN_EXERCISES.get(getattr(e, "scancode", None), ())
+            for ev in evs:
                 out.append(ev)
                 if ev in self.key_counts:
                     self.key_counts[ev] += 1

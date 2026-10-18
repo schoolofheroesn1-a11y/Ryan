@@ -2,7 +2,7 @@
 
 Запуск:
     python main.py                 # с веб-камерой
-    python main.py --no-camera     # без камеры, упражнения — клавишами 1/2/3
+    python main.py --no-camera     # без камеры: J удар, K уворот (держать), L эстус
     python main.py --camera 1      # выбрать другую камеру
     python main.py --screenshots shots   # отрисовать сцены в PNG и выйти
 """
@@ -91,7 +91,7 @@ def take_screenshots(out_dir):
 
 def main():
     ap = argparse.ArgumentParser(description="Ash & Iron — фитнес-RPG")
-    ap.add_argument("--no-camera", action="store_true", help="играть без камеры (клавиши 1/2/3)")
+    ap.add_argument("--no-camera", action="store_true", help="играть без камеры (клавиши J / K / L)")
     ap.add_argument("--camera", type=int, default=0, help="номер веб-камеры")
     ap.add_argument("--screenshots", metavar="DIR", help="сохранить скриншоты сцен и выйти")
     args = ap.parse_args()

@@ -355,3 +355,46 @@ class BossAndGearTest(unittest.TestCase):
                 json.dump({"strength": 3, "souls": 40, "sword": "bogus"}, f)
             p = Player.load(path)
         self.assertEqual((p.strength, p.sword, p.owned, p.red_gems), (3, "rusty", ["rusty"], 0))
+
+
+class KeyboardTest(unittest.TestCase):
+    """Управление с клавиатуры для проверки игры без камеры."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = shared_game()
+
+    def key(self, kind, key=0, scancode=0):
+        import pygame
+        return pygame.event.Event(kind, key=key, scancode=scancode, mod=0, unicode="")
+
+    def test_jkl_by_scancode(self):
+        import pygame
+        evs = [self.key(pygame.KEYDOWN, 0, sc) for sc in (pygame.KSCAN_J, pygame.KSCAN_K, pygame.KSCAN_L)]
+        self.assertEqual(self.game.motion.poll(evs), ["pushup", "squat_down", "squat", "jack"])
+
+    def test_holding_k_keeps_hero_low(self):
+        import pygame
+        from game.scenes import BattleScene
+        g = self.game
+        g.player = Player()
+        g.player.save = lambda *a, **k: None
+        g.run = None
+        s = BattleScene(g)
+        s.ready = 0
+        g.change(s)
+        g.frame(1 / 60, [self.key(pygame.KEYDOWN, pygame.K_k, pygame.KSCAN_K)])
+        s.enemy.set("windup", 2.0)  # удар через 2 с — дольше обычного уворота
+        for _ in range(150):
+            g.frame(1 / 60, [])
+        self.assertEqual(s.hp, g.player.max_hp)
+        g.frame(1 / 60, [self.key(pygame.KEYUP, pygame.K_k, pygame.KSCAN_K)])
+        self.assertFalse(g.manual_low)
+
+    def test_test_keys(self):
+        import pygame
+        g = self.game
+        g.player = Player(wave=2)
+        g.player.save = lambda *a, **k: None
+        g.test_keys([self.key(pygame.KEYDOWN, pygame.K_F2), self.key(pygame.KEYDOWN, pygame.K_F3)])
+        self.assertEqual((g.player.red_gems, g.player.blue_gems, g.player.wave), (10, 1, 5))

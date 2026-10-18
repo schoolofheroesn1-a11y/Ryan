@@ -3,7 +3,7 @@
 // В портретной ориентации под игрой появляется большая панель камеры.
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
-import { RELICS, SHOP_ORDER, SWORDS, isBossWave, item, priceText, rewards } from "./gear.js";
+import { BOSS_EVERY, RELICS, SHOP_ORDER, SWORDS, isBossWave, item, priceText, rewards } from "./gear.js";
 import { Player, STATS } from "./player.js";
 import { initAudio, sfx } from "./sfx.js";
 
@@ -97,7 +97,19 @@ class Game {
     this.run = null; // здоровье/эстус между боями (null — полные, после костра)
     this.resize();
     addEventListener("resize", () => this.resize());
-    addEventListener("keydown", (e) => this.keys.push(e.key));
+    this.codes = []; // физические клавиши (e.code) — J/K/L работают на любой раскладке
+    this.held = new Set(); // зажатые клавиши: удержание уворота
+    this.toast = "";
+    this.toastT = 0;
+    addEventListener("keydown", (e) => {
+      if (["F2", "F3", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
+      this.held.add(e.code);
+      if (e.repeat) return; // автоповтор не считается новым повторением упражнения
+      this.keys.push({ KeyW: "ArrowUp", KeyS: "ArrowDown" }[e.code] || e.key);
+      this.codes.push(e.code);
+    });
+    addEventListener("keyup", (e) => this.held.delete(e.code));
+    addEventListener("blur", () => this.held.clear());
     canvas.addEventListener("pointerdown", (e) => {
       const r = canvas.getBoundingClientRect();
       this.taps.push({ x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * this.H });
@@ -188,6 +200,32 @@ class Game {
     return this.keys.some((k) => names.includes(k));
   }
 
+  /** Зажата клавиша уворота (K или 2) — герой остаётся внизу, как в удержанном приседе. */
+  get manualLow() {
+    return ["KeyK", "Digit2", "Numpad2"].some((c) => this.held.has(c));
+  }
+
+  /** Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом. */
+  testKeys() {
+    const p = this.player;
+    if (this.codes.includes("F2")) {
+      p.redGems += 10;
+      p.blueGems += 1;
+      p.souls += 300;
+      this.say("Тест: +10 алых, +1 синий, +300 пепла");
+    }
+    if (this.codes.includes("F3")) {
+      p.wave = Math.ceil(p.wave / BOSS_EVERY) * BOSS_EVERY;
+      this.say(`Тест: следующий бой - босс (#${p.wave})`);
+    }
+    if (this.codes.includes("F2") || this.codes.includes("F3")) p.save();
+  }
+
+  say(text, t = 2.5) {
+    this.toast = text;
+    this.toastT = t;
+  }
+
   /** Пиксельный камень 8×10: алый или синий. */
   gem(x, y, kind) {
     const c = this.ctx;
@@ -248,7 +286,9 @@ class Game {
   /** Кнопки «ручного» упражнения: без камеры — основной ввод, с камерой — запасной. */
   manualButtons() {
     if (!this.portrait && this.motion.ok) return;
-    const labels = { pushup: "ОТЖИМ", squat: "ПРИСЕД", jack: "ЗВЕЗДА" };
+    const labels = this.portrait
+      ? { pushup: "ОТЖИМ", squat: "ПРИСЕД", jack: "ЗВЕЗДА" }
+      : { pushup: "ОТЖИМ [J]", squat: "ПРИСЕД [K]", jack: "ЗВЕЗДА [L]" };
     for (const [ex, r] of this.manual) this.button(r, labels[ex], { size: this.portrait ? 16 : 8 });
   }
 
@@ -259,8 +299,14 @@ class Game {
   frame(dt) {
     let moves = this.motion.poll();
     // клавиатура (браузер на ПК) и экранные кнопки
-    const keyMap = { 1: ["pushup"], 2: ["squat_down", "squat"], 3: ["jack"] };
-    for (const k of this.keys) if (keyMap[k]) moves.push(...keyMap[k]);
+    const pushup = ["pushup"], squat = ["squat_down", "squat"], jack = ["jack"];
+    const keyMap = {
+      KeyJ: pushup, Digit1: pushup, Numpad1: pushup,
+      KeyK: squat, Digit2: squat, Numpad2: squat,
+      KeyL: jack, Digit3: jack, Numpad3: jack,
+    };
+    for (const code of this.codes) if (keyMap[code]) moves.push(...keyMap[code]);
+    this.testKeys();
     if (this.portrait || !this.motion.ok) {
       for (const [ex, r] of this.manual) {
         if (this.scene.manual && this.tapped(r)) {
@@ -296,7 +342,12 @@ class Game {
       this.cameraWidget();
       if (this.scene.manual) this.manualButtons();
     }
+    if (this.toastT > 0) {
+      this.toastT -= dt;
+      this.text(this.toast, W / 2, 4, 8, "rgb(120,220,255)", "center");
+    }
     this.keys.length = 0;
+    this.codes.length = 0;
     this.taps.length = 0;
   }
 }
@@ -387,7 +438,7 @@ class TitleScene extends Scene {
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
     });
     g.text(`Ур. ${p.level}  Пепел: ${p.souls}  Враг: ${isBossWave(p.wave) ? "БОСС" : "скелет"} #${p.wave}`, 12, GAME_H - 16, 8, COL.dim);
-    if (!g.portrait) g.text("Нажмите на пункт меню", W - 12, GAME_H - 16, 8, COL.dim, "right");
+    if (!g.portrait) g.text("ПК: J K L, тест F2 F3", W - 12, GAME_H - 16, 8, COL.dim, "right");
   }
 }
 
@@ -741,7 +792,11 @@ class BattleScene extends Scene {
     this.actionT -= dt;
     if (this.actionT <= 0) this.action = "idle";
     this.invuln = Math.max(0, this.invuln - dt);
-    if (d && d.low) this.invuln = Math.max(this.invuln, 0.15); // пока игрок внизу — он под ударом не стоит
+    if ((d && d.low) || g.manualLow) { // пока игрок внизу — удар проходит над ним, герой в присяде
+      this.invuln = Math.max(this.invuln, 0.15);
+      this.action = "dodge";
+      this.actionT = Math.max(this.actionT, 0.1);
+    }
     this.regenPause -= dt;
     if (this.regenPause <= 0) this.stamina = Math.min(p.maxStamina, this.stamina + p.staminaRegen * dt);
 
@@ -856,8 +911,9 @@ class BattleScene extends Scene {
     g.gems(W - 12, GAME_H - 32, p, "right");
     g.button([12, GAME_H - 30, 104, 22], "< КОСТЁР");
 
-    [["ОТЖИМАНИЕ", "удар"], ["ПРИСЕД/ВНИЗ", "уворот"], ["ЗВЕЗДОЧКА", "эстус"]]
-      .forEach(([a, b], i) => g.text(`${a}: ${b}`, 16, 62 + i * 12, 8, COL.dim));
+    [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "эстус"]]
+      .forEach(([k, a, b], i) => g.text(`[${k}] ${a}: ${b}`, 16, 62 + i * 12, 8, COL.dim));
+    g.text("K держать: остаться внизу", 16, 98, 8, "rgb(110,100,100)");
 
     const plank = g.motion.ok && g.motion.detector.posture === "планка";
     if (this.paused) {

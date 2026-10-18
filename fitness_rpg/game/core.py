@@ -77,6 +77,8 @@ class Game:
         self.player = Player.load()
         self.motion = MotionInput(use_camera, camera_index)
         self.run = None  # здоровье/эстус между боями (None — полные, после костра)
+        self.held = set()  # зажатые клавиши (скан-коды): удержание уворота
+        self.toast, self.toast_t = "", 0.0
         self.shake = 0.0
         self.time = 0.0
         self.running = True
@@ -145,7 +147,7 @@ class Game:
             self.text(surf, "КАМЕРА", (x + w // 2, y + 6), 16, COL_DIM, center=True)
             for i, line in enumerate(self._wrap(self.motion.status, 20)):
                 self.text(surf, line, (x + w // 2, y + 24 + i * 11), 13, COL_DIM, center=True)
-            self.text(surf, "клавиши: 1 2 3", (x + w // 2, y + h - 14), 14, COL_GOLD, center=True)
+            self.text(surf, "клавиши: J K L", (x + w // 2, y + h - 14), 14, COL_GOLD, center=True)
 
     @staticmethod
     def _wrap(s, n):
@@ -163,8 +165,39 @@ class Game:
     def change(self, scene):
         self.scene = scene
 
+    @property
+    def manual_low(self):
+        """Зажата клавиша уворота (K или 2) — герой остаётся внизу."""
+        from .motion import HOLD_LOW_KEYS
+        return bool(self.held & HOLD_LOW_KEYS)
+
+    def test_keys(self, keys):
+        """Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом."""
+        from .gear import BOSS_EVERY
+        for e in keys:
+            if e.key == pygame.K_F2:
+                self.player.red_gems += 10
+                self.player.blue_gems += 1
+                self.player.souls += 300
+                self.say("Тест: +10 алых, +1 синий, +300 пепла")
+            elif e.key == pygame.K_F3:
+                self.player.wave = -(-self.player.wave // BOSS_EVERY) * BOSS_EVERY
+                self.say(f"Тест: следующий бой — босс (#{self.player.wave})")
+            else:
+                continue
+            self.player.save()
+
+    def say(self, text, t=2.5):
+        self.toast, self.toast_t = text, t
+
     def frame(self, dt, raw_events):
         keys = [e for e in raw_events if e.type == pygame.KEYDOWN]
+        for e in raw_events:
+            if e.type == pygame.KEYDOWN:
+                self.held.add(getattr(e, "scancode", None))
+            elif e.type == pygame.KEYUP:
+                self.held.discard(getattr(e, "scancode", None))
+        self.test_keys(keys)
         moves = self.motion.poll(keys)
         for m in moves:
             self.player.add_rep(m)
@@ -180,6 +213,9 @@ class Game:
         self.screen.fill((0, 0, 0))
         self.screen.blit(pygame.transform.scale(self.canvas, (SCREEN_W, SCREEN_H)), (ox * 2, oy * 2))
         self.scene.draw_ui(self.screen)
+        if self.toast_t > 0:
+            self.toast_t -= dt
+            self.text(self.screen, self.toast, (SCREEN_W // 2, 4), 16, (120, 220, 255), center=True)
 
     def run(self):
         from .scenes import TitleScene

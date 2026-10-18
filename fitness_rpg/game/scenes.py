@@ -15,9 +15,9 @@ GROUND_TITLE = 150
 GROUND_ARENA = 140
 
 MOVE_HINTS = [
-    ("ОТЖИМАНИЕ", "удар мечом", "1"),
-    ("ПРИСЕД / ВНИЗ", "уворот", "2"),
-    ("ЗВЁЗДОЧКА", "глоток эстуса", "3"),
+    ("ОТЖИМАНИЕ", "удар мечом", "J"),
+    ("ПРИСЕД / ВНИЗ", "уворот", "K"),
+    ("ЗВЁЗДОЧКА", "глоток эстуса", "L"),
 ]
 
 
@@ -119,7 +119,7 @@ class TitleScene(Scene):
         foe = "БОСС" if is_boss_wave(p.wave) else "скелет"
         g.text(s, f"Уровень {p.level}   Пепел: {p.souls}   Следующий враг: {foe} #{p.wave}",
                (12, SCREEN_H - 20), 16, COL_DIM)
-        g.text(s, "Стрелки — выбор, Enter — подтвердить", (SCREEN_W - 12, SCREEN_H - 20), 16, COL_DIM, right=True)
+        g.text(s, "↑↓ Enter · тест: F2 камни, F3 босс", (SCREEN_W - 12, SCREEN_H - 20), 16, COL_DIM, right=True)
 
 
 # ---------------------------------------------------------------- Костёр
@@ -466,8 +466,9 @@ class BattleScene(Scene):
         if self.action_t <= 0:
             self.action = "idle"
         self.invuln = max(0.0, self.invuln - dt)
-        if det is not None and det.low:  # пока игрок внизу — удар проходит над ним
+        if (det is not None and det.low) or g.manual_low:  # пока игрок внизу — удар проходит над ним
             self.invuln = max(self.invuln, 0.15)
+            self.action, self.action_t = "dodge", max(self.action_t, 0.1)
         self.regen_pause -= dt
         if self.regen_pause <= 0:
             self.stamina = min(p.max_stamina, self.stamina + p.stamina_regen * dt)
@@ -582,9 +583,9 @@ class BattleScene(Scene):
 
         y = 66
         for name, desc, key in MOVE_HINTS:
-            g.text(s, f"{name} — {desc}", (16, y), 14, COL_DIM)
+            g.text(s, f"[{key}] {name} — {desc}", (16, y), 14, COL_DIM)
             y += 13
-        g.text(s, "(без камеры: клавиши 1 / 2 / 3)", (16, y), 12, (100, 90, 90))
+        g.text(s, "K держать — остаться внизу, Esc — к костру", (16, y), 12, (110, 100, 100))
 
         det = g.motion.detector() if g.motion.camera_ok else None
         plank = det is not None and det.posture == "планка"
@@ -741,7 +742,7 @@ class CameraScene(Scene):
         "Отжимания и приседания: встаньте к камере БОКОМ.",
         "Звёздочка: встаньте к камере ЛИЦОМ, руки — над головой.",
         "Тело целиком должно быть в кадре.",
-        "Без камеры: 1 — отжимание, 2 — присед, 3 — звёздочка.",
+        "Без камеры: J (1) — отжимание, K (2) — присед, L (3) — звёздочка.",
     ]
 
     def handle(self, keys, moves):
