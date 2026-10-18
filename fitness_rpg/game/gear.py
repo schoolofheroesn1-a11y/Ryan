@@ -18,7 +18,7 @@ SWORDS = {
 # Реликвии работают сразу после покупки
 RELICS = {
     "armor": {"name": "Доспех Костяного Рыцаря", "desc": "получаемый урон -25%", "price": (0, 1), "unique": True},
-    "amulet": {"name": "Амулет Углей", "desc": "+1 фляга эстуса", "price": (0, 2), "unique": True},
+    "amulet": {"name": "Амулет Углей", "desc": "+1 зелье лечения", "price": (0, 2), "unique": True},
 }
 
 SHOP_ORDER = ["rusty", "steel", "great", "ash", "armor", "amulet"]

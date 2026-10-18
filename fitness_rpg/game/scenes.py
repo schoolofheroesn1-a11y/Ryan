@@ -18,7 +18,7 @@ GROUND_ARENA = 140
 MOVE_HINTS = [
     ("ОТЖИМАНИЕ", "удар мечом", "J"),
     ("ПРИСЕД / ВНИЗ", "уворот", "K"),
-    ("ЗВЁЗДОЧКА", "глоток эстуса", "L"),
+    ("ЗВЁЗДОЧКА", "глоток зелья", "L"),
 ]
 
 
@@ -134,7 +134,7 @@ class BonfireScene(Scene):
         g = game
         self.embers = Particles(216, 116, rate=26)
         self.ritual = None      # (stat, exercise, need, done)
-        self.message, self.msg_t = "Костёр зажжён. Здоровье и эстус восстановлены.", 3.0
+        self.message, self.msg_t = "Костёр зажжён. Здоровье и зелья восстановлены.", 3.0
         game.run = None  # отдых у костра
         items = [(None, (lambda st=st: self.start_ritual(st))) for st in STATS]
         items.append(("В бой", lambda: g.change(BattleScene(g))))
@@ -440,7 +440,7 @@ class BattleScene(Scene):
             self.game.sfx.play("dodge")
         elif move == "jack":
             if self.estus <= 0:
-                return self.float("Эстус пуст", self.HERO_X + 10, 90, COL_DIM, 18)
+                return self.float("Зелья кончились", self.HERO_X + 10, 90, COL_DIM, 18)
             if self.hp >= p.max_hp:
                 return self.float("Здоровье полное", self.HERO_X + 10, 90, COL_DIM, 16)
             self.estus -= 1
