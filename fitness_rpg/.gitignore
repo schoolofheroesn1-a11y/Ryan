@@ -1,3 +1,4 @@
 __pycache__/
-save.json
+dist/
 models/
+save.json

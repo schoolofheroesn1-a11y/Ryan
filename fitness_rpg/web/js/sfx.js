@@ -51,4 +51,11 @@ export const sfx = {
   win: () => [0, 0.15, 0.3].forEach((d, i) => tone([330, 415, 494][i], 0.35, { type: "triangle", delay: d })),
   die: () => [0, 0.25, 0.5].forEach((d, i) => tone([220, 185, 147][i], 0.5, { type: "sawtooth", delay: d, vol: 0.1 })),
   click: () => tone(880, 0.03, { vol: 0.05 }),
+  // косметика
+  thunder: () => { noise(0.35, 0.3); tone(90, 0.4, { type: "sawtooth", slide: -50, vol: 0.12 }); },
+  souls: () => [0, 0.1, 0.2].forEach((d, i) => tone(520 - i * 70, 0.4, { type: "sine", slide: -180, delay: d, vol: 0.07 })),
+  fanfare: () => [[523, 0], [659, 0.12], [784, 0.24], [1047, 0.38], [784, 0.6], [1047, 0.72]]
+    .forEach(([f, d]) => { tone(f, 0.28, { type: "square", delay: d, vol: 0.06 }); tone(f / 2, 0.28, { type: "triangle", delay: d, vol: 0.08 }); }),
+  pyre: () => { noise(0.8, 0.12); [196, 247, 294].forEach((f) => tone(f, 1.2, { type: "sine", vol: 0.06 })); },
+  buy: () => [0, 0.07, 0.14, 0.21].forEach((d, i) => tone([660, 880, 1100, 1320][i], 0.12, { type: "triangle", delay: d, vol: 0.09 })),
 };

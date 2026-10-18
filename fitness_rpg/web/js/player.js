@@ -23,6 +23,7 @@ export class Player {
     this.lostSouls = 0;
     this.lostAtWave = 0;
     this.totalReps = { pushup: 0, squat: 0, jack: 0 };
+    this.bossesDefeated = 0; // для рейтинга
     this.redGems = 0; // алые камни — за каждого врага, тратятся в кузнице
     this.blueGems = 0; // синие камни — за боссов, на уникальное снаряжение
     this.owned = ["rusty"];

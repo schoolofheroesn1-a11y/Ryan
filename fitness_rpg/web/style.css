@@ -37,3 +37,29 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 #gate.ready button { opacity: 1; pointer-events: auto; }
 #gate button.secondary { color: #e2d6be; border-color: #5a4032; background: #140c12; }
 #gate button:active { transform: translateY(2px); }
+
+/* Модальные окна (покупка, имя в рейтинге) */
+.modal {
+  position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 3, 8, 0.78); padding: 16px; box-sizing: border-box;
+}
+.modal-box {
+  width: min(440px, 100%); background: #140c12; border: 2px solid #e8be5c; padding: 20px;
+  box-shadow: 0 0 0 4px #2a1414, 0 12px 40px rgba(0, 0, 0, 0.7); box-sizing: border-box;
+  font-family: "PressStart2P", monospace; color: #e2d6be;
+}
+.modal-box h2 { font-size: 14px; color: #e8be5c; margin: 0 0 14px; line-height: 1.5; }
+.modal-box p { font-size: 10px; line-height: 1.8; margin: 0 0 12px; }
+.modal-box .modal-note { font-size: 8px; color: #78dcff; }
+.modal-input {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 10px;
+  background: #0a060c; color: #e8cea0; border: 2px solid #5a4032; margin-bottom: 14px;
+}
+.modal-input:focus { outline: none; border-color: #e8be5c; }
+.modal-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.modal-row button {
+  font: inherit; font-size: 10px; padding: 12px 14px; cursor: pointer; border: 2px solid #5a4032;
+  background: #140c12; color: #e2d6be;
+}
+.modal-row .modal-ok { border-color: #e8be5c; color: #e8be5c; background: #2a1414; }
+.modal-row button:focus-visible { outline: 2px solid #e8cea0; outline-offset: 2px; }

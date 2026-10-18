@@ -80,14 +80,10 @@ jobs:
         with:
           node-version: 22
       - name: Сайт + MediaPipe и модель позы
-        run: |
-          sh fitness_rpg/web/fetch_vendor.sh
-          mkdir -p site
-          cp -r fitness_rpg/web/. site/
-          rm -rf site/tests site/fetch_vendor.sh site/.gitignore
+        run: sh fitness_rpg/tools/build_web_release.sh
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: fitness_rpg/dist/ash-and-iron-web
 
   deploy-pages:
     if: github.ref == 'refs/heads/main'

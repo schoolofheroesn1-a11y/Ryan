@@ -8,6 +8,11 @@ import {
 } from "./gear.js";
 import { Player, STATS } from "./player.js";
 import { initAudio, sfx } from "./sfx.js";
+import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
+import { Leaderboard } from "./leaderboard.js";
+import { Profile } from "./profile.js";
+import { Store } from "./store.js";
+import { confirmDialog, modalOpen, promptName } from "./ui.js";
 
 const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
@@ -19,28 +24,22 @@ const COL = {
   red: "rgb(200,40,36)", green: "rgb(70,160,70)", shadow: "rgb(8,6,12)",
 };
 
-const FRAMES = {
-  skeleton: { idle: 2, windup: 2, attack: 1, hurt: 1, dead: 1 },
-  boss: { idle: 2, windup: 2, attack: 1, hurt: 1, enraged: 2, dead: 1 },
-  bandit: { idle: 2, windup: 2, attack: 1, hurt: 1, dead: 1 },
-  chief: { idle: 2, windup: 2, attack: 1, hurt: 1, drink: 2, enraged: 2, dead: 1 },
-  hero: { idle: 2, attack: 1, dodge: 1, hurt: 1, heal: 1, dead: 1 },
-};
 // Облик героя по реликвиям: доспех Костяного Рыцаря (рога, тёмные латы) и/или Амулет Углей
 const LOOKS = ["base", "armor", "amulet", "both"];
 function heroLook(owned) {
   const armor = owned.includes("armor"), amulet = owned.includes("amulet");
   return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
 }
-/** Префикс спрайтов героя с этим мечом и обликом. */
-const heroSprite = (sword, owned) => `hero_${sword}_${heroLook(owned)}`;
+/** Префикс спрайтов героя: меч (или купленный облик меча skin) и облик по реликвиям. */
+const heroSprite = (sword, owned, skin = null) => `hero_${skin || sword}_${heroLook(owned)}`;
 
 // След удара для каждого меча
 const SLASH_TIME = 0.18;
 const SLASH_COLORS = { rusty: [190, 140, 100], steel: [235, 240, 250], great: [200, 210, 230], ash: [255, 150, 60] };
 
 /** Дуга следа удара: k от 0 (начало) до 1 (исчезла). Двуручник — шире, пепельный — огненный. */
-function drawSlash(c, x, y, sword, k) {
+function drawSlash(c, x, y, sword, k, skin = null) {
+  if (skin) return drawSkinSlash(c, x, y, skin, k);
   const big = sword === "great";
   const radius = big ? 22 : 16;
   const base = SLASH_COLORS[sword];
@@ -60,25 +59,26 @@ function drawSlash(c, x, y, sword, k) {
   }
 }
 
-const SPRITES = [
-  "title_bg", "arena_bg", "castle_bg", "skeleton_dark_0",
-  "bonfire_0", "bonfire_1", "bonfire_2", "bonfire_3", "torch_0", "torch_1", "torch_2", "torch_3",
-];
-for (const [who, anims] of Object.entries(FRAMES)) {
-  const prefixes = who === "hero" ? Object.keys(SWORDS).flatMap((sw) => LOOKS.map((lk) => `hero_${sw}_${lk}`)) : [who];
-  for (const pre of prefixes) {
-    for (const [name, n] of Object.entries(anims)) for (let i = 0; i < n; i++) SPRITES.push(`${pre}_${name}_${i}`);
-  }
-}
 const IMG = {};
 
-function loadImages() {
-  return Promise.all(SPRITES.map((name) => new Promise((ok, fail) => {
-    const im = new Image();
-    im.onload = () => { IMG[name] = im; ok(); };
-    im.onerror = fail;
-    im.src = `assets/${name}.png`;
-  })));
+/** Все спрайты лежат в одном атласе (assets/atlas.png + atlas.json, см. tools/export_web_assets.py). */
+async function loadImages() {
+  const [rects, sheet] = await Promise.all([
+    fetch("assets/atlas.json").then((r) => r.json()),
+    new Promise((ok, fail) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = fail;
+      im.src = "assets/atlas.png";
+    }),
+  ]);
+  for (const [name, [x, y, w, h]] of Object.entries(rects)) {
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    cv.getContext("2d").drawImage(sheet, x, y, w, h, 0, 0, w, h);
+    IMG[name] = cv;
+  }
 }
 
 function anim(prefix, t, fps, n) {
@@ -125,6 +125,10 @@ class Game {
     this.world.height = CH;
     this.wctx = this.world.getContext("2d");
     this.player = Player.load();
+    this.profile = Profile.load(); // имя в рейтинге, рекорд и облик — переживают «Новую игру»
+    this.store = new Store(confirmDialog);
+    this.leaderboard = new Leaderboard();
+    this.leaderboard.flush(); // результат, накопленный без сети, уходит при запуске
     this.motion = new Motion();
     this.useCamera = useCamera;
     this.time = 0;
@@ -140,6 +144,7 @@ class Game {
     this.toast = "";
     this.toastT = 0;
     addEventListener("keydown", (e) => {
+      if (modalOpen()) return; // открыто окно (имя, покупка) — игра клавиши не слушает
       if (["F2", "F3", "F4", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
       this.held.add(e.code);
       if (e.repeat) return; // автоповтор не считается новым повторением упражнения
@@ -180,8 +185,7 @@ class Game {
   }
 
   // --- рисование
-  text(s, x, y, size = 8, color = COL.text, align = "left", shadow = true) {
-    const c = this.ctx;
+  text(s, x, y, size = 8, color = COL.text, align = "left", shadow = true, c = this.ctx) {
     c.font = `${size}px ${FONT}`;
     c.textBaseline = "top";
     c.textAlign = align;
@@ -266,6 +270,25 @@ class Game {
   say(text, t = 2.5) {
     this.toast = text;
     this.toastT = t;
+  }
+
+  /** Купленный и надетый облик данного типа (sword / hit / victory) или null. */
+  style(kind) {
+    const id = this.profile.style[kind];
+    return id && this.store.owns(id) ? id : null;
+  }
+
+  get skin() {
+    const id = this.style("sword");
+    return id ? COSMETIC[id].skin : null;
+  }
+
+  /** Сохраняет рекорд и отправляет его в рейтинг (без сети — в очередь). */
+  recordProgress() {
+    if (this.profile.record(this.player)) {
+      this.profile.save();
+      this.leaderboard.submit(this.profile);
+    }
   }
 
   /** Пиксельный камень 8×10: алый или синий. */
@@ -415,9 +438,12 @@ class TitleScene extends Scene {
     this.items = [
       ["Продолжить путь", () => g.change(new BattleScene(g))],
       ["Костёр: прокачка", () => g.change(new BonfireScene(g))],
+      ["Лавка образов", () => g.change(new CosmeticsScene(g))],
+      ["Рейтинг", () => g.change(new LeaderboardScene(g))],
       ["Камера и советы", () => g.change(new CameraScene(g))],
       ["Новая игра", () => this.newGame()],
     ];
+    this.aura = new SwordAura();
     this.confirmT = 0;
   }
   newGame() {
@@ -433,7 +459,7 @@ class TitleScene extends Scene {
     g.change(new BonfireScene(g));
   }
   rects() {
-    return this.items.map((_, i) => [32, 112 + i * 36, 232, 28]);
+    return this.items.map((_, i) => [32, 104 + i * 34, 232, 28]);
   }
   handle() {
     const g = this.game;
@@ -449,6 +475,7 @@ class TitleScene extends Scene {
   }
   update(dt) {
     this.embers.update(dt);
+    this.aura.update(dt, this.game.skin, "idle", 172, GROUND_TITLE - 32);
     this.confirmT -= dt;
   }
   draw(c) {
@@ -461,7 +488,8 @@ class TitleScene extends Scene {
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
-    c.drawImage(anim(`${heroSprite(p.sword, p.owned)}_idle`, t, 1.5, 2), 172, GROUND_TITLE - 32);
+    c.drawImage(anim(`${heroSprite(p.sword, p.owned, this.game.skin)}_idle`, t, 1.5, 2), 172, GROUND_TITLE - 32);
+    this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
     const sx = 270, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
     if (Math.floor(t * 1.3) % 5 !== 0) {
@@ -477,7 +505,7 @@ class TitleScene extends Scene {
     g.text("ASH & IRON", W / 2, 16, 40, "rgb(232,206,160)", "center", false);
     g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.dim, "center");
     this.rects().forEach((r, i) => {
-      const confirm = i === 3 && this.confirmT > 0;
+      const confirm = i === this.items.length - 1 && this.confirmT > 0;
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0], { selected: i === this.index, color: confirm ? COL.red : undefined });
     });
     const foe = isBossWave(p.wave) ? "БОСС" : Skeleton.NAMES[enemyKind(p.wave)].toLowerCase();
@@ -528,6 +556,7 @@ class BonfireScene extends Scene {
         const st = this.ritual.stat;
         p.levelUp(st);
         p.save();
+        g.recordProgress();
         this.ritual = null;
         this.say(`${STATS[st][0]} повышена до ${p[st]}!`, 4);
         this.embers.rate = 120;
@@ -569,7 +598,7 @@ class BonfireScene extends Scene {
     c.ellipse(216, GROUND_TITLE - 4, r, 12, 0, 0, Math.PI * 2);
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
-    const p = this.game.player, hs = heroSprite(p.sword, p.owned);
+    const p = this.game.player, hs = heroSprite(p.sword, p.owned, this.game.skin);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, 168, GROUND_TITLE - 32);
     this.embers.draw(c);
@@ -712,6 +741,16 @@ class BattleScene extends Scene {
     this.torchR = new Particles(256, 58, 8, 2);
     this.slashT = 0;
     this.bladeEmbers = new Particles(0, 0, 14, 2);
+    this.aura = new SwordAura();
+    this.hitFx = new HitFx();
+    this.victory = null;
+  }
+
+  /** Где сейчас стоит герой (верхний левый угол спрайта) и в какой он позе. */
+  heroPose() {
+    const hx = this.HERO_X + (this.action === "attack" ? 10 : this.action === "dodge" ? -6 : 0);
+    const pose = this.result === "dead" || this.hurtT > 0 ? "hurt" : this.action;
+    return [hx, GROUND_ARENA - 32, pose];
   }
 
   float(text, x, y, color, size = 16) {
@@ -741,6 +780,12 @@ class BattleScene extends Scene {
       crit ? sfx.crit() : sfx.hit();
       const label = crit ? `${dmg} КРИТ!` : en.kind === "knight" ? `${dmg} БРОНЯ` : `${dmg}`;
       this.float(label, en.x + 12, 90, crit ? COL.gold : COL.text);
+      const hit = this.game.style("hit");
+      if (hit) { // купленный эффект удара
+        const cx = { knight: 30, chief: 28 }[en.kind] || 12, cy = en.boss ? 24 : 18;
+        this.hitFx.spawn(hit, Math.round(en.x) + cx, GROUND_ARENA - cy);
+        hit === "hit_storm" ? sfx.thunder() : sfx.souls();
+      }
       if (p.lifesteal && this.hp < p.maxHp) this.hp = Math.min(p.maxHp, this.hp + p.lifesteal);
       if (en.state === "windup") {
         en.poise -= 1;
@@ -803,9 +848,17 @@ class BattleScene extends Scene {
     p.blueGems += blue;
     this.reward = [ash, red, blue];
     p.wave += 1;
+    if (en.boss) p.bossesDefeated += 1;
     p.save();
     this.saveRun();
-    sfx.win();
+    this.game.recordProgress();
+    const style = this.game.style("victory");
+    if (style) { // купленное оформление победы
+      this.victory = new VictoryFx(style);
+      style === "win_crown" ? sfx.fanfare() : sfx.pyre();
+    } else {
+      sfx.win();
+    }
     if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
   }
 
@@ -854,8 +907,12 @@ class BattleScene extends Scene {
     this.texts = this.texts.filter((ft) => ft.ttl > 0);
     en.flash = Math.max(0, en.flash - dt);
     this.hurtT = Math.max(0, this.hurtT - dt);
+    const [hx, hy, pose] = this.heroPose();
+    this.aura.update(dt, this.game.skin, pose, hx, hy);
+    this.hitFx.update(dt);
     if (this.result) {
       this.resultT += dt;
+      if (this.victory) this.victory.update(dt);
       return;
     }
     // С камерой: бой ждёт, пока игрок встанет в кадр, и замирает, если он вышел
@@ -965,7 +1022,8 @@ class BattleScene extends Scene {
     c.drawImage(spr, ex, GROUND_ARENA - spr.height);
 
     const p = this.game.player;
-    const hero = heroSprite(p.sword, p.owned); // спрайт с надетым мечом и обликом по реликвиям
+    const skin = this.game.skin;
+    const hero = heroSprite(p.sword, p.owned, skin); // меч (или его облик) и облик по реликвиям
     if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
     else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
@@ -977,8 +1035,11 @@ class BattleScene extends Scene {
       c.globalAlpha = 1;
     }
     c.drawImage(spr, hx, GROUND_ARENA - spr.height);
-    if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME); // след удара
-    if (p.sword === "ash") { // раскалённый клинок искрит
+    const [, hy, pose] = this.heroPose();
+    this.aura.draw(c, skin, pose, hx, hy, t);
+    if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
+    this.hitFx.draw(c);
+    if (p.sword === "ash" && !skin) { // раскалённый клинок искрит
       [this.bladeEmbers.x, this.bladeEmbers.y] = this.action === "attack" ? [hx + 30, GROUND_ARENA - 20] : [hx + 20, GROUND_ARENA - 10];
       this.bladeEmbers.draw(c);
     }
@@ -993,6 +1054,7 @@ class BattleScene extends Scene {
 
   drawUi() {
     const g = this.game, p = g.player, en = this.enemy;
+    this.hitFx.drawFlash(g.ctx, W, GAME_H);
     g.bar(16, 16, Math.floor(p.maxHp * 1.4), 8, this.hp / p.maxHp, COL.red);
     g.bar(16, 28, Math.floor(p.maxStamina * 1.6), 6, this.stamina / p.maxStamina, COL.green);
     for (let i = 0; i < p.estusMax; i++) {
@@ -1055,7 +1117,14 @@ class BattleScene extends Scene {
 
     for (const ft of this.texts) g.text(ft.text, Math.round(ft.x * 2), Math.round(ft.y * 2), ft.size, ft.color, "center");
 
-    if (this.result) {
+    if (this.result === "won" && this.victory) {
+      const [ash, red, blue] = this.reward;
+      this.victory.draw(g.ctx, (ctx, ...a) => g.text(a[0], a[1], a[2], a[3], a[4], a[5], a[6] ?? true, ctx), {
+        title: en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН",
+        loot: `+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`,
+        hint: "Звёздочка: следующий бой. Касание: к костру",
+      });
+    } else if (this.result) {
       g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
         g.text("ВЫ ПОГИБЛИ", W / 2, GAME_H / 2 - 28, 32, "rgb(170,20,20)", "center");
@@ -1175,6 +1244,273 @@ class ShopScene extends Scene {
   }
 }
 
+// ------------------------------------------------------------------ Лавка образов (косметика за 1 $)
+const COS_LAYOUT = (() => {
+  const rows = [];
+  let y = 40;
+  for (const kind of ["sword", "hit", "victory"]) {
+    rows.push({ head: KIND_TITLES[kind], y });
+    y += 14;
+    for (const item of COSMETICS.filter((c) => c.kind === kind)) {
+      rows.push({ item, rect: [12, y, 318, 30] });
+      y += 33;
+    }
+  }
+  return rows;
+})();
+const COS_ITEMS = COS_LAYOUT.filter((r) => r.item);
+const COS_PREVIEW = [340, 40, 288, 200];
+const COS_ACTION = [340, 322, 288, 26];
+const COS_RESTORE = [12, 322, 186, 26];
+const COS_BACK = [206, 322, 124, 26];
+
+/** Витрина: живое превью меча, удара по манекену и оформления победы; покупка и «надеть». */
+class CosmeticsScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.index = 0;
+    this.busy = false;
+    this.pc = document.createElement("canvas"); // пиксельная сцена превью 144×100 (×2 на экране)
+    this.pc.width = 144;
+    this.pc.height = 100;
+    this.pctx = this.pc.getContext("2d");
+    this.vc = document.createElement("canvas"); // превью победы рисуется в полный экран и уменьшается
+    this.vc.width = W;
+    this.vc.height = GAME_H;
+    this.aura = new SwordAura();
+    this.hitFx = new HitFx();
+    this.demoT = 0;
+    this.msgT = 0;
+    this.resetPreview();
+  }
+  get item() {
+    return COS_ITEMS[this.index].item;
+  }
+  say(msg, t = 3) {
+    this.message = msg;
+    this.msgT = t;
+  }
+  resetPreview() {
+    this.demoT = 0;
+    this.victory = this.item.kind === "victory" ? new VictoryFx(this.item.id) : null;
+  }
+  select(i) {
+    if (i === this.index) return;
+    this.index = i;
+    sfx.click();
+    this.resetPreview();
+  }
+  async action() {
+    const g = this.game, it = this.item;
+    if (this.busy) return;
+    if (!g.store.owns(it.id)) {
+      this.busy = true;
+      const bought = await g.store.buy(it);
+      this.busy = false;
+      if (!bought) return;
+      sfx.buy();
+      g.profile.style[it.kind] = it.id; // купленное сразу надевается
+      g.profile.save();
+      return this.say(`Куплено и надето: ${it.name}`, 4);
+    }
+    const on = g.profile.style[it.kind] === it.id;
+    g.profile.style[it.kind] = on ? null : it.id;
+    g.profile.save();
+    sfx.click();
+    this.say(on ? `Снято: ${it.name}` : `Надето: ${it.name}`);
+  }
+  async restore() {
+    const ids = await this.game.store.restore();
+    this.say(ids.length ? `Покупки восстановлены: ${ids.length}` : "Покупок пока нет");
+  }
+  handle() {
+    const g = this.game, n = COS_ITEMS.length;
+    if (g.key("Escape") || g.tapped(COS_BACK)) return g.change(new TitleScene(g));
+    if (g.key("ArrowUp")) this.select((this.index + n - 1) % n);
+    if (g.key("ArrowDown")) this.select((this.index + 1) % n);
+    if (g.key("Enter", " ") || g.tapped(COS_ACTION)) return this.action();
+    if (g.tapped(COS_RESTORE)) return this.restore();
+    COS_ITEMS.forEach((r, i) => { if (g.tapped(r.rect)) this.select(i); });
+  }
+  update(dt) {
+    this.msgT -= dt;
+    this.demoT += dt;
+    // демо: каждые 2,4 с герой бьёт манекен
+    const phase = this.demoT % 2.4;
+    this.attacking = phase > 1.0 && phase < 1.35;
+    if (phase > 1.0 && phase - dt <= 1.0) {
+      this.slashT = SLASH_TIME;
+      const hit = this.item.kind === "hit" ? this.item.id : this.game.style("hit");
+      if (hit) this.hitFx.spawn(hit, 108, 64);
+      this.dummyFlash = 0.15;
+    }
+    this.slashT = Math.max(0, (this.slashT || 0) - dt);
+    this.dummyFlash = Math.max(0, (this.dummyFlash || 0) - dt);
+    this.aura.update(dt, this.previewSkin, this.attacking ? "attack" : "idle", this.attacking ? 34 : 28, 48);
+    this.hitFx.update(dt);
+    if (this.victory) {
+      this.victory.update(dt);
+      if (this.victory.t > 4.5) this.victory = new VictoryFx(this.item.id);
+    }
+  }
+  /** Облик меча в превью: выбранный в списке (примерка) или надетый. */
+  get previewSkin() {
+    return this.item.kind === "sword" ? this.item.skin : this.game.skin;
+  }
+  draw(c) {
+    c.drawImage(IMG.arena_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.55)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  drawPreview() {
+    const g = this.game, p = g.player, c = this.pctx, t = g.time;
+    c.imageSmoothingEnabled = false;
+    c.drawImage(IMG.arena_bg, 60, 60, 144, 100, 0, 0, 144, 100);
+    const skin = this.previewSkin, hs = heroSprite(p.sword, p.owned, skin);
+    const pose = this.attacking ? "attack" : "idle", hx = this.attacking ? 34 : 28;
+    const dummy = this.dummyFlash > 0 ? IMG.skeleton_hurt_0 : IMG.skeleton_idle_0;
+    c.drawImage(dummy, 96, 80 - dummy.height);
+    c.drawImage(this.attacking ? IMG[`${hs}_attack_0`] : anim(`${hs}_idle`, t, 1.5, 2), hx, 48);
+    this.aura.draw(c, skin, pose, hx, 48, t);
+    if (this.slashT > 0) drawSlash(c, hx + 34, 61, p.sword, 1 - this.slashT / SLASH_TIME, skin);
+    this.hitFx.draw(c);
+    const [x, y, w, h] = COS_PREVIEW;
+    g.ctx.drawImage(this.pc, x, y, w, h);
+    if (this.victory) {
+      const vc = this.vc.getContext("2d");
+      vc.clearRect(0, 0, W, GAME_H);
+      vc.drawImage(this.pc, 0, 0, W, GAME_H);
+      this.victory.draw(vc, (ctx, ...a) => g.text(a[0], a[1], a[2], a[3], a[4], a[5], a[6] ?? true, ctx), {
+        title: "БОСС ПОВЕРЖЕН", loot: "+560 пепла  +5 алых  +1 синий", hint: "",
+      });
+      g.ctx.drawImage(this.vc, x, y, w, h);
+    }
+    g.ctx.strokeStyle = COL.gold;
+    g.ctx.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+  }
+  drawUi() {
+    const g = this.game, it = this.item, owned = g.store.owns(it.id);
+    g.text("ЛАВКА ОБРАЗОВ", 14, 14, 16, COL.gold);
+    g.text("ТЕСТ: оплата не списывается", W - 12, 18, 8, "rgb(120,220,255)", "right");
+    for (const row of COS_LAYOUT) {
+      if (row.head) {
+        g.text(row.head, 14, row.y + 3, 8, COL.dim);
+        continue;
+      }
+      const ci = COS_ITEMS.indexOf(row), sel = ci === this.index, r = row.rect, c = row.item;
+      g.button(r, "", { selected: sel });
+      g.rect([r[0] + 6, r[1] + 7, 4, 16], `rgb(${c.color.join(",")})`);
+      g.text(c.name, r[0] + 16, r[1] + 6, 8, sel ? COL.gold : COL.text);
+      g.text(c.desc, r[0] + 16, r[1] + 18, 8, COL.dim);
+      const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
+      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : g.store.price(c.id);
+      g.text(status, r[0] + r[2] - 8, r[1] + 11, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
+    }
+    this.drawPreview();
+    const [x, y, w, h] = COS_PREVIEW;
+    g.text(it.name, x, y + h + 10, 8, `rgb(${it.color.join(",")})`);
+    g.text(it.desc, x, y + h + 24, 8, COL.text);
+    g.text("Только облик: сила героя не меняется", x, y + h + 38, 8, COL.dim);
+    if (this.msgT > 0) g.text(this.message, x, y + h + 56, 8, COL.gold);
+    const on = g.profile.style[it.kind] === it.id && owned;
+    const label = !owned ? `КУПИТЬ ЗА ${g.store.price(it.id)}` : on ? "СНЯТЬ" : "НАДЕТЬ";
+    g.button(COS_ACTION, label, { selected: true, color: owned ? COL.gold : "rgb(120,220,255)" });
+    g.button(COS_RESTORE, "ВОССТАНОВИТЬ ПОКУПКИ");
+    g.button(COS_BACK, "НАЗАД");
+  }
+}
+
+// ------------------------------------------------------------------ Рейтинг
+const LB_NAME = [12, 322, 250, 26];
+const LB_REFRESH = [270, 322, 170, 26];
+const LB_BACK = [448, 322, 180, 26];
+const LB_ROWS = 10;
+
+/** Рейтинг по побеждённым боссам и уровню. Без сети — сохранённая таблица, игра не ждёт сервер. */
+class LeaderboardScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.res = null;
+    this.load();
+  }
+  async load() {
+    this.loading = true;
+    const g = this.game;
+    g.recordProgress();
+    try {
+      this.res = await g.leaderboard.top(g.profile);
+    } finally {
+      this.loading = false;
+    }
+  }
+  async rename() {
+    const g = this.game;
+    const raw = await promptName({
+      title: "ИМЯ В РЕЙТИНГЕ",
+      text: "2-16 символов: буквы, цифры, пробел. Имя видят другие игроки.",
+      value: g.profile.name,
+    });
+    if (raw == null) return;
+    if (!g.profile.rename(raw)) return g.say("Такое имя не подходит");
+    g.profile.save();
+    g.leaderboard.submit(g.profile);
+    this.load();
+  }
+  handle() {
+    const g = this.game;
+    if (g.key("Escape") || g.tapped(LB_BACK)) return g.change(new TitleScene(g));
+    if (g.tapped(LB_REFRESH) || g.key("Enter")) return this.load();
+    if (g.tapped(LB_NAME)) return this.rename();
+  }
+  draw(c) {
+    c.drawImage(IMG.castle_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.62)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  drawUi() {
+    const g = this.game, me = g.profile.id;
+    g.text("РЕЙТИНГ", 14, 14, 16, COL.gold);
+    g.text("по побеждённым боссам, затем по уровню", 14, 36, 8, COL.dim);
+    const r = this.res;
+    let status = "Загрузка...", scol = COL.dim;
+    if (r) {
+      if (r.source === "online") [status, scol] = ["Онлайн", "rgb(120,220,120)"];
+      else if (r.source === "cache") {
+        const when = r.at ? new Date(r.at).toLocaleDateString("ru-RU") : "";
+        [status, scol] = [`Нет сети: сохранённая таблица ${when}`.trim(), "rgb(230,180,90)"];
+      } else [status, scol] = ["Сервер рейтинга не подключён: показан ваш результат", "rgb(230,180,90)"];
+      if (r.pending) status += " · ваш результат отправится при появлении сети";
+    }
+    g.wrap(status, 76).forEach((line, i) => g.text(line, 14, 290 + i * 12, 8, scol));
+    const cols = [[22, "#"], [64, "ИМЯ"], [400, "БОССЫ"], [486, "УР."], [560, "РАУНД"]];
+    cols.forEach(([x, h]) => g.text(h, x, 56, 8, COL.dim));
+    g.rect([14, 68, W - 28, 1], "rgb(90,64,50)");
+    if (r) {
+      const rows = r.rows.slice(0, LB_ROWS);
+      const mine = r.rows.findIndex((x) => x.player_id === me);
+      const show = rows.map((row, i) => [i + 1, row]);
+      if (mine >= LB_ROWS || (mine < 0 && r.rank)) {
+        show.length = LB_ROWS - 1;
+        const own = r.rows[mine] || { name: g.profile.name, ...g.profile.best, player_id: me };
+        show.push([r.rank || mine + 1, own]);
+      }
+      show.forEach(([rank, row], i) => {
+        const y = 76 + i * 21, isMe = row.player_id === me;
+        if (isMe) g.rect([14, y - 4, W - 28, 19], "rgba(232,190,92,0.18)");
+        const col = isMe ? COL.gold : rank <= 3 ? "rgb(255,220,150)" : COL.text;
+        g.text(`${rank}`, 22, y, 8, col);
+        g.text(row.name, 64, y, 8, col);
+        g.text(`${row.bosses}`, 400, y, 8, col);
+        g.text(`${row.level}`, 486, y, 8, col);
+        g.text(`${row.wave}`, 560, y, 8, col);
+      });
+    }
+    g.button(LB_NAME, `ИМЯ: ${g.profile.name}`);
+    g.button(LB_REFRESH, this.loading ? "..." : "ОБНОВИТЬ");
+    g.button(LB_BACK, "НАЗАД");
+  }
+}
+
 // ------------------------------------------------------------------ Камера и советы
 class CameraScene extends Scene {
   constructor(game) {
@@ -1267,4 +1603,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BattleScene, BonfireScene, CameraScene, ShopScene, TitleScene };
+export { BattleScene, BonfireScene, CameraScene, CosmeticsScene, LeaderboardScene, ShopScene, TitleScene };
