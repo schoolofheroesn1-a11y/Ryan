@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dinosaur Facts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f1e7;
+    --card: #ffffff;
+    --ink: #1f2a1f;
+    --muted: #5b665b;
+    --accent: #2f7d4f;
+    --accent-soft: #dcefe2;
+    --key: #fff1a8;
+    --key-ink: #3d3200;
+    --line: #e4dccb;
+    --shadow: 0 6px 20px rgba(40, 50, 30, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151a16;
+      --card: #1f2620;
+      --ink: #eef3ec;
+      --muted: #a8b5a8;
+      --accent: #6fcf97;
+      --accent-soft: #23402e;
+      --key: #4a4214;
+      --key-ink: #fff3b0;
+      --line: #2f3a31;
+      --shadow: 0 6px 20px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151a16;
+    --card: #1f2620;
+    --ink: #eef3ec;
+    --muted: #a8b5a8;
+    --accent: #6fcf97;
+    --accent-soft: #23402e;
+    --key: #4a4214;
+    --key-ink: #fff3b0;
+    --line: #2f3a31;
+    --shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Lexend", system-ui, sans-serif;
+    font-size: 20px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+  header {
+    text-align: center;
+    padding: 56px 16px 32px;
+  }
+  header .badge {
+    display: inline-block;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 15px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    letter-spacing: .03em;
+  }
+  h1 {
+    font-size: clamp(36px, 7vw, 64px);
+    line-height: 1.1;
+    margin: 16px 0 12px;
+    font-weight: 800;
+  }
+  header p { color: var(--muted); margin: 0 auto; max-width: 620px; }
+
+  /* Word box */
+  .words {
+    background: var(--card);
+    border: 2px dashed var(--line);
+    border-radius: 20px;
+    padding: 20px 24px;
+    margin: 8px 0 40px;
+  }
+  .words h2 { margin: 0 0 12px; font-size: 22px; }
+  .words dl {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 24px;
+    margin: 0;
+  }
+  .words dt { font-weight: 800; color: var(--accent); }
+  .words dd { margin: 0; font-size: 17px; color: var(--muted); }
+
+  /* Fact cards */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 28px;
+    padding-bottom: 48px;
+  }
+  .fact {
+    background: var(--card);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .photo {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: var(--accent-soft);
+  }
+  .photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .photo .fallback {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 96px;
+  }
+  .photo.failed img { display: none; }
+  .photo.failed .fallback { display: flex; }
+  .num {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 800;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,.25);
+  }
+  .body { padding: 20px 24px 22px; display: flex; flex-direction: column; flex: 1; }
+  .fact p.text {
+    font-size: 23px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    line-height: 1.45;
+  }
+  mark {
+    background: var(--key);
+    color: var(--key-ink);
+    padding: 0 4px;
+    border-radius: 6px;
+  }
+  .compare {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--accent-soft);
+    border-radius: 14px;
+    padding: 10px 14px;
+    font-size: 17px;
+    margin-top: auto;
+  }
+  .compare .emoji { font-size: 30px; line-height: 1; }
+  .credit {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+  .credit a { color: inherit; }
+
+  /* Quiz */
+  .quiz {
+    background: var(--card);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    padding: 28px 24px;
+    margin-bottom: 56px;
+  }
+  .quiz h2 { margin: 0 0 6px; font-size: 30px; }
+  .quiz > p { margin: 0 0 20px; color: var(--muted); }
+  .q {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  .q span { flex: 1 1 320px; }
+  .q .btns { display: flex; gap: 8px; }
+  .q button {
+    font: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    border: 2px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    padding: 6px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .q button:hover { border-color: var(--accent); }
+  .q button.right { background: #2f9e5a; border-color: #2f9e5a; color: #fff; }
+  .q button.wrong { background: #d0473f; border-color: #d0473f; color: #fff; }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 0 16px 40px;
+  }
+
+  @media (max-width: 480px) {
+    body { font-size: 18px; }
+    .facts { grid-template-columns: 1fr; }
+    .fact p.text { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">🦕 English Reading · Level A1–A2</span>
+  <h1>10 Fun Facts<br>About Dinosaurs</h1>
+  <p>Look at the photo. Read the sentence. The <mark>yellow words</mark> are the most important words.</p>
+</header>
+
+<main class="wrap">
+
+  <section class="words" aria-labelledby="words-title">
+    <h2 id="words-title">📖 New Words</h2>
+    <dl>
+      <div><dt>feathers</dt><dd>soft things on a bird's body 🪶</dd></div>
+      <div><dt>evolve (evolved)</dt><dd>to change slowly over a very long time</dd></div>
+      <div><dt>fossil</dt><dd>very old bones or shapes in rock 🦴</dd></div>
+      <div><dt>herbivore</dt><dd>an animal that eats only plants 🌿</dd></div>
+      <div><dt>extinct</dt><dd>gone forever — no more alive</dd></div>
+      <div><dt>million</dt><dd>1,000,000</dd></div>
+    </dl>
+  </section>
+
+  <section class="facts">
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Compsognathus_BW.jpg?width=800" alt="Drawing of Compsognathus, a small dinosaur the size of a chicken" loading="lazy">
+        <div class="fallback">🐔</div>
+        <div class="num">1</div>
+      </div>
+      <div class="body">
+        <p class="text">Some dinosaurs were as <mark>small</mark> as <mark>chickens</mark>.</p>
+        <div class="compare"><span class="emoji">🐔</span> Compsognathus was about the size of a chicken.</div>
+        <div class="credit">Compsognathus · Nobu Tamura, CC BY 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Compsognathus_BW.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Argentinosaurus_BW.jpg?width=800" alt="Drawing of Argentinosaurus, a giant long-necked dinosaur" loading="lazy">
+        <div class="fallback">🚌🚌🚌</div>
+        <div class="num">2</div>
+      </div>
+      <div class="body">
+        <p class="text">The <mark>biggest</mark> dinosaur was <mark>longer</mark> than 3 <mark>school buses</mark>.</p>
+        <div class="compare"><span class="emoji">🚌🚌🚌</span> Argentinosaurus: about 35 metres long!</div>
+        <div class="credit">Argentinosaurus · Nobu Tamura, CC BY 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Argentinosaurus_BW.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Archaeopteryx_lithographica_(Berlin_specimen).jpg?width=800" alt="Fossil of Archaeopteryx in rock, showing wings and feathers" loading="lazy">
+        <div class="fallback">🐦</div>
+        <div class="num">3</div>
+      </div>
+      <div class="body">
+        <p class="text"><mark>Birds</mark> are modern dinosaurs. They <mark>evolved</mark> from dinosaurs.</p>
+        <div class="compare"><span class="emoji">🦖➡️🐦</span> Archaeopteryx: half dinosaur, half bird.</div>
+        <div class="credit">Archaeopteryx fossil, Berlin · H. Raab, CC BY-SA 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Archaeopteryx_lithographica_(Berlin_specimen).jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Sinosauropteryx_prima_slab.jpg?width=800" alt="Fossil of Sinosauropteryx, a small dinosaur with feathers" loading="lazy">
+        <div class="fallback">🪶</div>
+        <div class="num">4</div>
+      </div>
+      <div class="body">
+        <p class="text">Some dinosaurs had <mark>feathers</mark>.</p>
+        <div class="compare"><span class="emoji">🪶</span> Sinosauropteryx had soft, fluffy feathers.</div>
+        <div class="credit">Sinosauropteryx fossil · James St. John, CC BY 2.0 · <a href="https://commons.wikimedia.org/wiki/File:Sinosauropteryx_prima_slab.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Tyrannosaurus_Rex_Holotype.jpg?width=800" alt="Skeleton of a Tyrannosaurus rex with big sharp teeth" loading="lazy">
+        <div class="fallback">🦖🍌</div>
+        <div class="num">5</div>
+      </div>
+      <div class="body">
+        <p class="text">The <mark>T-Rex</mark> had <mark>teeth</mark> as long as <mark>bananas</mark>.</p>
+        <div class="compare"><span class="emoji">🦷 = 🍌</span> Its biggest teeth were about 30 cm long.</div>
+        <div class="credit">T-Rex skeleton, Carnegie Museum · Scott Robert Anselmo, CC BY-SA 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Tyrannosaurus_Rex_Holotype.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Geological_time_spiral.png?width=800" alt="Spiral picture of Earth's history, showing the time of the dinosaurs" loading="lazy">
+        <div class="fallback">🌍⏳</div>
+        <div class="num">6</div>
+      </div>
+      <div class="body">
+        <p class="text">Dinosaurs <mark>lived</mark> on Earth for about <mark>165 million years</mark>.</p>
+        <div class="compare"><span class="emoji">⏳</span> Humans: about 300,000 years. Dinosaurs: 165,000,000 years!</div>
+        <div class="credit">Geologic time spiral · USGS, public domain · <a href="https://commons.wikimedia.org/wiki/File:Geological_time_spiral.png">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Gallimimus_Steveoc86.jpg?width=800" alt="Picture of Gallimimus, a fast running dinosaur with long legs" loading="lazy">
+        <div class="fallback">🏃🚗</div>
+        <div class="num">7</div>
+      </div>
+      <div class="body">
+        <p class="text">Some dinosaurs could <mark>run</mark> as <mark>fast</mark> as a <mark>car</mark>.</p>
+        <div class="compare"><span class="emoji">🚗💨</span> Gallimimus had long legs, like an ostrich.</div>
+        <div class="credit">Gallimimus · Steveoc 86, CC BY-SA 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Gallimimus_Steveoc86.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Buckland,_Megalosaurus_jaw.jpg?width=800" alt="Old drawing of the Megalosaurus jaw bone with teeth, from 1824" loading="lazy">
+        <div class="fallback">🦴</div>
+        <div class="num">8</div>
+      </div>
+      <div class="body">
+        <p class="text">The <mark>first</mark> dinosaur <mark>fossil</mark> was found in <mark>1824</mark>.</p>
+        <div class="compare"><span class="emoji">🦴</span> Megalosaurus: the first dinosaur with a name (England).</div>
+        <div class="credit">Megalosaurus jaw, 1824 · Mary Morland, public domain · <a href="https://commons.wikimedia.org/wiki/File:Buckland,_Megalosaurus_jaw.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Triceratops_side_view.jpg?width=800" alt="Skeleton of Triceratops, a plant-eating dinosaur with three horns" loading="lazy">
+        <div class="fallback">🌿🦕</div>
+        <div class="num">9</div>
+      </div>
+      <div class="body">
+        <p class="text">Some dinosaurs ate <mark>only plants</mark>. They were called <mark>herbivores</mark>.</p>
+        <div class="compare"><span class="emoji">🌿</span> Triceratops ate leaves and plants.</div>
+        <div class="credit">Triceratops, Smithsonian · Quadell, CC BY-SA 3.0 · <a href="https://commons.wikimedia.org/wiki/File:Triceratops_side_view.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+    <article class="fact">
+      <div class="photo">
+        <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Chicxulub_impact_-_artist_impression.jpg?width=800" alt="Painting of a big asteroid hitting the Earth" loading="lazy">
+        <div class="fallback">☄️</div>
+        <div class="num">10</div>
+      </div>
+      <div class="body">
+        <p class="text">Dinosaurs became <mark>extinct</mark> about <mark>66 million years ago</mark>.</p>
+        <div class="compare"><span class="emoji">☄️</span> A giant rock from space hit the Earth.</div>
+        <div class="credit">Chicxulub impact · Donald E. Davis / NASA, public domain · <a href="https://commons.wikimedia.org/wiki/File:Chicxulub_impact_-_artist_impression.jpg">Wikimedia Commons</a></div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="quiz" aria-labelledby="quiz-title">
+    <h2 id="quiz-title">✅ True or False?</h2>
+    <p>Read again and click your answer.</p>
+    <div class="q" data-answer="true"><span>1. Birds evolved from dinosaurs.</span><div class="btns"><button>True</button><button>False</button></div></div>
+    <div class="q" data-answer="false"><span>2. All dinosaurs were very big.</span><div class="btns"><button>True</button><button>False</button></div></div>
+    <div class="q" data-answer="false"><span>3. Herbivores eat meat.</span><div class="btns"><button>True</button><button>False</button></div></div>
+    <div class="q" data-answer="true"><span>4. The T-Rex had very long teeth.</span><div class="btns"><button>True</button><button>False</button></div></div>
+    <div class="q" data-answer="false"><span>5. Dinosaurs became extinct 66 years ago.</span><div class="btns"><button>True</button><button>False</button></div></div>
+  </section>
+
+</main>
+
+<footer>Photos from Wikimedia Commons. Click a credit to see the original photo and its licence.</footer>
+
+<script>
+  // Show an emoji picture if a photo cannot load.
+  document.querySelectorAll('.photo img').forEach(function (img) {
+    function fail() { img.parentElement.classList.add('failed'); }
+    img.addEventListener('error', fail);
+    if (img.complete && img.naturalWidth === 0) fail();
+  });
+
+  document.querySelectorAll('.q').forEach(function (q) {
+    var answer = q.dataset.answer;
+    q.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        q.querySelectorAll('button').forEach(function (b) { b.classList.remove('right', 'wrong'); });
+        var picked = btn.textContent.trim().toLowerCase();
+        btn.classList.add(picked === answer ? 'right' : 'wrong');
+      });
+    });
+  });
+</script>
+</body>
+</html>
