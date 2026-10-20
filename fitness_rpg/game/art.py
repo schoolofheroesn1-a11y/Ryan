@@ -41,6 +41,12 @@ PALETTE = {
     "U": (164, 124, 96),   # кожа
     "f": (96, 82, 70),     # мех
     "F": (146, 128, 108),  # светлый мех
+    "x": (58, 84, 52),     # тёмная кожа зомби
+    "X": (98, 128, 78),    # кожа зомби
+    "Q": (150, 170, 110),  # блик гнилой кожи
+    "S": (44, 48, 72),     # рваная рубаха
+    "L": (76, 84, 112),    # рубаха светлее
+    "D": (120, 24, 30),    # запёкшаяся кровь
 }
 
 # --- Главный герой: Негасимый рыцарь (смотрит вправо) ---
@@ -582,6 +588,79 @@ SWORD_MAPS = {
         "..kk.",
         "..k..",
     ],
+    # Гигантский меч: тяжёлый клинок в рост героя, носится на плече
+    "giant": [
+        "....k....",
+        "...kgk...",
+        "....b....",
+        "....B....",
+        "....b....",
+        "....B....",
+        "kkgggggkk",
+        "kgggggggk",
+        ".kwwwwlk.",
+        ".kwwwwlk.",
+        ".kwwwllk.",
+        ".kwwwwlk.",
+        ".kwwwwlk.",
+        ".kwwwllk.",
+        ".kwwwwlk.",
+        ".kwwwwlk.",
+        ".kwwwllk.",
+        ".kwwwwlk.",
+        ".kwwwwlk.",
+        ".kwwwllk.",
+        ".kwwwwlk.",
+        "..kwwlk..",
+        "..kwwlk..",
+        "...kwk...",
+        "....k....",
+    ],
+    # Гриф от штанги: стальной гриф с насечкой, замок и два блина
+    "barbell": [
+        "....k....",
+        "...kdk...",
+        "....s....",
+        "....l....",
+        "....s....",
+        "....l....",
+        "....s....",
+        "....l....",
+        "....s....",
+        "....l....",
+        ".kkkkkkk.",
+        "kCCCCCCCk",
+        "kcCCCCCck",
+        "kkkkkkkkk",
+        "kAAhAAAAk",
+        "kaAAAAAak",
+        "kkkkkkkkk",
+        "...klk...",
+        "....k....",
+    ],
+    # Радиатор: широкий золотой клинок с раскалёнными прорезями-рёбрами
+    "radiator": [
+        "....k....",
+        "...kJk...",
+        "....b....",
+        "....b....",
+        "kJjjJjjJk",
+        ".kJJJJJk.",
+        "kJJJJJJJk",
+        "kjYYYYYjk",
+        "kJJJJJJJk",
+        "kjYyYyYjk",
+        "kJJJJJJJk",
+        "kjYYYYYjk",
+        "kJJJJJJJk",
+        "kjYyYyYjk",
+        "kJJJJJJJk",
+        "kjYYYYYjk",
+        ".kJJJJJk.",
+        "..kJJJk..",
+        "...kJk...",
+        "....k....",
+    ],
 }
 COSMETIC_SWORDS = ("void", "sun", "frost")
 SWORD_GRIP = 2
@@ -599,6 +678,9 @@ ATTACK_W = 40
 
 # Цвет следа удара для каждого меча
 SLASH_COLORS = {
+    "giant": (210, 220, 240),
+    "barbell": (170, 180, 200),
+    "radiator": (255, 170, 60),
     "void": (180, 90, 255),
     "sun": (255, 214, 96),
     "frost": (150, 220, 255),
@@ -609,7 +691,14 @@ SLASH_COLORS = {
 }
 
 # Облик героя: доспех Костяного Рыцаря и/или Амулет Углей
-LOOKS = ("base", "armor", "amulet", "both")
+LOOKS = ("base", "armor", "amulet", "both", "king", "king_amulet")
+# Доспех Короля-Призрака: латы цвета старой бирюзы, призрачный плащ, корона и горящие глаза
+KING_PALETTE = dict(
+    PALETTE,
+    d=(20, 40, 44), s=(36, 78, 80), l=(70, 140, 136), w=(140, 220, 200),
+    r=(20, 70, 56), R=(52, 150, 112), e=(120, 255, 230),
+    Y=(246, 120, 40), y=(255, 230, 160),
+)
 ARMOR_PALETTE = dict(
     PALETTE,
     d=(30, 26, 36), s=(58, 52, 68), l=(98, 90, 112), w=(146, 136, 158),
@@ -635,7 +724,14 @@ def _body_rows(rows, width, look):
             _put(rows, x, y, "O")
         for x in (12, 14):  # глаза горят в прорези забрала
             _put(rows, x, 6, "e")
-    if look in ("amulet", "both"):
+    if look in ("king", "king_amulet"):
+        for x in (10, 12, 14):  # зубцы короны
+            _put(rows, x, 0, "g")
+        for x in range(10, 16):  # обод короны
+            _put(rows, x, 1, "g")
+        for x in (12, 14):  # призрачный огонь в прорези забрала
+            _put(rows, x, 6, "e")
+    if look in ("amulet", "both", "king_amulet"):
         _put(rows, 11, 9, "g")
         _put(rows, 15, 9, "g")
         for x, ch in ((12, "Y"), (13, "y"), (14, "Y")):
@@ -660,9 +756,13 @@ def compose_hero(sword, look, pose):
     """Спрайт героя: меч рисуется первым, рука перчаткой ложится поверх рукояти."""
     attack = pose == "attack"
     width = ATTACK_W if attack else 24
-    body = sprite_from_map(_body_rows(HERO_ATTACK if attack else HERO_IDLE, width, look),
-                           ARMOR_PALETTE if look in ("armor", "both") else BODY_PALETTE)
+    palette = ARMOR_PALETTE if look in ("armor", "both") else KING_PALETTE if look.startswith("king") else BODY_PALETTE
     blade_map = SWORD_MAPS[sword]
+    if attack:
+        width = max(width, ATTACK_GRIP[0] - SWORD_GRIP + len(blade_map))  # длинный клинок не обрезается
+    body = sprite_from_map(_body_rows(HERO_ATTACK if attack else HERO_IDLE, width, look), palette)
+    if sword == "giant" and not attack:
+        return _giant_on_shoulder(body, blade_map)
     if attack:
         blade = sprite_from_map(_rotate_ccw(blade_map), SWORD_PALETTE)
         gx, gy = ATTACK_GRIP
@@ -674,6 +774,23 @@ def compose_hero(sword, look, pose):
     surf = pygame.Surface((width, 32), pygame.SRCALPHA)
     surf.blit(blade, pos)
     surf.blit(body, (0, 0))
+    return surf
+
+
+def _giant_on_shoulder(body, blade_map):
+    """Стойка с гигантским мечом: клинок остриём вверх лежит на плече, наклонён назад за голову."""
+    rows = list(reversed(blade_map))            # остриё сверху, рукоять снизу
+    grip = len(rows) - 1 - SWORD_GRIP           # строка рукояти после переворота
+    gx, gy = IDLE_GRIP
+    lift = max(0, grip - gy)                    # на сколько холст выше обычного
+    h = 32 + lift
+    surf = pygame.Surface((24, h), pygame.SRCALPHA)
+    blade = sprite_from_map(rows, SWORD_PALETTE)
+    bw = blade.get_width()
+    for y in range(blade.get_height()):         # наклон: каждые 3 пикселя вверх — на 1 назад
+        shift = (grip - y) // 3 if y < grip else 0
+        surf.blit(blade, (gx - bw // 2 - shift, gy + lift - grip + y), pygame.Rect(0, y, bw, 1))
+    surf.blit(body, (0, lift))
     return surf
 
 
@@ -1060,6 +1177,8 @@ def make_hero_frames(sword, look="base"):
 def hero_look(owned):
     """Облик героя по купленным реликвиям."""
     armor, amulet = "armor" in owned, "amulet" in owned
+    if "kingarmor" in owned:  # доспех Короля-Призрака надевается поверх костяного
+        return "king_amulet" if amulet else "king"
     return "both" if armor and amulet else "armor" if armor else "amulet" if amulet else "base"
 
 
@@ -1103,6 +1222,263 @@ def make_chief_frames():
     }
 
 
+# --- Кладбище: зомби, летучая мышь и Король-Призрак (смотрят влево) ---
+ZOMBIE_IDLE = [
+    "........................",
+    "..........kkkkk.........",
+    ".........kXXXXxk........",
+    "........kXQXXXXxk.......",
+    "........kXXXXXXxk.......",
+    "........kkekkXexk.......",
+    "........kXXXXXXxk.......",
+    "........kXkkkkXxk.......",
+    ".........kXDXXxk........",
+    "..........kxxxk.........",
+    "..kkkkkkkkSSLLSk........",
+    ".kXXXXXXXkSLLLSSk.......",
+    "..kkkkkkkSSLLSSSk.......",
+    "..kkkkkkkSLLSSSSk.......",
+    ".kXXXXxxkSSLSSDSk.......",
+    "..kkkkkkkSLSSSSSk.......",
+    ".........kSSSSSSk.......",
+    ".........kSLSkSSk.......",
+    ".........kbbbbbbk.......",
+    ".........kSSkkSSk.......",
+    ".........kSSk.kSSk......",
+    "........kSSk..kSSk......",
+    "........kSSk...kSk......",
+    "........kxXk...kSk......",
+    "........kXXk...kXk......",
+    "........kXXk...kXk......",
+    "........kXxk...kxk......",
+    "........kXXk..kXXk......",
+    ".......kXXk...kXXk......",
+    ".......kXXk..kXXXk......",
+    "......kkkkk..kkkkk......",
+    "........................",
+]
+
+
+def zombie_attack_map():
+    """Бросок: тело подаётся вперёд, руки вытянуты на 6 пикселей дальше."""
+    rows = ["......" + r for r in ZOMBIE_IDLE]
+    for y in (11, 14):  # руки
+        r = rows[y]
+        start = r.index("k")
+        rows[y] = "k" + "X" * (start - 1) + r[start:] if y == 11 else "kx" + "X" * (start - 2) + r[start:]
+    for y in (10, 12, 13, 15):
+        r = rows[y]
+        start = r.index("k")
+        rows[y] = "." + "k" * (start - 1) + r[start:]
+    return rows
+
+
+BAT_UP = [
+    "k................k",
+    "kk..............kk",
+    "kNk....k..k....kNk",
+    "kNNk...kkkk...kNNk",
+    ".kNNk.kNNNNk.kNNk.",
+    ".kNNNkkeNNekkNNNk.",
+    "..kNNNkNWWNkNNNk..",
+    "...kkkkNNNNkkkk...",
+    ".......kNNk.......",
+    "........kk........",
+    "..................",
+    "..................",
+]
+BAT_DOWN = [
+    "..................",
+    ".......k..k.......",
+    ".......kkkk.......",
+    "......kNNNNk......",
+    ".....kkeNNekk.....",
+    "...kkNNNWWNNNkk...",
+    "..kNNNNNNNNNNNNk..",
+    ".kNNNk.kNNk.kNNNk.",
+    "kNNk....kk....kNNk",
+    "kNk............kNk",
+    "kk..............kk",
+    "k................k",
+]
+BAT_DUP_ROWS = (2, 3, 5, 6, 7)
+BAT_DUP_COLS = (2, 3, 6, 8, 9, 11, 14, 15)
+
+# Король-Призрак: латы и корона, призрачное пламя бирюзового цвета (по мотивам королей-нежити)
+WRAITH_PALETTE = dict(
+    PALETTE,
+    a=(18, 40, 44), A=(34, 80, 84), h=(86, 166, 160),
+    c=(16, 70, 54), C=(46, 170, 120),
+    e=(120, 255, 230), E=(210, 255, 245),
+    O=(170, 196, 170), W=(214, 236, 214), o=(96, 120, 100),
+    w=(176, 255, 226), l=(90, 200, 160),
+)
+WRAITH_CROWN = [  # поверх рогов, по столбцам 19..31 тела
+    "..k...k...k..",
+    ".kgk.kgk.kgk.",
+    "kgggkgggkgggk",
+    "kgegggegggegk",
+]
+WRAITH_DUP_ROWS = (8, 15, 21, 28, 34, 40)
+WRAITH_DUP_COLS = (BOSS_X + 20, BOSS_X + 27)
+
+
+def wraith_map(arm):
+    rows = [list(r) for r in boss_map(arm)]
+    for y in range(4):  # убираем рога и ставим корону
+        for x in range(BOSS_X + 17, BOSS_X + 33):
+            if rows[y][x] in "kOW":
+                rows[y][x] = "."
+        for i, ch in enumerate(WRAITH_CROWN[y]):
+            if ch != ".":
+                rows[y][BOSS_X + 19 + i] = ch
+    return _enlarge(["".join(r) for r in rows], WRAITH_DUP_ROWS, WRAITH_DUP_COLS)
+
+
+def make_zombie_frames():
+    idle = sprite_from_map(ZOMBIE_IDLE)
+    return {
+        "idle": [idle, shifted_breath(idle, 10)],
+        "windup": [tinted(idle, (255, 90, 50), 0.35), idle],
+        "attack": [sprite_from_map(zombie_attack_map())],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "dead": [crouched(tinted(idle, (60, 50, 50), 0.5))],
+    }
+
+
+def make_bat_frames():
+    up = sprite_from_map(_enlarge(BAT_UP, BAT_DUP_ROWS, BAT_DUP_COLS))
+    down = sprite_from_map(_enlarge(BAT_DOWN, BAT_DUP_ROWS, BAT_DUP_COLS))
+    return {
+        "idle": [up, down],
+        "windup": [tinted(up, (255, 90, 50), 0.35), tinted(down, (255, 90, 50), 0.35)],
+        "attack": [down],
+        "hurt": [tinted(down, (255, 255, 255), 0.8)],
+        "dead": [pygame.transform.flip(tinted(down, (60, 50, 50), 0.5), False, True)],
+    }
+
+
+def make_wraith_frames():
+    idle = sprite_from_map(wraith_map(BOSS_ARM_DOWN), WRAITH_PALETTE)
+    raised = sprite_from_map(wraith_map(BOSS_ARM_RAISED), WRAITH_PALETTE)
+    swing = sprite_from_map(wraith_map(BOSS_ARM_SWING), WRAITH_PALETTE)
+    return {
+        "idle": [idle, shifted_breath(idle, 22)],
+        "windup": [tinted(raised, (120, 255, 220), 0.35), raised],
+        "attack": [swing],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "enraged": [tinted(idle, (80, 255, 200), 0.3), tinted(shifted_breath(idle, 22), (80, 255, 200), 0.3)],
+        "revive": [tinted(crouched(idle), (120, 255, 230), 0.6), tinted(idle, (120, 255, 230), 0.5)],
+        "dead": [crouched(tinted(idle, (40, 60, 60), 0.5))],
+    }
+
+
+def _dead_tree(surf, x, base, h, rnd, col=(16, 12, 20)):
+    """Кривое мёртвое дерево с ветками."""
+    top = base - h
+    pygame.draw.line(surf, col, (x, base), (x + 2, top), 4)
+    pygame.draw.line(surf, col, (x - 3, base), (x + 4, base), 3)  # корни
+    for i in range(6):
+        by = top + 4 + i * (h // 8)
+        side = -1 if i % 2 else 1
+        ln = rnd.randint(8, 16)
+        ex, ey = x + 2 + side * ln, by - rnd.randint(4, 10)
+        pygame.draw.line(surf, col, (x + 2, by), (ex, ey), 2)
+        pygame.draw.line(surf, col, (ex, ey), (ex + side * 4, ey - 4))
+
+
+def _tombstone(surf, x, base, kind, scale, rnd):
+    """Надгробие: kind 0 — закруглённое, 1 — крест, 2 — обелиск."""
+    stone, dark, moss = (92, 92, 104), (52, 50, 62), (60, 82, 56)
+    w, h = int(10 * scale), int(14 * scale)
+    if kind == 0:
+        pygame.draw.rect(surf, dark, (x - 1, base - h, w + 2, h + 1))
+        pygame.draw.rect(surf, stone, (x, base - h + 3, w, h - 3))
+        pygame.draw.ellipse(surf, stone, (x, base - h, w, 7))
+        pygame.draw.line(surf, dark, (x + 2, base - h + 6), (x + w - 3, base - h + 6))
+        pygame.draw.line(surf, dark, (x + 2, base - h + 9), (x + w - 4, base - h + 9))
+    elif kind == 1:
+        pygame.draw.rect(surf, dark, (x + w // 2 - 2, base - h - 2, 5, h + 2))
+        pygame.draw.rect(surf, dark, (x, base - h + 2, w + 1, 5))
+        pygame.draw.rect(surf, stone, (x + w // 2 - 1, base - h - 1, 3, h + 1))
+        pygame.draw.rect(surf, stone, (x + 1, base - h + 3, w - 1, 3))
+    else:
+        pygame.draw.polygon(surf, dark, [(x, base), (x + 2, base - h - 6), (x + w // 2, base - h - 10), (x + w - 2, base - h - 6), (x + w, base)])
+        pygame.draw.polygon(surf, stone, [(x + 1, base), (x + 3, base - h - 5), (x + w // 2, base - h - 8), (x + w - 3, base - h - 5), (x + w - 1, base)])
+    for _ in range(int(3 * scale)):  # мох у основания
+        surf.set_at((x + rnd.randrange(max(1, w)), base - rnd.randrange(3)), moss)
+
+
+def make_graveyard_background(w=320, h=180, seed=33):
+    """Кладбище: поле с надгробиями и мёртвыми деревьями под зеленоватой луной, стелется туман."""
+    rnd = random.Random(seed)
+    surf = pygame.Surface((w, h))
+    horizon = 108
+    stops = [(0.0, (8, 10, 22)), (0.55, (22, 30, 48)), (1.0, (56, 74, 78))]
+    bands = 18
+    for i in range(bands):
+        t = i / (bands - 1)
+        for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+            if t0 <= t <= t1:
+                col = _lerp(c0, c1, (t - t0) / (t1 - t0))
+                break
+        pygame.draw.rect(surf, col, (0, int(i * horizon / bands), w, horizon // bands + 2))
+    for _ in range(60):
+        surf.set_at((rnd.randrange(w), rnd.randrange(70)), rnd.choice([(180, 190, 210), (110, 120, 150), (200, 230, 210)]))
+    # большая зеленоватая луна с ореолом
+    mx, my = 236, 40
+    for r, col in ((26, (30, 52, 54)), (21, (46, 74, 72)), (17, (196, 220, 196)), (15, (220, 240, 214))):
+        pygame.draw.circle(surf, col, (mx, my), r)
+    for cx, cy, cr in ((230, 34, 3), (242, 46, 4), (228, 48, 2)):  # кратеры
+        pygame.draw.circle(surf, (180, 204, 182), (cx, cy), cr)
+    # дальние холмы и ограда
+    pts, y = [(0, h)], 96
+    for x in range(0, w + 6, 6):
+        y = max(84, min(100, y + rnd.randint(-3, 3)))
+        pts.append((x, y))
+    pts.append((w, h))
+    pygame.draw.polygon(surf, (20, 26, 34), pts)
+    for x in range(0, w, 5):  # чугунная ограда на горизонте
+        pygame.draw.line(surf, (12, 14, 20), (x, horizon - 9), (x, horizon))
+        surf.set_at((x, horizon - 10), (12, 14, 20))
+    pygame.draw.line(surf, (12, 14, 20), (0, horizon - 6), (w, horizon - 6))
+    # часовня вдали
+    pygame.draw.rect(surf, (14, 16, 24), (40, 76, 22, 32))
+    pygame.draw.polygon(surf, (14, 16, 24), [(38, 77), (51, 62), (64, 77)])
+    pygame.draw.rect(surf, (14, 16, 24), (49, 50, 4, 14))
+    pygame.draw.rect(surf, (14, 16, 24), (46, 54, 10, 3))
+    pygame.draw.rect(surf, (150, 190, 120), (49, 88, 4, 6))  # огонёк в окне
+    # поле
+    for yy in range(horizon, h):
+        t = (yy - horizon) / (h - horizon)
+        pygame.draw.line(surf, _lerp((34, 44, 40), (20, 26, 24), t), (0, yy), (w, yy))
+    for _ in range(int(w * (h - horizon) * 0.1)):
+        x, yy = rnd.randrange(w), rnd.randrange(horizon + 2, h)
+        t = (yy - horizon) / (h - horizon)
+        blade = rnd.choice([(52, 70, 50), (66, 84, 58), (44, 58, 44), (80, 92, 66)])
+        pygame.draw.line(surf, blade, (x, yy), (x + rnd.choice((-1, 0, 1)), yy - 1 - int(t * 3)))
+    # надгробия: дальний ряд мельче, ближний крупнее (середину оставляем для боя)
+    for x in range(8, w, 26):
+        _tombstone(surf, x + rnd.randint(-4, 4), horizon + 8 + rnd.randint(0, 4), rnd.randrange(3), 0.7, rnd)
+    for x in (6, 34, 262, 296):
+        _tombstone(surf, x, 136 + rnd.randint(0, 6), rnd.randrange(3), 1.1, rnd)
+    for x in (18, 288):
+        _tombstone(surf, x, 168, rnd.randrange(3), 1.4, rnd)
+    # два мёртвых дерева
+    _dead_tree(surf, 112, 122, 46, rnd)
+    _dead_tree(surf, 300, 128, 58, rnd)
+    # вороны на ветке и в небе
+    for cx, cy in ((118, 80), (150, 34), (164, 40)):
+        pygame.draw.lines(surf, (10, 10, 16), False, [(cx - 3, cy), (cx, cy + 1), (cx + 3, cy)])
+    # зеленоватый туман над землёй
+    fog = pygame.Surface((w, h), pygame.SRCALPHA)
+    for _ in range(26):
+        fog_y = rnd.randrange(104, 150)
+        pygame.draw.rect(fog, (150, 200, 170, 26), (rnd.randrange(-30, w), fog_y, rnd.randint(30, 90), 2))
+    surf.blit(fog, (0, 0))
+    return surf
+
+
 class Art:
     """Набор всех спрайтов игры, создаётся один раз после pygame.init()."""
 
@@ -1126,6 +1502,10 @@ class Art:
         self.castle_bg = make_castle_background()
         self.bandit = make_bandit_frames()
         self.chief = make_chief_frames()
+        self.graveyard_bg = make_graveyard_background()
+        self.zombie = make_zombie_frames()
+        self.bat = make_bat_frames()
+        self.wraith = make_wraith_frames()
 
     def hero_for(self, sword, owned):
         """Кадры героя с этим мечом и обликом по реликвиям из owned."""

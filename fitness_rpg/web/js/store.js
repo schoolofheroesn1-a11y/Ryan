@@ -7,6 +7,7 @@ import { REVENUECAT, STORE } from "./config.js";
 import { COSMETICS } from "./cosmetics.js";
 import { hasPlugin, isIOS, native } from "./platform.js";
 import { loadJSON, saveJSON } from "./storage.js";
+import { tf } from "./i18n.js";
 
 const OWNED_KEY = "ash-and-iron-purchases";
 const TIPS_KEY = "ash-and-iron-tips";
@@ -17,6 +18,9 @@ export const TIPS = [
   { id: "support_torch", name: "Факел для костра", price: "3 $", desc: "на новые локации и врагов" },
   { id: "support_forge", name: "Меч в кузню", price: "5 $", desc: "на большое обновление" },
 ];
+
+/** Платное снаряжение (поддержка проекта, но с игровой пользой): id товара -> цена по умолчанию. */
+export const PAID_ITEMS = { weapon_barbell: "10 $" };
 
 export const productId = (id) => `${STORE.bundleId}.${id}`;
 
@@ -71,7 +75,7 @@ export class Store {
   }
 
   async loadProducts(ids = null) {
-    const all = ids || [...COSMETICS.map((c) => c.id), ...TIPS.map((t) => t.id)];
+    const all = ids || [...COSMETICS.map((c) => c.id), ...Object.keys(PAID_ITEMS), ...TIPS.map((t) => t.id)];
     const res = await this.call("Purchases", "getProducts", { productIdentifiers: all.map(productId), type: "NON_SUBSCRIPTION" });
     for (const p of (res && res.products) || []) {
       const id = p.identifier.startsWith(`${STORE.bundleId}.`) ? p.identifier.slice(STORE.bundleId.length + 1) : p.identifier;
@@ -94,10 +98,10 @@ export class Store {
     return this.owned.has(id);
   }
 
-  /** Цена: из магазина, если он подключён; иначе 1 $ (в App Store ближайшая — 0,99 $). */
+  /** Цена: из магазина, если он подключён; иначе 1 $ (в App Store ближайшая — 0,99 $), гриф — 10 $. */
   price(id) {
     const p = this.products[id];
-    return p && p.priceString ? p.priceString : "1 $";
+    return p && p.priceString ? p.priceString : PAID_ITEMS[id] || "1 $";
   }
 
   tipPrice(tip) {
@@ -137,9 +141,9 @@ export class Store {
     }
     const ok = await this.confirm({
       title: "ТЕСТОВАЯ ПОКУПКА",
-      text: `«${item.name}» за ${this.price(item.id)}`,
+      text: tf("«{name}» за {price}", { name: item.name, price: this.price(item.id) }),
       note: "Тестовый режим: деньги не списываются. В версии для App Store покупка пройдёт через Apple.",
-      ok: `КУПИТЬ ${this.price(item.id)}`,
+      ok: tf("КУПИТЬ {price}", { price: this.price(item.id) }),
     });
     if (ok) this.grant(item.id);
     return ok;
@@ -152,9 +156,9 @@ export class Store {
     else {
       ok = await this.confirm({
         title: "ТЕСТОВАЯ ПОДДЕРЖКА",
-        text: `«${t.name}» за ${this.tipPrice(t)}`,
+        text: tf("«{name}» за {price}", { name: t.name, price: this.tipPrice(t) }),
         note: "Тестовый режим: деньги не списываются. В версии для App Store платёж пройдёт через Apple.",
-        ok: `ПОДДЕРЖАТЬ ${this.tipPrice(t)}`,
+        ok: tf("ПОДДЕРЖАТЬ {price}", { price: this.tipPrice(t) }),
       });
     }
     if (ok) {

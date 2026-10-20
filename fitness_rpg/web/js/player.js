@@ -45,7 +45,7 @@ export class Player {
   get attackCost() { return this.weapon.cost; }
   get critMult() { return this.weapon.crit; }
   get lifesteal() { return this.weapon.lifesteal; }
-  get damageTakenMult() { return this.owned.includes("armor") ? 0.75 : 1; }
+  get damageTakenMult() { return this.owned.includes("kingarmor") ? 0.65 : this.owned.includes("armor") ? 0.75 : 1; }
   get estusMax() { return ESTUS_MAX + (this.owned.includes("amulet") ? 1 : 0); }
 
   // --- Кузница ---
@@ -56,12 +56,21 @@ export class Player {
 
   /** Покупает вещь (меч сразу надевается). false — уже есть или не хватает камней. */
   buy(key) {
+    if (item(key).paid) return false; // платные вещи выдаёт только магазин (grantPaid)
     if (this.owned.includes(key) || !this.canAfford(key)) return false;
     const [red, blue] = item(key).price;
     this.redGems -= red;
     this.blueGems -= blue;
     this.owned.push(key);
     if (SWORDS[key]) this.sword = key;
+    return true;
+  }
+
+  /** Вещь, оплаченная в магазине (поддержка проекта): выдаётся без камней и сразу надевается. */
+  grantPaid(key, equip = true) {
+    if (!item(key) || !item(key).paid) return false;
+    if (!this.owned.includes(key)) this.owned.push(key);
+    if (equip && SWORDS[key]) this.sword = key;
     return true;
   }
 

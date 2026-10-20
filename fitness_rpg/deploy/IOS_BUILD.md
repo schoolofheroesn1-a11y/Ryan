@@ -93,6 +93,7 @@ git push -u origin main
 | `com.ashandiron.fitnessrpg.hit_souls` | разовая покупка | Призраки павших |
 | `com.ashandiron.fitnessrpg.win_crown` | разовая покупка | Королевский триумф |
 | `com.ashandiron.fitnessrpg.win_pyre` | разовая покупка | Синее пламя |
+| `com.ashandiron.fitnessrpg.weapon_barbell` | разовая покупка | Гриф от штанги (оружие, 10 $ → 9,99 $) |
 | `com.ashandiron.fitnessrpg.support_ale` | расходуемая | Поддержка 1 $ |
 | `com.ashandiron.fitnessrpg.support_torch` | расходуемая | Поддержка 3 $ |
 | `com.ashandiron.fitnessrpg.support_forge` | расходуемая | Поддержка 5 $ |
