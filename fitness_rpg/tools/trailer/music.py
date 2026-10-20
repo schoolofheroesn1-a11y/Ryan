@@ -142,6 +142,44 @@ def build_music(dur):
     return m
 
 
+def build_promo(dur, drop=2.0, bpm=150):
+    """Короткий динамичный трек для ролика-обновления: удар с первого кадра, раскачка, дроп на боссе."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + SR)
+    mix_at(m, KICK, 0, 1.0)
+    mix_at(m, CRASH, 0, 0.45)
+    for b in range(int(dur / beat)):
+        t = b * beat
+        root, chord = CHORDS[(b // 4) % 4]
+        hot = t >= drop
+        if t > dur - 1.6:  # последние секунды — только аккорд финала
+            break
+        mix_at(m, KICK, t, 0.95 if hot else 0.7)
+        if b % 2 == 1:
+            mix_at(m, SNARE, t, 0.5 if hot else 0.3)
+        for k in range(4 if hot else 2):
+            mix_at(m, HAT, t + k * beat / (4 if hot else 2), 0.2)
+        for k in range(2):
+            f = hz(root, 2) * (2 if (k == 1 and hot) else 1)
+            note = lp(square(f, beat / 2 * 0.9, 0.5), 0.12) * env(int(SR * beat / 2 * 0.9), 0.003, 0.12)
+            mix_at(m, note, t + k * beat / 2, 0.6)
+        if hot:
+            for k in range(4):
+                n = chord[(b * 4 + k) % 3]
+                note = square(hz(n, 5), beat / 4 * 0.8, 0.25) * env(int(SR * beat / 4 * 0.8), 0.002, 0.04)
+                mix_at(m, note, t + k * beat / 4, 0.09)
+    for k in range(8):  # дробь перед дропом
+        mix_at(m, SNARE, drop - beat * 2 + k * beat / 4, 0.2 + k * 0.04)
+    mix_at(m, hp(noise(1.0)) * np.linspace(0, 1, SR) ** 2, drop - 1.0, 0.22)
+    mix_at(m, CRASH, drop, 0.55)
+    tail = 1.6
+    pad = sum(np.sign(np.sin(2 * np.pi * hz(n, o) * (1 + det) * t_(tail)))
+              for n, o in (("A", 2), ("A", 3), ("C", 4), ("E", 4)) for det in (0, 0.004))
+    mix_at(m, lp(pad / 8, 0.08) * np.linspace(1, 0, int(SR * tail)) ** 1.5, dur - 1.6, 0.55)
+    mix_at(m, CRASH, dur - 1.6, 0.4)
+    return m
+
+
 def sfx(kind):
     if kind == "thunder":  # молния «Гнева грозы»: треск и низкий раскат
         crack = hp(noise(0.5), 0.6) * env(int(SR * 0.5), 0.001, 0.12)
@@ -203,7 +241,7 @@ SFX_GAIN = {"thunder": 0.55, "hit": 0.5, "alert": 0.5, "dodge": 0.45, "heal": 0.
 def main(out, events_path):
     spec = json.load(open(events_path, encoding="utf-8"))
     dur = spec["duration"]
-    mus = build_music(dur)
+    mus = build_promo(dur, spec.get("drop", 2.0)) if spec.get("style") == "promo" else build_music(dur)
     fx = np.zeros_like(mus)
     for t, kind in spec["events"]:
         mix_at(fx, sfx(kind), t, SFX_GAIN[kind])
