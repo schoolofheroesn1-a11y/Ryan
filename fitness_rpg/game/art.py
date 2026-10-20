@@ -1304,34 +1304,147 @@ BAT_DOWN = [
 BAT_DUP_ROWS = (2, 3, 5, 6, 7)
 BAT_DUP_COLS = (2, 3, 6, 8, 9, 11, 14, 15)
 
-# Король-Призрак: латы и корона, призрачное пламя бирюзового цвета (по мотивам королей-нежити)
+# Король-Призрак: собственная модель — высокая корона, череп с горящими глазницами,
+# призрачная борода до пояса, рогатые наплечники, шипастый воротник и рваный плащ.
 WRAITH_PALETTE = dict(
     PALETTE,
-    a=(18, 40, 44), A=(34, 80, 84), h=(86, 166, 160),
-    c=(16, 70, 54), C=(46, 170, 120),
-    e=(120, 255, 230), E=(210, 255, 245),
-    O=(170, 196, 170), W=(214, 236, 214), o=(96, 120, 100),
-    w=(176, 255, 226), l=(90, 200, 160),
+    a=(16, 34, 40), A=(32, 70, 76), h=(84, 156, 150),          # латы цвета старой бирюзы
+    c=(10, 46, 40), C=(30, 110, 84), q=(50, 160, 120),          # призрачный плащ
+    e=(120, 255, 230), E=(214, 255, 248),                       # огонь в глазницах и самоцветы
+    O=(176, 196, 168), W=(222, 236, 210), o=(104, 122, 104),    # кость черепа
+    y=(226, 255, 246), Y=(140, 222, 200), z=(62, 140, 128),     # призрачная борода
+    g=(214, 168, 64), G=(255, 226, 120),                        # золото короны
+    w=(176, 255, 226), l=(90, 200, 160),                        # клинок из призрачного пламени
 )
-WRAITH_CROWN = [  # поверх рогов, по столбцам 19..31 тела
-    "..k...k...k..",
-    ".kgk.kgk.kgk.",
-    "kgggkgggkgggk",
-    "kgegggegggegk",
-]
-WRAITH_DUP_ROWS = (8, 15, 21, 28, 34, 40)
-WRAITH_DUP_COLS = (BOSS_X + 20, BOSS_X + 27)
+WRAITH_W, WRAITH_H = 44, 44
+WRAITH_DUP_ROWS = (9, 17, 24, 31, 37)
+WRAITH_DUP_COLS = (BOSS_X + 21, BOSS_X + 30)
+
+
+def wraith_body():
+    """Король-Призрак (смотрит влево): высокая корона, череп с бородой до пояса, рогатые
+    наплечники, шипастый воротник и рваный плащ до земли. Контур добавляется автоматически."""
+    W, H = WRAITH_W, WRAITH_H
+    g = [["."] * W for _ in range(H)]
+
+    def px(x, y, ch):
+        if 0 <= x < W and 0 <= y < H:
+            g[y][x] = ch
+
+    def ellipse(cx, cy, rx, ry, ch, top=None):
+        for y in range(cy - ry, cy + ry + 1):
+            for x in range(cx - rx, cx + rx + 1):
+                if ((x - cx) / (rx + 0.5)) ** 2 + ((y - cy) / (ry + 0.5)) ** 2 <= 1:
+                    px(x, y, top if top and y <= cy - ry + 1 else ch)
+
+    # 1. рваный плащ за спиной (правее тела), складки и рваный низ
+    for y in range(14, H):
+        x0 = 27 - (y - 14) // 5
+        x1 = min(W - 1, 33 + (y - 14) // 2)
+        rag = (y >= H - 4) and ((y * 7) % 3 != 0)
+        for x in range(x0, x1 + 1):
+            if rag and (x * 5 + y) % 4 == 0:
+                continue
+            px(x, y, "C" if (x - x0) % 4 == 1 else "q" if (x - x0) % 4 == 2 and y < 30 else "c")
+    # 2. шипастый воротник за головой
+    for i, (bx, h) in enumerate(((27, 8), (30, 10), (33, 7))):
+        for k in range(h):
+            for x in range(bx - (h - k) // 3, bx + (h - k) // 3 + 1):
+                px(x, 14 - k, "h" if x == bx and k > 1 else "a")
+    # 3. ноги в латных сапогах
+    for lx in (17, 24):
+        for y in range(33, 42):
+            for x in range(lx, lx + 4):
+                px(x, y, "h" if x == lx else "A")
+        for x in range(lx - 1, lx + 5):
+            px(x, 42, "a")
+            px(x, 43, "a")
+    # 4. латная юбка с золотой каймой
+    for y in range(28, 34):
+        for x in range(14 - (y - 28) // 2, 32 + (y - 28) // 3):
+            px(x, y, "g" if y == 33 else "a" if (x - 14) % 4 == 0 else "A")
+    # 5. кираса
+    for y in range(15, 28):
+        for x in range(16, 31):
+            px(x, y, "h" if x in (17, 18) else "a" if x == 30 else "A")
+    for x in range(15, 32):  # пояс с самоцветом
+        px(x, 27, "g")
+    px(19, 27, "e")
+    # 6. дальний наплечник с рогом
+    ellipse(32, 16, 5, 3, "A", top="h")
+    for k in range(5):
+        px(34 + k // 2, 12 - k, "W" if k > 2 else "O")
+    # 7. ближний наплечник: крупный, с рогом и золотым ободом
+    ellipse(13, 16, 7, 4, "A", top="h")
+    for x in range(7, 20):
+        px(x, 20, "g")
+    for k in range(6):
+        px(9 - k // 2, 12 - k, "W" if k > 3 else "O")
+    # 8. череп
+    ellipse(21, 9, 5, 4, "O")
+    for x, y in ((17, 6), (17, 7), (18, 6), (16, 8)):  # блик на лбу
+        px(x, y, "W")
+    for y in range(7, 12):  # тень на затылке
+        px(25, y, "o")
+        px(24, y, "o" if y > 8 else "O")
+    for x in range(16, 26):  # тень от короны
+        px(x, 6, "o")
+    for sx in (16, 20):  # глубокие глазницы с призрачным огнём
+        for x in (sx, sx + 1, sx + 2):
+            px(x, 8, "k")
+        px(sx, 9, "k")
+        px(sx + 1, 9, "E")
+        px(sx + 2, 9, "e")
+        px(sx + 1, 10, "e")
+        px(sx + 1, 7, "e")  # язычок пламени над глазом
+    px(19, 11, "k")  # нос
+    px(18, 11, "o")
+    for x in range(17, 24):  # челюсть
+        px(x, 12, "o")
+    # 9. борода: от челюсти до пояса, развевается вперёд (влево), светлые пряди
+    for y in range(12, 27):
+        t = (y - 12) / 14
+        cx = 20 - int(t * 4)
+        half = max(1, int(5 * (1 - t) + 1))
+        for x in range(cx - half, cx + half + 1):
+            edge = x in (cx - half, cx + half)
+            strand = (x + y) % 3 == 0
+            px(x, y, "z" if edge else "y" if strand else "Y")
+    for x in range(17, 24, 2):  # усы над бородой
+        px(x, 12, "Y")
+    # 10. высокая корона: обод с самоцветами и пять зубцов
+    for x in range(15, 27):
+        px(x, 4, "g")
+        px(x, 5, "G" if x % 3 else "e")
+    for i, sx in enumerate((15, 18, 21, 24, 26)):
+        h = 4 if i == 2 else 3
+        for k in range(1, h + 1):
+            px(sx, 4 - k, "G" if k == h else "g")
+        if i != 4:
+            px(sx + 1, 3, "g")
+    # контур: пустая клетка рядом с закрашенной становится чёрной
+    out = [row[:] for row in g]
+    for y in range(H):
+        for x in range(W):
+            if g[y][x] == "." and any(0 <= x + dx < W and 0 <= y + dy < H and g[y + dy][x + dx] not in ".k"
+                                      for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                out[y][x] = "k"
+    return ["".join(r) for r in out]
 
 
 def wraith_map(arm):
-    rows = [list(r) for r in boss_map(arm)]
-    for y in range(4):  # убираем рога и ставим корону
-        for x in range(BOSS_X + 17, BOSS_X + 33):
-            if rows[y][x] in "kOW":
-                rows[y][x] = "."
-        for i, ch in enumerate(WRAITH_CROWN[y]):
+    """Тело Короля-Призрака + рука с мечом (те же позы, что у Костяного Рыцаря), крупнее."""
+    body = wraith_body()
+    W = BOSS_X + WRAITH_W
+    rows = [list("." * W) for _ in range(WRAITH_H)]
+    for y, row in enumerate(body):
+        for x, ch in enumerate(row):
             if ch != ".":
-                rows[y][BOSS_X + 19 + i] = ch
+                rows[y][BOSS_X + x] = ch
+    for y, (x0, seg) in arm.items():
+        for i, ch in enumerate(seg):
+            if ch != "." and 0 <= x0 + i < W:
+                rows[y][x0 + i] = ch
     return _enlarge(["".join(r) for r in rows], WRAITH_DUP_ROWS, WRAITH_DUP_COLS)
 
 
