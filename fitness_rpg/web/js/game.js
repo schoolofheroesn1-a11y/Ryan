@@ -939,6 +939,14 @@ class BattleScene extends Scene {
     this.texts.push({ text, x, y, color, size, ttl: 1 });
   }
 
+  /** Звук усталости: не чаще раза в секунду, чтобы не сливался при частых попытках удара. */
+  exhaustedSound() {
+    const now = this.game.time;
+    if (now - (this.exhaustedAt ?? -9) < 1) return;
+    this.exhaustedAt = now;
+    sfx.exhausted();
+  }
+
   saveRun() {
     this.game.run = { hp: this.hp, estus: this.estus };
   }
@@ -947,8 +955,12 @@ class BattleScene extends Scene {
     const p = this.game.player, en = this.enemy;
     if (move === "pushup") {
       if (en.state === "revive") return this.float("НЕУЯЗВИМ", en.x + 12, 90, "rgb(120,255,230)", 8);
-      if (this.stamina < p.attackCost) return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+      if (this.stamina < p.attackCost) {
+        this.exhaustedSound();
+        return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+      }
       this.stamina -= p.attackCost;
+      if (this.stamina < p.attackCost) this.exhaustedSound(); // сил на следующий удар уже нет
       this.regenPause = 0.6;
       this.action = "attack";
       this.actionT = 0.35;

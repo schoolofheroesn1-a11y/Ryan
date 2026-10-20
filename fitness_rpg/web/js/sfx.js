@@ -56,7 +56,7 @@ function tone(freq, dur, { type = "square", vol = 0.12, slide = 0, delay = 0, ou
   osc.stop(t0 + dur + 0.02);
 }
 
-function noise(dur, vol = 0.15) {
+function noise(dur, vol = 0.15, delay = 0, lowpass = 0) {
   if (!ctx) return;
   const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
   const data = buf.getChannelData(0);
@@ -65,8 +65,15 @@ function noise(dur, vol = 0.15) {
   const gain = ctx.createGain();
   gain.gain.value = vol;
   src.buffer = buf;
-  src.connect(gain).connect(master || ctx.destination);
-  src.start();
+  let node = src;
+  if (lowpass) { // глухой шум (выдох), а не шипение
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = lowpass;
+    node = src.connect(f);
+  }
+  node.connect(gain).connect(master || ctx.destination);
+  src.start(ctx.currentTime + delay);
 }
 
 export const sfx = {
@@ -89,6 +96,15 @@ export const sfx = {
   win: () => [0, 0.15, 0.3].forEach((d, i) => tone([330, 415, 494][i], 0.35, { type: "triangle", delay: d })),
   die: () => [0, 0.25, 0.5].forEach((d, i) => tone([220, 185, 147][i], 0.5, { type: "sawtooth", delay: d, vol: 0.1 })),
   click: () => tone(880, 0.03, { vol: 0.05 }),
+  // выносливость кончилась: тяжёлое «тук-тук» сердца и усталый выдох
+  exhausted: () => {
+    [[0, 0.2], [0.17, 0.14]].forEach(([d, v]) => {
+      tone(70, 0.16, { type: "sine", slide: -25, delay: d, vol: v });
+      tone(140, 0.08, { type: "triangle", slide: -60, delay: d, vol: v * 0.4 });
+    });
+    noise(0.5, 0.1, 0.3, 700);
+    tone(330, 0.45, { type: "sine", slide: -170, delay: 0.32, vol: 0.05 });
+  },
   // косметика
   thunder: () => { noise(0.35, 0.3); tone(90, 0.4, { type: "sawtooth", slide: -50, vol: 0.12 }); },
   souls: () => [0, 0.1, 0.2].forEach((d, i) => tone(520 - i * 70, 0.4, { type: "sine", slide: -180, delay: d, vol: 0.07 })),
