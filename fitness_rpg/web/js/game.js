@@ -16,7 +16,7 @@ import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { isNative, keepAwake, openAppSettings, openUrl, restoreBackup, vibrate } from "./platform.js";
 import { LANGS, getLang, setLang, tf, tr } from "./i18n.js";
-import { confirmDialog, modalOpen, promptAccount, promptName, promptText } from "./ui.js";
+import { choiceDialog, confirmDialog, modalOpen, promptAccount, promptName, promptText } from "./ui.js";
 import { Online, errorText, heroSnapshot } from "./online.js";
 
 const CW = 320, CH = 180;
@@ -135,7 +135,7 @@ class Game {
     this.wctx = this.world.getContext("2d");
     this.player = Player.load();
     this.profile = Profile.load(); // имя в рейтинге, рекорд и облик — переживают «Новую игру»
-    this.store = new Store(confirmDialog);
+    this.store = new Store(confirmDialog, { offer: (it, kind) => this.offerCode(it, kind) });
     this.store.init().then(() => this.syncPaid()); // RevenueCat в iOS-приложении; иначе — тестовый режим
     this.syncPaid();
     this.leaderboard = new Leaderboard();
@@ -354,6 +354,27 @@ class Game {
     }
     this.syncPaid();
     return fresh;
+  }
+
+  /** Платные вещи открываются уникальным кодом: где его получить — в Telegram. */
+  async offerCode(it, kind) {
+    if (kind === "tip") {
+      const go = await choiceDialog({
+        title: "ПОДДЕРЖАТЬ ПРОЕКТ",
+        text: "Поддержать разработку можно через наш Telegram: там всё подробно.",
+        buttons: [[null, "ОТМЕНА"], ["tg", "ОТКРЫТЬ TELEGRAM", true]],
+      });
+      if (go === "tg") openUrl(TELEGRAM_URL);
+      return;
+    }
+    const go = await choiceDialog({
+      title: "НУЖЕН КОД",
+      text: tf("Чтобы получить «{name}», нужен уникальный код. Как его приобрести — подробнее в нашем Telegram.", { name: it.name }),
+      note: "Код вводится здесь или в Настройках: «Ввести код».",
+      buttons: [[null, "ОТМЕНА"], ["code", "ВВЕСТИ КОД"], ["tg", "ОТКРЫТЬ TELEGRAM", true]],
+    });
+    if (go === "tg") openUrl(TELEGRAM_URL);
+    if (go === "code") await this.redeemCode();
   }
 
   /** Ввод кода активации (настройки). */

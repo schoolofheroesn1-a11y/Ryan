@@ -42,6 +42,22 @@ export function confirmDialog({ title, text, note, ok = "OK", cancel = "ОТМЕ
   });
 }
 
+/** Окно с выбором: buttons — [[значение, подпись, главная?]]. Возвращает значение или null. */
+export function choiceDialog({ title, text, note, buttons }) {
+  return modal((box, close) => {
+    box.appendChild(el("h2", null, title));
+    box.appendChild(el("p", null, text));
+    if (note) box.appendChild(el("p", "modal-note", note));
+    const row = el("div", "modal-row");
+    for (const [value, label, main] of buttons) {
+      const b = el("button", main ? "modal-ok" : "modal-cancel", label);
+      b.onclick = () => close(value);
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+}
+
 /** Ввод имени. Возвращает строку или null (отмена). */
 export function promptName({ title, text, value }) {
   return modal((box, close) => {

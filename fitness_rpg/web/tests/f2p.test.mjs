@@ -100,3 +100,18 @@ test("test store: purchase only after confirmation, persists", async () => {
   assert.equal(new Store(async () => false).owns("sword_void"), true);
   assert.deepEqual(await store.restore(), ["sword_void"]);
 });
+
+test("web with code offer: no test badge, buying opens the code window, a redeemed code unlocks", async () => {
+  mem.clear();
+  const offered = [];
+  let store;
+  store = new Store(async () => assert.fail("тестовое окно покупки больше не показывается"), {
+    offer: async (it, kind) => { offered.push([it.id, kind]); if (it.id === "sword_sun") store.grant("sword_sun"); },
+  });
+  assert.equal(store.badge, null);
+  assert.equal(await store.buy({ id: "sword_void", name: "Клинок Бездны" }), false);
+  assert.equal(await store.buy({ id: "sword_sun", name: "Клинок Рассвета" }), true, "код введён в окне — вещь открыта");
+  assert.equal(await store.tip({ id: "support_ale", name: "Кружка эля", price: "1 $" }), false);
+  assert.deepEqual(offered, [["sword_void", "item"], ["sword_sun", "item"], ["support_ale", "tip"]]);
+  assert.equal(store.tips, 0);
+});

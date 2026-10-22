@@ -1,6 +1,7 @@
 // Покупки косметики и поддержка проекта. Одна точка входа для игры: buy / tip / restore / owns / price.
 // Режимы:
-//   "test"           — сайт, Android и iOS без ключа: оплата не списывается, подтверждение — окно игры;
+//   "test"           — сайт, Android и iOS без ключа: вещи открываются уникальным кодом (offer — окно
+//                      «как получить код» со ссылкой на Telegram); без offer — тестовое окно покупки;
 //   "revenuecat-test" — iOS с ключом RevenueCat Test Store: покупки симулирует RevenueCat;
 //   "live"           — настоящие платежи App Store. Выключены, пока REVENUECAT.allowRealPayments = false.
 import { REVENUECAT, STORE } from "./config.js";
@@ -38,8 +39,9 @@ export class Store {
    * confirm — функция-диалог ({title, text, note, ok}) => Promise<boolean> для тестового режима;
    * call — вызов нативного плагина (для тестов подменяется).
    */
-  constructor(confirm, { call = native, available = () => isIOS() && hasPlugin("Purchases") } = {}) {
+  constructor(confirm, { call = native, available = () => isIOS() && hasPlugin("Purchases"), offer = null } = {}) {
     this.confirm = confirm;
+    this.offer = offer; // (вещь или поддержка, "item" | "tip") => Promise: окно с кодом и Telegram
     this.call = call;
     this.available = available;
     this.mode = "test";
@@ -71,7 +73,8 @@ export class Store {
 
   /** Надпись о тестовом режиме для витрины (null — настоящие платежи). */
   get badge() {
-    return this.mode === "live" ? null : this.mode === "revenuecat-test" ? "ТЕСТ: RevenueCat Test Store" : "ТЕСТ: оплата не списывается";
+    if (this.mode === "live" || (this.mode === "test" && this.offer)) return null;
+    return this.mode === "revenuecat-test" ? "ТЕСТ: RevenueCat Test Store" : "ТЕСТ: оплата не списывается";
   }
 
   async loadProducts(ids = null) {
@@ -139,6 +142,10 @@ export class Store {
       if (ok) this.grant(item.id);
       return ok;
     }
+    if (this.offer) { // вещь открывается кодом: окно подскажет, где его получить, и даст ввести
+      await this.offer(item, "item");
+      return this.owns(item.id);
+    }
     const ok = await this.confirm({
       title: "ТЕСТОВАЯ ПОКУПКА",
       text: tf("«{name}» за {price}", { name: item.name, price: this.price(item.id) }),
@@ -153,7 +160,10 @@ export class Store {
   async tip(t) {
     let ok;
     if (this.viaRevenueCat) ok = await this.purchase(t.id);
-    else {
+    else if (this.offer) {
+      await this.offer(t, "tip"); // поддержка — через Telegram
+      return false;
+    } else {
       ok = await this.confirm({
         title: "ТЕСТОВАЯ ПОДДЕРЖКА",
         text: tf("«{name}» за {price}", { name: t.name, price: this.tipPrice(t) }),
