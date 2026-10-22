@@ -1,5 +1,5 @@
 // Офлайн-кэш: после первого запуска с сетью игра открывается и без интернета.
-const CACHE = "ash-and-iron-v14";
+const CACHE = "ash-and-iron-v15";
 const CORE = [
   "./", "index.html", "style.css", "manifest.webmanifest",
   "js/game.js", "js/motion.js", "js/exercises.js", "js/player.js", "js/sfx.js", "js/gear.js",
@@ -22,7 +22,7 @@ self.addEventListener("activate", (e) => {
 // Картинки, модель позы и wasm кэшируются по мере загрузки.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  if (e.request.url.includes("/rest/v1/")) return; // рейтинг: свой кэш в leaderboard.js, без сети честно «нет сети»
+  if (e.request.url.includes("/rest/v1/") || e.request.url.includes("leaderboard.php")) return; // рейтинг: свой кэш в leaderboard.js, без сети честно «нет сети»
   e.respondWith(
     fetch(e.request)
       .then((res) => {

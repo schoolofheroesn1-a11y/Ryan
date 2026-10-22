@@ -20,6 +20,12 @@ rm -rf "$OUT"
 OUT=dist/ash-and-iron-web
 touch "$OUT/.nojekyll"  # GitHub Pages отдаёт файлы как есть, без Jekyll
 cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html "$OUT/"
+# архив для своего хостинга (sweb): игра + .htaccess + сервер рейтинга, всё в корне архива
+H=dist/ash-a-iron-hosting
+rm -rf "$H" dist/ash-a-iron-hosting.zip && cp -r "$OUT" "$H"
+rm -f "$H/README_DEPLOY.md" "$H/supabase.sql" "$H/.nojekyll"
+cp deploy/hosting/.htaccess server/leaderboard.php server/lb_config.example.php "$H/"
+(cd "$H" && zip -qr ../ash-a-iron-hosting.zip .)
 (cd dist && zip -qr ash-and-iron-web.zip ash-and-iron-web)
 echo "Готово: $(pwd)/dist/ash-and-iron-web.zip ($(du -h dist/ash-and-iron-web.zip | cut -f1))"
 find "$OUT" -type f | wc -l | xargs echo "файлов:"
