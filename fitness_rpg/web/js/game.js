@@ -2003,7 +2003,7 @@ class CameraScene extends Scene {
 // ------------------------------------------------------------------ Настройки
 const SETTINGS_KEY = "ash-and-iron-settings";
 const ALERT_LEVELS = [[0, "ВЫКЛ"], [0.5, "ТИХО"], [1, "НОРМА"], [1.5, "ГРОМКО"]];
-const TELEGRAM_URL = "https://t.me/melnikovdania";
+const TELEGRAM_URL = "https://t.me/ashe_and_iron";
 
 /** Раскладка настроек: альбомная (640×360) или вертикальная во весь экран телефона. */
 function settingsLayout(g) {
