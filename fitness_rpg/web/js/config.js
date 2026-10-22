@@ -1,11 +1,16 @@
-// Настройки сервера рейтинга. Основной — leaderboard.php на своём хостинге (deploy/hosting/README.md).
-// Запасной вариант — Supabase (url + anonKey). Пока сервер не отвечает, рейтинг работает на устройстве:
+// Настройки сервера рейтинга (Supabase). Пока поля пустые, рейтинг работает только на устройстве:
 // игра полностью играбельна без сети, а результаты отправятся, когда сервер появится.
+// Как получить значения — см. README_DEPLOY.md, раздел «Рейтинг».
 export const LEADERBOARD = {
-  api: "https://ash-a-iron.com/leaderboard.php", // на самом ash-a-iron.com запросы идут на свой адрес
-  url: "", // Supabase, например "https://abcdefgh.supabase.co"
+  url: "", // например "https://abcdefgh.supabase.co"
   anonKey: "", // публичный anon-ключ проекта (не service_role!)
   table: "leaderboard",
+};
+
+// Мультиплеер (аккаунты, рейтинг, вызовы, дуэли, коды активации): server/api.php на своём хостинге.
+// На самом ash-a-iron.com запросы идут на тот же адрес, что и страница.
+export const ONLINE = {
+  api: "https://ash-a-iron.com/api.php",
 };
 
 // Покупки. На сайте и в тестовых сборках — тестовый режим: оплата не списывается.

@@ -100,23 +100,3 @@ test("test store: purchase only after confirmation, persists", async () => {
   assert.equal(new Store(async () => false).owns("sword_void"), true);
   assert.deepEqual(await store.restore(), ["sword_void"]);
 });
-
-test("own-hosting leaderboard: POST carries the device secret, GET asks for own rank", async () => {
-  const calls = [];
-  const fake = async (url, opt = {}) => {
-    calls.push({ url, opt });
-    return { ok: true, json: async () => ({ rows: [{ player_id: "p", name: "Сэр", bosses: 2, level: 5, wave: 9 }], rank: 7 }) };
-  };
-  const lb = new Leaderboard({ api: "https://ash-a-iron.com/leaderboard.php", url: "", anonKey: "" }, fake, { offline: false });
-  assert.ok(lb.configured);
-  const me = { id: "p", name: "Сэр", best: { bosses: 2, level: 5, wave: 9 } };
-  assert.equal(await lb.submit(me), true);
-  const body = JSON.parse(calls[0].opt.body);
-  assert.equal(calls[0].url, "https://ash-a-iron.com/leaderboard.php");
-  assert.ok(body.secret.length >= 32 && body.player_id === "p");
-  const t = await lb.top(me);
-  assert.equal(t.rank, 7);
-  assert.equal(t.source, "online");
-  assert.ok(calls.at(-1).url.endsWith("?player_id=p"));
-  assert.equal(JSON.parse(calls[0].opt.body).secret, body.secret, "секрет устройства постоянный");
-});

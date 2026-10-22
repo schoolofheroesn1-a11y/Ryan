@@ -1,5 +1,5 @@
 <?php
-// Скопируйте этот файл на хостинге как lb_config.php (рядом с leaderboard.php) и впишите данные базы
+// Скопируйте этот файл на хостинге как lb_config.php (рядом с api.php) и впишите данные базы
 // из панели sweb (раздел «MySQL»). Этот файл с паролем не загружайте на GitHub.
 return [
     'dsn' => 'mysql:host=localhost;dbname=ИМЯ_БАЗЫ;charset=utf8mb4',

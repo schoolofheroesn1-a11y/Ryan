@@ -69,4 +69,60 @@ export function promptName({ title, text, value }) {
   });
 }
 
+function input(box, { type = "text", value = "", placeholder = "", maxLength = 32, caps = "none" } = {}) {
+  const i = el("input", "modal-input");
+  i.type = type;
+  i.maxLength = maxLength;
+  i.value = value;
+  i.placeholder = tr(placeholder);
+  i.autocomplete = type === "password" ? "current-password" : "off";
+  i.setAttribute("autocapitalize", caps);
+  i.addEventListener("keydown", (e) => e.stopPropagation()); // буквы J/K/L не управляют боем
+  box.appendChild(i);
+  return i;
+}
+
+/** Ввод строки (код, номер комнаты). Возвращает строку или null. */
+export function promptText({ title, text, value = "", ok = "OK", maxLength = 32, caps = "characters" }) {
+  return modal((box, close) => {
+    box.appendChild(el("h2", null, title));
+    if (text) box.appendChild(el("p", null, text));
+    const i = input(box, { value, maxLength, caps });
+    const row = el("div", "modal-row");
+    const yes = el("button", "modal-ok", ok);
+    const no = el("button", "modal-cancel", "ОТМЕНА");
+    yes.onclick = () => close(i.value);
+    no.onclick = () => close(null);
+    i.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") close(i.value);
+      if (e.key === "Escape") close(null);
+    });
+    row.append(no, yes);
+    box.appendChild(row);
+  });
+}
+
+/** Вход или регистрация. Возвращает {mode: "login"|"register", login, password, name} или null. */
+export function promptAccount({ name = "" } = {}) {
+  return modal((box, close) => {
+    box.appendChild(el("h2", null, "АККАУНТ"));
+    box.appendChild(el("p", null, "Результат, вызовы и покупки сохраняются в аккаунте и доступны на любом устройстве."));
+    const login = input(box, { placeholder: "логин (латиница)", maxLength: 20 });
+    const pass = input(box, { type: "password", placeholder: "пароль (от 6 символов)", maxLength: 72 });
+    const nick = input(box, { value: name, placeholder: "имя в игре (для регистрации)", maxLength: 16, caps: "words" });
+    box.appendChild(el("p", "modal-note", "Имя в игре видят другие игроки. Пароль никому не сообщайте."));
+    const send = (mode) => close({ mode, login: login.value.trim(), password: pass.value, name: nick.value });
+    const row = el("div", "modal-row");
+    const no = el("button", "modal-cancel", "ОТМЕНА");
+    const reg = el("button", "modal-cancel", "РЕГИСТРАЦИЯ");
+    const yes = el("button", "modal-ok", "ВОЙТИ");
+    no.onclick = () => close(null);
+    reg.onclick = () => send("register");
+    yes.onclick = () => send("login");
+    pass.addEventListener("keydown", (e) => { if (e.key === "Enter") send("login"); });
+    row.append(no, reg, yes);
+    box.appendChild(row);
+  });
+}
+
 export const modalOpen = () => !!document.querySelector(".modal");

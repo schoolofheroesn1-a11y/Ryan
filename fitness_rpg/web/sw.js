@@ -22,7 +22,7 @@ self.addEventListener("activate", (e) => {
 // Картинки, модель позы и wasm кэшируются по мере загрузки.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  if (e.request.url.includes("/rest/v1/") || e.request.url.includes("leaderboard.php")) return; // рейтинг: свой кэш в leaderboard.js, без сети честно «нет сети»
+  if (e.request.url.includes("/rest/v1/") || e.request.url.includes("api.php")) return; // рейтинг: свой кэш в leaderboard.js, без сети честно «нет сети»
   e.respondWith(
     fetch(e.request)
       .then((res) => {

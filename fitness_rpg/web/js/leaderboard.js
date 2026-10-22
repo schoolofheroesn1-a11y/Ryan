@@ -1,5 +1,4 @@
-// Рейтинг игроков по побеждённым боссам и уровню (сервер — leaderboard.php на своём хостинге
-// или Supabase, см. config.js).
+// Рейтинг игроков по побеждённым боссам и уровню (сервер — Supabase, см. config.js).
 // Игра не зависит от сети: результат ставится в очередь и уходит, когда появится интернет;
 // без сети показывается последняя сохранённая таблица, без сервера — только свой результат.
 import { IOS, LEADERBOARD } from "./config.js";
@@ -8,33 +7,14 @@ import { loadJSON, saveJSON } from "./storage.js";
 
 const QUEUE_KEY = "ash-and-iron-lb-queue";
 const CACHE_KEY = "ash-and-iron-lb-cache";
-const SECRET_KEY = "ash-and-iron-lb-secret"; // доказывает серверу, что строка рейтинга — этого устройства
 const TIMEOUT_MS = 6000;
 const TOP = 50;
 
 const byRank = (a, b) => b.bosses - a.bosses || b.level - a.level || b.wave - a.wave;
 
-function newSecret() {
-  const b = new Uint8Array(24);
-  globalThis.crypto.getRandomValues(b);
-  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-}
-
-/** Адрес leaderboard.php: на своём сайте — относительный (тот же адрес, что и страница). */
-function apiUrl(api) {
-  if (!api) return "";
-  try {
-    const here = globalThis.location;
-    const host = new URL(api).hostname.replace(/^www\./, "");
-    if (here && here.hostname.replace(/^www\./, "") === host) return new URL("leaderboard.php", here.href).href;
-  } catch (e) { /* не URL — оставляем как есть */ }
-  return api;
-}
-
 export class Leaderboard {
   constructor(config = LEADERBOARD, fetchImpl = globalThis.fetch?.bind(globalThis), { offline = isIOS() && !IOS.leaderboardOnline } = {}) {
     this.config = config;
-    this.api = apiUrl(config.api);
     this.offline = offline; // iOS до исправления правил сервера: только свой результат, без сети
     this.fetch = fetchImpl;
     this.pending = loadJSON(QUEUE_KEY, null); // последний неотправленный результат
@@ -45,13 +25,7 @@ export class Leaderboard {
 
   get configured() {
     if (this.offline) return false;
-    return !!((this.api || (this.config.url && this.config.anonKey)) && this.fetch);
-  }
-
-  get secret() {
-    let s = loadJSON(SECRET_KEY, null);
-    if (!s) saveJSON(SECRET_KEY, (s = newSecret()));
-    return s;
+    return !!(this.config.url && this.config.anonKey && this.fetch);
   }
 
   headers(extra = {}) {
@@ -67,8 +41,7 @@ export class Leaderboard {
     const ctrl = typeof AbortController === "function" ? new AbortController() : null;
     const timer = ctrl && setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
-      const base = this.api || `${this.config.url}/rest/v1/${this.config.table}`;
-      const res = await this.fetch(`${base}${path}`, {
+      const res = await this.fetch(`${this.config.url}/rest/v1/${this.config.table}${path}`, {
         ...options,
         signal: ctrl && ctrl.signal,
       });
@@ -100,19 +73,11 @@ export class Leaderboard {
     this.sending = true;
     const entry = this.pending;
     try {
-      if (this.api) {
-        await this.request("", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...entry, secret: this.secret }),
-        });
-      } else {
-        await this.request("?on_conflict=player_id", {
-          method: "POST",
-          headers: this.headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-          body: JSON.stringify(entry),
-        });
-      }
+      await this.request("?on_conflict=player_id", {
+        method: "POST",
+        headers: this.headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+        body: JSON.stringify(entry),
+      });
       if (this.pending === entry) {
         this.pending = null;
         saveJSON(QUEUE_KEY, null);
@@ -137,14 +102,6 @@ export class Leaderboard {
     if (!this.configured) return { rows: [me], rank: 1, source: "local", pending: false };
     await this.flush();
     try {
-      if (this.api) {
-        const res = await this.request(`?player_id=${encodeURIComponent(me.player_id)}`);
-        const data = await res.json();
-        const rows = data.rows || [];
-        this.cache = { rows, at: Date.now() };
-        saveJSON(CACHE_KEY, this.cache);
-        return { rows, rank: data.rank || (await this.rankOf(me, rows)), source: "online", pending: !!this.pending };
-      }
       const res = await this.request(
         `?select=player_id,name,bosses,level,wave&order=bosses.desc,level.desc,wave.desc&limit=${TOP}`,
         { headers: this.headers() },
@@ -163,7 +120,6 @@ export class Leaderboard {
   async rankOf(me, rows) {
     const i = rows.findIndex((r) => r.player_id === me.player_id);
     if (i >= 0) return i + 1;
-    if (this.api) return null; // место вне топа сервер присылает сам
     // не в топе — считаем, сколько игроков выше
     try {
       const better = `or=(bosses.gt.${me.bosses},and(bosses.eq.${me.bosses},level.gt.${me.level}))`;
