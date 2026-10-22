@@ -5,6 +5,8 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  # технические адреса sweb (*.swtest.ru) открываются без перевода на https — для проверки
+  RewriteCond %{HTTP_HOST} !swtest\.ru$ [NC]
   RewriteCond %{HTTPS} !=on
   RewriteCond %{HTTP:X-Forwarded-Proto} !https
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
