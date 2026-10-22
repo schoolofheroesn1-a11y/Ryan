@@ -1,17 +1,18 @@
-// Косметика за 1 $: облик меча с анимацией, эффекты удара и оформление побед.
+// Косметика за 1 $: облик меча с анимацией, облик доспеха, эффекты удара и оформление побед.
 // Только внешний вид — на силу персонажа не влияет (честный free-to-play).
 
 export const COSMETICS = [
   { id: "sword_void", kind: "sword", skin: "void", name: "Клинок Бездны", desc: "обсидиан, живые руны, шлейф тьмы", color: [180, 90, 255] },
   { id: "sword_sun", kind: "sword", skin: "sun", name: "Клинок Рассвета", desc: "золото, сияние и искры", color: [255, 214, 96] },
   { id: "sword_frost", kind: "sword", skin: "frost", name: "Ледяной Клык", desc: "кристалл, иней и снегопад", color: [150, 220, 255] },
+  { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "алый лак, кабуто с рогами, маска", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
   { id: "hit_souls", kind: "hit", name: "Призраки павших", desc: "души вырываются из врага", color: [190, 170, 255] },
   { id: "win_crown", kind: "victory", name: "Королевский триумф", desc: "корона, лучи и золото", color: [255, 200, 90] },
   { id: "win_pyre", kind: "victory", name: "Синее пламя", desc: "костёр душ и рой искр", color: [120, 180, 255] },
 ];
 export const COSMETIC = Object.fromEntries(COSMETICS.map((c) => [c.id, c]));
-export const KIND_TITLES = { sword: "ОБЛИК МЕЧА", hit: "ЭФФЕКТ УДАРА", victory: "ОФОРМЛЕНИЕ ПОБЕДЫ" };
+export const KIND_TITLES = { sword: "ОБЛИК МЕЧА", armor: "ОБЛИК ДОСПЕХА", hit: "ЭФФЕКТ УДАРА", victory: "ОФОРМЛЕНИЕ ПОБЕДЫ" };
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;

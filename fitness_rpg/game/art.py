@@ -691,7 +691,15 @@ SLASH_COLORS = {
 }
 
 # Облик героя: доспех Костяного Рыцаря и/или Амулет Углей
-LOOKS = ("base", "armor", "amulet", "both", "king", "king_amulet")
+LOOKS = ("base", "armor", "amulet", "both", "king", "king_amulet", "samurai")
+# Доспех самурая (облик из лавки, только внешний вид): алый лак, чёрный плащ, золотые рога кабуто
+SAMURAI_PALETTE = dict(
+    PALETTE,
+    d=(64, 14, 18), s=(138, 28, 30), l=(196, 54, 42), w=(244, 124, 88),
+    r=(20, 16, 24), R=(50, 42, 56), g=(232, 186, 70),
+    a=(26, 20, 30), A=(52, 44, 60), h=(120, 108, 132),  # чёрный лак кабуто и маски
+    Y=(246, 120, 40), y=(255, 230, 160),
+)
 # Доспех Короля-Призрака: латы цвета старой бирюзы, призрачный плащ, корона и горящие глаза
 KING_PALETTE = dict(
     PALETTE,
@@ -731,6 +739,23 @@ def _body_rows(rows, width, look):
             _put(rows, x, 1, "g")
         for x in (12, 14):  # призрачный огонь в прорези забрала
             _put(rows, x, 6, "e")
+    if look == "samurai":
+        for y in range(0, 5):  # кабуто — чёрный лак
+            rows[y] = rows[y].replace("s", "a").replace("l", "A").replace("w", "h")
+        for x, y in ((7, 1), (7, 2), (8, 0), (18, 1), (18, 2), (17, 0), (12, 0), (13, 0)):  # рога кувагата и герб
+            _put(rows, x, y, "g")
+        for x in (7, 18):  # отогнутые края шлема фукигаэси
+            _put(rows, x, 5, "g")
+        for y in (6, 7, 8):  # широкий назатыльник сикоро
+            _put(rows, 7, y, "k")
+        for x in range(10, 16):  # маска мэмпо
+            _put(rows, x, 7, "a")
+        for x in (11, 12, 14, 15):  # белые усы маски
+            _put(rows, x, 8, "W")
+        for x in (10, 12, 14, 16):  # золотая шнуровка на груди
+            _put(rows, x, 10, "g")
+        for x in (10, 12, 15, 17):  # и на набедренных пластинах
+            _put(rows, x, 18, "g")
     if look in ("amulet", "both", "king_amulet"):
         _put(rows, 11, 9, "g")
         _put(rows, 15, 9, "g")
@@ -756,7 +781,8 @@ def compose_hero(sword, look, pose):
     """Спрайт героя: меч рисуется первым, рука перчаткой ложится поверх рукояти."""
     attack = pose == "attack"
     width = ATTACK_W if attack else 24
-    palette = ARMOR_PALETTE if look in ("armor", "both") else KING_PALETTE if look.startswith("king") else BODY_PALETTE
+    palette = ARMOR_PALETTE if look in ("armor", "both") else KING_PALETTE if look.startswith("king") \
+        else SAMURAI_PALETTE if look == "samurai" else BODY_PALETTE
     blade_map = SWORD_MAPS[sword]
     if attack:
         width = max(width, ATTACK_GRIP[0] - SWORD_GRIP + len(blade_map))  # длинный клинок не обрезается

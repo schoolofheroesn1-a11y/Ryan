@@ -89,6 +89,7 @@ git push -u origin main
 | `com.ashandiron.fitnessrpg.sword_void` | разовая покупка | Клинок Бездны |
 | `com.ashandiron.fitnessrpg.sword_sun` | разовая покупка | Клинок Рассвета |
 | `com.ashandiron.fitnessrpg.sword_frost` | разовая покупка | Ледяной Клык |
+| `com.ashandiron.fitnessrpg.armor_samurai` | разовая покупка | Доспех самурая |
 | `com.ashandiron.fitnessrpg.hit_storm` | разовая покупка | Гнев грозы |
 | `com.ashandiron.fitnessrpg.hit_souls` | разовая покупка | Призраки павших |
 | `com.ashandiron.fitnessrpg.win_crown` | разовая покупка | Королевский триумф |

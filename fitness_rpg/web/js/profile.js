@@ -28,8 +28,8 @@ export class Profile {
     this.id = data.id || newId();
     this.name = cleanName(data.name) || `Рыцарь-${this.id.slice(0, 4).toUpperCase()}`;
     this.best = { bosses: 0, level: 1, wave: 1, ...(data.best || {}) };
-    // выбранный облик: меч, эффект удара, оформление победы (null — стандартный)
-    this.style = { sword: null, hit: null, victory: null, ...(data.style || {}) };
+    // выбранный облик: меч, доспех, эффект удара, оформление победы (null — стандартный)
+    this.style = { sword: null, armor: null, hit: null, victory: null, ...(data.style || {}) };
   }
 
   /** Обновляет рекорд из текущего персонажа. true — если рекорд вырос. */

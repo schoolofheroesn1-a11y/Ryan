@@ -43,11 +43,12 @@ export function apiUrl(api) {
 }
 
 /** Снимок героя для боёв с ним: бот играет его снаряжением и характеристиками. */
-export function heroSnapshot(player, skin = null) {
+export function heroSnapshot(player, skin = null, outfit = null) {
   return {
     sword: player.sword,
     looks: player.owned.filter((k) => ["armor", "kingarmor", "amulet"].includes(k)),
     skin,
+    outfit,
     level: player.level,
     maxHp: player.maxHp,
     damage: player.damage,

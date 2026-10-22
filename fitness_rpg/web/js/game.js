@@ -36,8 +36,8 @@ function heroLook(owned) {
   if (owned.includes("kingarmor")) return amulet ? "king_amulet" : "king";
   return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
 }
-/** Префикс спрайтов героя: меч (или купленный облик меча skin) и облик по реликвиям. */
-const heroSprite = (sword, owned, skin = null) => `hero_${skin || sword}_${heroLook(owned)}`;
+/** Префикс спрайтов героя: меч (или купленный облик меча skin) и облик по реликвиям (или облик доспеха outfit). */
+const heroSprite = (sword, owned, skin = null, outfit = null) => `hero_${skin || sword}_${outfit || heroLook(owned)}`;
 
 // След удара для каждого меча
 const SLASH_TIME = 0.18;
@@ -323,6 +323,12 @@ class Game {
     return id ? COSMETIC[id].skin : null;
   }
 
+  /** Надетый облик доспеха из лавки (например, самурайский) или null. */
+  get outfit() {
+    const id = this.style("armor");
+    return id ? COSMETIC[id].outfit : null;
+  }
+
   /** Сохраняет рекорд и отправляет его в рейтинг (без сети — в очередь). */
   recordProgress() {
     if (this.profile.record(this.player)) {
@@ -334,7 +340,7 @@ class Game {
 
   /** Рекорд и характеристики героя — в аккаунт (для рейтинга и боёв с этим героем). Без сети — молча позже. */
   accountSync() {
-    if (this.online.loggedIn) this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin)).catch(() => {});
+    if (this.online.loggedIn) this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit)).catch(() => {});
   }
 
   /** Вход в аккаунт: имя из аккаунта, покупки и активированные коды — на этом устройстве. */
@@ -611,7 +617,7 @@ class TitleScene extends Scene {
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
-    const heroIdle = anim(`${heroSprite(p.sword, p.owned, this.game.skin)}_idle`, t, 1.5, 2);
+    const heroIdle = anim(`${heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
     this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
     const sx = 270, sy = GROUND_TITLE - 32;
@@ -751,7 +757,7 @@ class BonfireScene extends Scene {
     c.fill();
     if (this.game.portrait) return; // на телефоне вертикально костёр и рыцарь рисуются крупно рядом с панелями
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
-    const p = this.game.player, hs = heroSprite(p.sword, p.owned, this.game.skin);
+    const p = this.game.player, hs = heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, 168, GROUND_TITLE - hero.height);
     this.embers.draw(c);
@@ -824,7 +830,7 @@ class BonfireScene extends Scene {
     c.ellipse(x + 130, ground - 4, r, 18, 0, 0, Math.PI * 2);
     c.fill();
     c.imageSmoothingEnabled = false;
-    const hs = heroSprite(p.sword, p.owned, g.skin);
+    const hs = heroSprite(p.sword, p.owned, g.skin, g.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, x + 12, ground - hero.height * 3, hero.width * 3, hero.height * 3);
     const fire = anim("bonfire", t, 8, 4);
@@ -1365,7 +1371,7 @@ class BattleScene extends Scene {
 
     const p = this.game.player;
     const skin = this.game.skin;
-    const hero = heroSprite(p.sword, p.owned, skin); // меч (или его облик) и облик по реликвиям
+    const hero = heroSprite(p.sword, p.owned, skin, this.game.outfit); // меч (или его облик) и облик по реликвиям
     if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
     else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
@@ -1503,7 +1509,7 @@ function drawFlipped(c, spr, x, y) {
 
 /** Поза героя-соперника: тот же набор спрайтов, что у нашего героя. */
 function rivalSprite(en, t) {
-  const h = heroSprite(en.hero.sword, en.hero.looks || [], en.hero.skin);
+  const h = heroSprite(en.hero.sword, en.hero.looks || [], en.hero.skin, en.hero.outfit);
   if (en.state === "dead") return IMG[`${h}_dead_0`];
   if (en.flash > 0) return IMG[`${h}_hurt_0`];
   if (en.state === "windup") return IMG[`${h}_dodge_0`]; // пригнулся перед выпадом
@@ -1842,7 +1848,7 @@ class MultiplayerScene extends Scene {
     }
     const a = await promptAccount({ name: g.profile.name });
     if (!a) return;
-    const best = g.profile.best, hero = heroSnapshot(g.player, g.skin);
+    const best = g.profile.best, hero = heroSnapshot(g.player, g.skin, g.outfit);
     await this.run(async () => {
       const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero) : await o.login(a.login, a.password);
       g.onAccount(acc);
@@ -1857,7 +1863,7 @@ class MultiplayerScene extends Scene {
     if (raw == null) return;
     if (!g.profile.rename(raw)) return g.say("Такое имя не подходит");
     g.profile.save();
-    if (this.online.loggedIn) await this.run(() => this.online.sync(g.profile.best, heroSnapshot(g.player, g.skin), g.profile.name));
+    if (this.online.loggedIn) await this.run(() => this.online.sync(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit), g.profile.name));
     this.load();
   }
   challenge(row) {
@@ -1871,7 +1877,7 @@ class MultiplayerScene extends Scene {
   createRoom() {
     const g = this.game;
     this.run(async () => {
-      const r = await this.online.duelCreate(g.profile.best, heroSnapshot(g.player, g.skin));
+      const r = await this.online.duelCreate(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit));
       this.room = r.code;
       this.waitT = 0;
     });
@@ -1881,7 +1887,7 @@ class MultiplayerScene extends Scene {
     const code = await promptText({ title: "ВОЙТИ ПО КОДУ", text: "Код комнаты из 4 символов: его видит на экране создатель дуэли.", maxLength: 4, ok: "ВОЙТИ" });
     if (!code) return;
     this.run(async () => {
-      const r = await this.online.duelJoin(code.trim().toUpperCase(), g.profile.best, heroSnapshot(g.player, g.skin));
+      const r = await this.online.duelJoin(code.trim().toUpperCase(), g.profile.best, heroSnapshot(g.player, g.skin, g.outfit));
       g.change(new DuelScene(g, r));
     });
   }
@@ -2157,7 +2163,7 @@ class ShopScene extends Scene {
     const g = this.game, p = g.player, key = SHOP_ROWS[this.index];
     const sword = SWORDS[key] ? key : p.sword;
     const owned = RELICS[key] ? [...p.owned, key] : p.owned;
-    const hero = anim(`${heroSprite(sword, owned)}_idle`, g.time, 1.5, 2);
+    const hero = anim(`${heroSprite(sword, owned, null, g.outfit)}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, x, ground - hero.height * scale, hero.width * scale, hero.height * scale);
     if (key !== "back" && !p.owned.includes(key)) {
       g.text("ПРИМЕРКА", x + (hero.width * scale) / 2, ground - hero.height * scale - 20, g.portrait ? 16 : 8, "rgb(120,220,255)", "center");
@@ -2220,15 +2226,16 @@ class ShopScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Лавка образов (косметика за 1 $)
+const COS_KINDS = ["sword", "armor", "hit", "victory"];
 const COS_LAYOUT = (() => {
   const rows = [];
-  let y = 40;
-  for (const kind of ["sword", "hit", "victory"]) {
+  let y = 38;
+  for (const kind of COS_KINDS) {
     rows.push({ head: KIND_TITLES[kind], y });
-    y += 14;
+    y += 12;
     for (const item of COSMETICS.filter((c) => c.kind === kind)) {
-      rows.push({ item, rect: [12, y, 318, 30] });
-      y += 33;
+      rows.push({ item, rect: [12, y, 318, 26] });
+      y += 28;
     }
   }
   return rows;
@@ -2247,10 +2254,10 @@ function cosLayoutTall(g) {
   const back = [W - 216, bottom - 52, 200, 52], restore = [16, bottom - 52, W - 248, 52];
   const action = [16, bottom - 52 - 12 - 60, W - 32, 60];
   const top = GAME_H + 70, headH = 26, gap = 8, n = COS_ITEMS.length;
-  const h = Math.max(46, Math.min(84, Math.floor((action[1] - 16 - top - 3 * headH - gap * n) / n)));
+  const h = Math.max(40, Math.min(84, Math.floor((action[1] - 16 - top - COS_KINDS.length * headH - gap * n) / n)));
   const rows = [];
   let y = top;
-  for (const kind of ["sword", "hit", "victory"]) {
+  for (const kind of COS_KINDS) {
     rows.push({ head: KIND_TITLES[kind], y });
     y += headH;
     for (const item of COSMETICS.filter((c) => c.kind === kind)) {
@@ -2370,7 +2377,8 @@ class CosmeticsScene extends Scene {
     const g = this.game, p = g.player, c = this.pctx, t = g.time;
     c.imageSmoothingEnabled = false;
     c.drawImage(IMG.arena_bg, 60, 60, 144, 100, 0, 0, 144, 100);
-    const skin = this.previewSkin, hs = heroSprite(p.sword, p.owned, skin);
+    const skin = this.previewSkin, outfit = this.item.kind === "armor" ? this.item.outfit : g.outfit; // примерка доспеха
+    const hs = heroSprite(p.sword, p.owned, skin, outfit);
     const pose = this.attacking ? "attack" : "idle", hx = this.attacking ? 34 : 28;
     const dummy = this.dummyFlash > 0 ? IMG.skeleton_hurt_0 : IMG.skeleton_idle_0;
     c.drawImage(dummy, 96, 80 - dummy.height);
@@ -2435,12 +2443,12 @@ class CosmeticsScene extends Scene {
       }
       const ci = COS_ITEMS.indexOf(row), sel = ci === this.index, r = row.rect, c = row.item;
       g.button(r, "", { selected: sel });
-      g.rect([r[0] + 6, r[1] + 7, 4, 16], `rgb(${c.color.join(",")})`);
-      g.text(c.name, r[0] + 16, r[1] + 6, 8, sel ? COL.gold : COL.text);
-      g.text(c.desc, r[0] + 16, r[1] + 18, 8, COL.dim);
+      g.rect([r[0] + 6, r[1] + 5, 4, 16], `rgb(${c.color.join(",")})`);
+      g.text(c.name, r[0] + 16, r[1] + 4, 8, sel ? COL.gold : COL.text);
+      g.text(c.desc, r[0] + 16, r[1] + 15, 8, COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
       const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : g.store.price(c.id);
-      g.text(status, r[0] + r[2] - 8, r[1] + 11, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
+      g.text(status, r[0] + r[2] - 8, r[1] + 9, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     this.drawPreview();
     const [x, y, w, h] = COS_PREVIEW;
@@ -2523,7 +2531,7 @@ class LeaderboardScene extends Scene {
     const g = this.game, b = g.profile.best, r = this.res;
     g.text("РЕЙТИНГ", W / 2, 24, 40, COL.gold, "center");
     g.text("по побеждённым боссам, затем по уровню", W / 2, 76, 12, COL.dim, "center");
-    const hs = heroSprite(g.player.sword, g.player.owned, g.skin), hero = anim(`${hs}_idle`, g.time, 1.5, 2);
+    const hs = heroSprite(g.player.sword, g.player.owned, g.skin, g.outfit), hero = anim(`${hs}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, 28, 324 - hero.height * 4, hero.width * 4, hero.height * 4); // рыцарь у карточки игрока
     const cx = 136, cw = W - 16 - cx, mid = cx + cw / 2;
     g.rect([cx, 120, cw, 200], "rgba(10,6,14,0.8)");

@@ -94,6 +94,7 @@ function int_in($v, $min, $max, $def) {
 const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'barbell'];
 const RELICS = ['armor', 'kingarmor', 'amulet'];
 const SKINS = ['void', 'sun', 'frost'];
+const OUTFITS = ['samurai'];
 
 /** Характеристики героя для боёв с ним (бот играет его снаряжением и силой). */
 function clean_hero($h) {
@@ -104,6 +105,7 @@ function clean_hero($h) {
         'sword' => (isset($h['sword']) && in_array($h['sword'], SWORDS, true)) ? $h['sword'] : 'rusty',
         'looks' => array_values(array_unique($looks)),
         'skin' => (isset($h['skin']) && in_array($h['skin'], SKINS, true)) ? $h['skin'] : null,
+        'outfit' => (isset($h['outfit']) && in_array($h['outfit'], OUTFITS, true)) ? $h['outfit'] : null,
         'level' => int_in(isset($h['level']) ? $h['level'] : 1, 1, 2000, 1),
         'maxHp' => int_in(isset($h['maxHp']) ? $h['maxHp'] : 92, 50, 3000, 92),
         'damage' => int_in(isset($h['damage']) ? $h['damage'] : 13, 1, 600, 13),
