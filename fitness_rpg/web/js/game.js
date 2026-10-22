@@ -9,7 +9,7 @@ import {
 } from "./gear.js";
 import { Player, STATS } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
-import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
+import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
 import { Store, TIPS } from "./store.js";
@@ -559,6 +559,7 @@ class TitleScene extends Scene {
       ["Новая игра", () => this.newGame()],
     ];
     this.aura = new SwordAura();
+    this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.confirmT = 0;
     this.ownsPanel = true; // в портрете меню занимает место панели камеры
   }
@@ -605,6 +606,7 @@ class TitleScene extends Scene {
   update(dt) {
     this.embers.update(dt);
     this.aura.update(dt, this.game.skin, "idle", 172, GROUND_TITLE - 32);
+    this.outfitFx.update(dt, this.game.outfit, 172, GROUND_TITLE - 32);
     this.confirmT -= dt;
   }
   draw(c) {
@@ -620,6 +622,7 @@ class TitleScene extends Scene {
     const heroIdle = anim(`${heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
     this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
+    this.outfitFx.draw(c);
     const sx = 270, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
     if (Math.floor(t * 1.3) % 5 !== 0) {
@@ -995,6 +998,7 @@ class BattleScene extends Scene {
     this.slashT = 0;
     this.bladeEmbers = new Particles(0, 0, 14, 2);
     this.aura = new SwordAura();
+    this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.hitFx = new HitFx();
     this.victory = null;
   }
@@ -1039,6 +1043,7 @@ class BattleScene extends Scene {
       this.action = "attack";
       this.actionT = 0.35;
       this.slashT = SLASH_TIME;
+      this.outfitFx.burst(this.game.outfit, this.HERO_X + 44, GROUND_ARENA - 19);
       const crit = en.state === "recover";
       let dmg = p.damage;
       if (crit) dmg = Math.floor(dmg * p.critMult);
@@ -1206,6 +1211,7 @@ class BattleScene extends Scene {
     this.hurtT = Math.max(0, this.hurtT - dt);
     const [hx, hy, pose] = this.heroPose();
     this.aura.update(dt, this.game.skin, pose, hx, hy);
+    this.outfitFx.update(dt, this.game.outfit, hx, hy);
     this.hitFx.update(dt);
     if (en.kind === "wraith") this.updateGhosts(dt);
     if (this.result) {
@@ -1385,6 +1391,7 @@ class BattleScene extends Scene {
     c.drawImage(spr, hx, GROUND_ARENA - spr.height);
     const [, hy, pose] = this.heroPose();
     this.aura.draw(c, skin, pose, hx, hy, t);
+    this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
     this.hitFx.draw(c);
     if ((p.sword === "ash" || p.sword === "radiator") && !skin) { // раскалённый клинок искрит
@@ -1734,6 +1741,7 @@ class DuelScene extends BattleScene {
         this.action = "attack";
         this.actionT = 0.35;
         this.slashT = SLASH_TIME;
+        this.outfitFx.burst(this.game.outfit, this.HERO_X + 44, GROUND_ARENA - 19);
       }
     }
     const target = en.state === "attack" ? this.HERO_X + 30 : en.homeX;
@@ -2282,6 +2290,7 @@ class CosmeticsScene extends Scene {
     this.vc.width = W;
     this.vc.height = GAME_H;
     this.aura = new SwordAura();
+    this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.hitFx = new HitFx();
     this.demoT = 0;
     this.msgT = 0;
@@ -2353,16 +2362,22 @@ class CosmeticsScene extends Scene {
       this.slashT = SLASH_TIME;
       const hit = this.item.kind === "hit" ? this.item.id : this.game.style("hit");
       if (hit) this.hitFx.spawn(hit, 108, 64);
+      this.outfitFx.burst(this.previewOutfit, 72, 61);
       this.dummyFlash = 0.15;
     }
     this.slashT = Math.max(0, (this.slashT || 0) - dt);
     this.dummyFlash = Math.max(0, (this.dummyFlash || 0) - dt);
     this.aura.update(dt, this.previewSkin, this.attacking ? "attack" : "idle", this.attacking ? 34 : 28, 48);
+    this.outfitFx.update(dt, this.previewOutfit, 28, 48);
     this.hitFx.update(dt);
     if (this.victory) {
       this.victory.update(dt);
       if (this.victory.t > 4.5) this.victory = new VictoryFx(this.item.id);
     }
+  }
+  /** Облик доспеха в превью: выбранный в списке (примерка) или надетый. */
+  get previewOutfit() {
+    return this.item.kind === "armor" ? this.item.outfit : this.game.outfit;
   }
   /** Облик меча в превью: выбранный в списке (примерка) или надетый. */
   get previewSkin() {
@@ -2377,7 +2392,7 @@ class CosmeticsScene extends Scene {
     const g = this.game, p = g.player, c = this.pctx, t = g.time;
     c.imageSmoothingEnabled = false;
     c.drawImage(IMG.arena_bg, 60, 60, 144, 100, 0, 0, 144, 100);
-    const skin = this.previewSkin, outfit = this.item.kind === "armor" ? this.item.outfit : g.outfit; // примерка доспеха
+    const skin = this.previewSkin, outfit = this.previewOutfit; // примерка доспеха
     const hs = heroSprite(p.sword, p.owned, skin, outfit);
     const pose = this.attacking ? "attack" : "idle", hx = this.attacking ? 34 : 28;
     const dummy = this.dummyFlash > 0 ? IMG.skeleton_hurt_0 : IMG.skeleton_idle_0;
@@ -2385,6 +2400,7 @@ class CosmeticsScene extends Scene {
     const heroSpr = this.attacking ? IMG[`${hs}_attack_0`] : anim(`${hs}_idle`, t, 1.5, 2);
     c.drawImage(heroSpr, hx, 80 - heroSpr.height);
     this.aura.draw(c, skin, pose, hx, 48, t);
+    this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, 61, p.sword, 1 - this.slashT / SLASH_TIME, skin);
     this.hitFx.draw(c);
     const [x, y, w, h] = this.layout().preview;

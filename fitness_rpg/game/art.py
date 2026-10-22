@@ -742,8 +742,8 @@ def _body_rows(rows, width, look):
     if look == "samurai":
         for y in range(0, 5):  # кабуто — чёрный лак
             rows[y] = rows[y].replace("s", "a").replace("l", "A").replace("w", "h")
-        for x, y in ((7, 1), (7, 2), (8, 0), (18, 1), (18, 2), (17, 0), (12, 0), (13, 0)):  # рога кувагата и герб
-            _put(rows, x, y, "g")
+        for x in (12, 14):  # глаза горят в прорезях маски
+            _put(rows, x, 6, "e")
         for x in (7, 18):  # отогнутые края шлема фукигаэси
             _put(rows, x, 5, "g")
         for y in (6, 7, 8):  # широкий назатыльник сикоро
@@ -788,7 +788,8 @@ def compose_hero(sword, look, pose):
         width = max(width, ATTACK_GRIP[0] - SWORD_GRIP + len(blade_map))  # длинный клинок не обрезается
     body = sprite_from_map(_body_rows(HERO_ATTACK if attack else HERO_IDLE, width, look), palette)
     if sword == "giant" and not attack:
-        return _giant_on_shoulder(body, blade_map)
+        surf = _giant_on_shoulder(body, blade_map)
+        return _samurai_dress(surf) if look == "samurai" else surf
     if attack:
         blade = sprite_from_map(_rotate_ccw(blade_map), SWORD_PALETTE)
         gx, gy = ATTACK_GRIP
@@ -800,7 +801,55 @@ def compose_hero(sword, look, pose):
     surf = pygame.Surface((width, 32), pygame.SRCALPHA)
     surf.blit(blade, pos)
     surf.blit(body, (0, 0))
-    return surf
+    return _samurai_dress(surf) if look == "samurai" else surf
+
+
+SAMURAI_LIFT = 11  # над шлемом: рога кувагата и знамя сасимоно
+
+
+def _samurai_dress(surf):
+    """Доспех самурая: знамя сасимоно за спиной (только там, где пусто) и большие золотые рога над шлемом."""
+    w, h = surf.get_size()
+    out = pygame.Surface((w, h + SAMURAI_LIFT), pygame.SRCALPHA)
+    out.blit(surf, (0, SAMURAI_LIFT))
+    top = h + SAMURAI_LIFT - 32  # где теперь макушка тела (у гигантского меча холст выше)
+
+    def px(x, y, col, behind=False):
+        yy = top + y
+        if 0 <= x < w and 0 <= yy < h + SAMURAI_LIFT and (not behind or out.get_at((x, yy)).a == 0):
+            out.set_at((x, yy), col)
+
+    k, pole = (16, 12, 22), (70, 48, 34)
+    crim, crim_d, white, gold, gold_d, gold_l = (196, 32, 40), (128, 18, 26), (244, 238, 222), (236, 188, 64), (150, 104, 30), (255, 236, 150)
+    for y in range(-11, 12):  # древко за спиной
+        px(6, y, pole, True)
+        px(7, y, k, True)
+    for x in range(0, 7):  # перекладина и флаг
+        px(x, -11, k, True)
+    for y in range(-10, -1):
+        px(0, y, k, True)
+        for x in range(1, 6):
+            px(x, y, crim_d if x == 5 or y == -2 else crim, True)
+    for x in range(0, 6):
+        px(x, -1, k, True)
+    for x, y in ((2, -8), (3, -8), (1, -7), (4, -7), (1, -6), (4, -6), (2, -5), (3, -5)):  # герб-мон: белое кольцо
+        px(x, y, white)  # флаг уже нарисован — герб поверх него
+    for x, y in ((2, -7), (3, -7), (2, -6), (3, -6)):  # с золотым солнцем внутри
+        px(x, y, gold)
+    # рога кувагата: широкая золотая «V» с тенью и бликами на концах
+    horn = [(10, 0), (9, -1), (9, -2), (8, -3), (8, -4), (7, -5), (7, -6)]
+    for x, y in horn:
+        px(x, y, gold)
+        px(x - 1, y, gold_d)
+        px(25 - x, y, gold)
+        px(26 - x, y, gold_d)
+    for x, y in ((7, -7), (18, -7)):
+        px(x, y, gold_l)
+    for x, y in ((12, 0), (13, 0), (12, -1), (13, -1)):  # маэдатэ: красное солнце в золотой оправе
+        px(x, y, crim)
+    for x, y in ((11, 0), (14, 0), (11, -1), (14, -1), (12, -2), (13, -2)):
+        px(x, y, gold)
+    return out
 
 
 def _giant_on_shoulder(body, blade_map):

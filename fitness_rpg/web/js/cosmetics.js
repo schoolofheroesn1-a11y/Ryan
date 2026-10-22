@@ -5,7 +5,7 @@ export const COSMETICS = [
   { id: "sword_void", kind: "sword", skin: "void", name: "Клинок Бездны", desc: "обсидиан, живые руны, шлейф тьмы", color: [180, 90, 255] },
   { id: "sword_sun", kind: "sword", skin: "sun", name: "Клинок Рассвета", desc: "золото, сияние и искры", color: [255, 214, 96] },
   { id: "sword_frost", kind: "sword", skin: "frost", name: "Ледяной Клык", desc: "кристалл, иней и снегопад", color: [150, 220, 255] },
-  { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "алый лак, кабуто с рогами, маска", color: [226, 64, 52] },
+  { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "золотые рога, знамя, вихрь сакуры", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
   { id: "hit_souls", kind: "hit", name: "Призраки павших", desc: "души вырываются из врага", color: [190, 170, 255] },
   { id: "win_crown", kind: "victory", name: "Королевский триумф", desc: "корона, лучи и золото", color: [255, 200, 90] },
@@ -427,5 +427,57 @@ export class VictoryFx {
     ctx.clip();
     text(ctx, s, 320, y, size, `rgb(${shine.join(",")})`, "center", false);
     ctx.restore();
+  }
+}
+
+// ------------------------------------------------------------------ Облик доспеха: лепестки сакуры
+const SAKURA = [[255, 183, 197], [255, 140, 170], [255, 222, 232], [236, 96, 130]];
+
+/** Доспех самурая: вокруг героя кружат лепестки сакуры, удар выпускает их вихрем из клинка. */
+export class OutfitFx {
+  constructor() {
+    this.parts = [];
+    this.acc = 0;
+  }
+
+  spawn(x, y, vx, vy, life = rand(1.6, 2.6)) {
+    const col = SAKURA[Math.floor(Math.random() * SAKURA.length)];
+    this.parts.push({ x, y, vx, vy, t: 0, f: rand(2, 4), ph: rand(0, 6), life, col });
+  }
+
+  /** hx, hy — верхний левый угол тела героя 24×32 (как у SwordAura). */
+  update(dt, outfit, hx, hy) {
+    for (const p of this.parts) {
+      p.t += dt;
+      p.x += (p.vx + Math.sin(p.t * p.f + p.ph) * 10) * dt; // лепесток качается на ветру
+      p.y += p.vy * dt;
+      p.vx *= 1 - Math.min(1, dt * 1.5);
+      p.vy = Math.min(p.vy + 14 * dt, 14);
+      p.life -= dt;
+    }
+    this.parts = this.parts.filter((p) => p.life > 0);
+    if (outfit !== "samurai") return;
+    this.acc += dt * 5;
+    while (this.acc >= 1) {
+      this.acc -= 1;
+      this.spawn(hx + rand(-12, 34), hy + rand(-18, 2), rand(-6, 2), rand(3, 8));
+    }
+  }
+
+  /** Удар: вихрь лепестков из клинка. */
+  burst(outfit, x, y) {
+    if (outfit !== "samurai") return;
+    for (let i = 0; i < 16; i++) {
+      const a = rand(-1.3, 1.1), v = rand(18, 48);
+      this.spawn(x, y, Math.cos(a) * v, Math.sin(a) * v - 8, rand(0.7, 1.4));
+    }
+  }
+
+  draw(c) {
+    for (const p of this.parts) {
+      c.fillStyle = rgba(p.col, Math.min(1, p.life / 0.5));
+      const flat = Math.sin(p.t * 8 + p.ph) > 0; // лепесток поворачивается: то плашмя, то ребром
+      c.fillRect(Math.round(p.x), Math.round(p.y), flat ? 2 : 1, flat ? 1 : 2);
+    }
   }
 }

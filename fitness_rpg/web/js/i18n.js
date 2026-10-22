@@ -73,7 +73,7 @@ const EN = {
   "Костёр: прокачка": "Bonfire: level up",
   "Лавка образов": "Cosmetics shop",
   "Рейтинг": "Leaderboard",
-  "алый лак, кабуто с рогами, маска": "red lacquer, horned kabuto, mask",
+  "золотые рога, знамя, вихрь сакуры": "golden horns, war banner, sakura storm",
   "Доспех самурая": "Samurai armor",
   "ОБЛИК ДОСПЕХА": "ARMOR LOOK",
   "НУЖЕН КОД": "CODE NEEDED",
