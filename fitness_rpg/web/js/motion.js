@@ -25,7 +25,10 @@ async function exists(url) {
 
 async function loadVision() {
   try {
-    return { vision: await import(LOCAL_BASE + "vision_bundle.mjs"), wasm: LOCAL_WASM };
+    const vision = await import(LOCAL_BASE + "vision_bundle.mjs");
+    // крупные wasm-файлы хостинг мог не принять — тогда берём их с CDN
+    const wasm = (await exists(`${LOCAL_WASM}/vision_wasm_internal.wasm`)) ? LOCAL_WASM : CDN_BASE + "wasm";
+    return { vision, wasm };
   } catch (e) {
     return { vision: await import(CDN_BASE + "vision_bundle.mjs"), wasm: CDN_BASE + "wasm" };
   }
