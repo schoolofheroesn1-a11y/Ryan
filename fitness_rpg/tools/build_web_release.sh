@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 OUT=dist/site-tree
 rm -rf "$OUT" dist/ash-and-iron-web dist/ash-and-iron-web.zip
 mkdir -p "$OUT/vendor/tasks-vision/wasm"
-cp web/index.html web/style.css web/manifest.webmanifest web/sw.js "$OUT/"
+cp web/index.html web/style.css web/manifest.webmanifest web/sw.js web/og_image.png web/robots.txt web/sitemap.xml "$OUT/"
 cp -r web/js web/assets web/fonts "$OUT/"
 cp web/vendor/pose_landmarker_lite.task "$OUT/vendor/"
 cp web/vendor/tasks-vision/vision_bundle.mjs "$OUT/vendor/tasks-vision/"
