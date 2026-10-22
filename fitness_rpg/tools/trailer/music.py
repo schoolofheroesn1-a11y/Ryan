@@ -180,6 +180,63 @@ def build_promo(dur, drop=2.0, bpm=150):
     return m
 
 
+def taiko(freq=62, dur=0.5):
+    """Большой барабан тайко: низкий тон с падением высоты и шлепок по коже."""
+    body = sine_sweep(freq * 1.6, freq, dur) * env(int(SR * dur), 0.002, dur * 0.3)
+    skin = lp(noise(0.06), 0.3) * env(int(SR * 0.06), 0.0005, 0.02)
+    return body + 0.6 * np.pad(skin, (0, len(body) - len(skin)))
+
+
+def saw(freq, dur):
+    t = t_(dur)
+    return 2 * ((t * freq) % 1.0) - 1
+
+
+def build_epic(dur, drop=1.2, bpm=140):
+    """Второй трек: эпичные тайко, ре минор (Dm–B♭–F–C), рычащий бас и цепляющий мотив."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + SR)
+    prog = [("D", ["D", "F", "A"]), ("A#", ["A#", "D", "F"]), ("F", ["F", "A", "C"]), ("C", ["C", "E", "G"])]
+    motif = [("D", 5), ("F", 5), ("A", 5), ("G", 5), ("F", 5), ("E", 5), ("D", 5), ("A", 4)]  # мотив на 2 такта
+    big, small = taiko(58, 0.6), taiko(96, 0.35)
+    # вступление: три удара тайко с нарастанием
+    for k, g in ((0, 1.0), (beat, 0.8), (2 * beat, 0.9)):
+        mix_at(m, big, k, g)
+    mix_at(m, hp(noise(drop)) * np.linspace(0, 1, int(SR * drop)) ** 2, 0, 0.18)
+    end = dur - 1.8
+    n = int((end - drop) / beat)
+    for b in range(n):
+        t = drop + b * beat
+        root, chord = prog[(b // 4) % 4]
+        mix_at(m, big if b % 2 == 0 else small, t, 0.9 if b % 4 == 0 else 0.6)
+        if b % 2 == 1:
+            mix_at(m, SNARE, t, 0.55)  # хлопок на 2 и 4
+        for k in range(2):
+            mix_at(m, HAT, t + k * beat / 2, 0.14)
+        # бас: восьмые, пила с перегрузом
+        for k in range(2):
+            note = np.tanh(3 * lp(saw(hz(root, 2), beat / 2 * 0.85), 0.2)) * env(int(SR * beat / 2 * 0.85), 0.003, 0.15)
+            mix_at(m, note, t + k * beat / 2, 0.32)
+        # мотив: восьмые, квадрат + октава
+        name, octv = motif[(b * 2) % len(motif)]
+        for k in range(2):
+            nm, oc = motif[(b * 2 + k) % len(motif)]
+            f = hz(nm, oc)
+            note = (square(f, beat / 2 * 0.8, 0.25) + 0.4 * square(f * 2, beat / 2 * 0.8, 0.5)) * env(int(SR * beat / 2 * 0.8), 0.002, 0.08)
+            mix_at(m, note, t + k * beat / 2, 0.075)
+        if b % 8 == 7:  # заполнение тайко в конце фразы
+            for k in range(4):
+                mix_at(m, small, t + k * beat / 4, 0.4 + 0.1 * k)
+    mix_at(m, CRASH, drop, 0.5)
+    # финал: удар, аккорд ре минор и затухание
+    tail = dur - end
+    pad = sum(saw(hz(nn, o) * (1 + det), tail) for nn, o in (("D", 3), ("A", 3), ("D", 4), ("F", 4)) for det in (0, 0.005))
+    mix_at(m, lp(pad / 8, 0.06) * np.linspace(1, 0, int(SR * tail)) ** 1.6, end, 0.6)
+    mix_at(m, big, end, 1.0)
+    mix_at(m, CRASH, end, 0.45)
+    return m
+
+
 def sfx(kind):
     if kind == "thunder":  # молния «Гнева грозы»: треск и низкий раскат
         crack = hp(noise(0.5), 0.6) * env(int(SR * 0.5), 0.001, 0.12)
@@ -241,7 +298,13 @@ SFX_GAIN = {"thunder": 0.55, "hit": 0.5, "alert": 0.5, "dodge": 0.45, "heal": 0.
 def main(out, events_path):
     spec = json.load(open(events_path, encoding="utf-8"))
     dur = spec["duration"]
-    mus = build_promo(dur, spec.get("drop", 2.0)) if spec.get("style") == "promo" else build_music(dur)
+    style = spec.get("style")
+    if style == "epic":
+        mus = build_epic(dur, spec.get("drop", 1.2))
+    elif style == "promo":
+        mus = build_promo(dur, spec.get("drop", 2.0))
+    else:
+        mus = build_music(dur)
     fx = np.zeros_like(mus)
     for t, kind in spec["events"]:
         mix_at(fx, sfx(kind), t, SFX_GAIN[kind])
