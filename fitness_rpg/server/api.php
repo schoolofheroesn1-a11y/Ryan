@@ -23,6 +23,8 @@ const BOTS = 30;
 const SESSION_DAYS = 180;
 const ROOM_TTL = 1800;          // комната дуэли живёт полчаса
 const ROOM_IDLE = 20;           // соперник «вышел», если не отвечает 20 с
+const REF_ITEM = 'sword_kin';   // облик за приглашённого друга (обоим: и пригласившему, и другу)
+const REF_BOSSES = 1;           // награда — когда приглашённый победит первого босса (защита от пустых аккаунтов)
 
 function reply($data, $code = 200) {
     http_response_code($code);
@@ -51,6 +53,13 @@ try {
         bosses INT NOT NULL DEFAULT 0, level INT NOT NULL DEFAULT 1, wave INT NOT NULL DEFAULT 1,
         hero TEXT NULL, unlocks TEXT NULL, arena_pos INT NOT NULL,
         att_day CHAR(10) NULL, att_used INT NOT NULL DEFAULT 0, created INT NOT NULL)$cs");
+    try { // приглашения друзей: столбцы добавляются к уже созданной таблице
+        $db->query('SELECT invite_code FROM mp_accounts LIMIT 0');
+    } catch (Exception $e) {
+        foreach (['invite_code VARCHAR(8) NULL', 'invited_by CHAR(16) NULL', 'ref_done INT NOT NULL DEFAULT 0'] as $col) {
+            try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
+        }
+    }
     $db->exec("CREATE TABLE IF NOT EXISTS mp_sessions (token_hash CHAR(64) PRIMARY KEY, account_id CHAR(16) NOT NULL, created INT NOT NULL)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_fights (id CHAR(16) PRIMARY KEY, account_id CHAR(16) NOT NULL, opp_id CHAR(16) NOT NULL, created INT NOT NULL, done INT NOT NULL DEFAULT 0)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_hits (ip_hash CHAR(64) NOT NULL, kind VARCHAR(8) NOT NULL, t INT NOT NULL)$cs");
@@ -93,7 +102,7 @@ function int_in($v, $min, $max, $def) {
 
 const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'barbell'];
 const RELICS = ['armor', 'kingarmor', 'amulet'];
-const SKINS = ['void', 'sun', 'frost', 'phoenix'];
+const SKINS = ['void', 'sun', 'frost', 'phoenix', 'kin'];
 const OUTFITS = ['samurai'];
 
 /** Характеристики героя для боёв с ним (бот играет его снаряжением и силой). */
@@ -162,8 +171,47 @@ function need_account($in) {
     return $a;
 }
 
+const INVITE_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** Уникальный код приглашения аккаунта (создаётся при первом запросе). */
+function invite_code($a) {
+    global $db;
+    if (!empty($a['invite_code'])) return $a['invite_code'];
+    for ($try = 0; $try < 20; $try++) {
+        $code = '';
+        for ($i = 0; $i < 6; $i++) $code .= INVITE_ABC[random_int(0, strlen(INVITE_ABC) - 1)];
+        $q = $db->prepare('SELECT COUNT(*) FROM mp_accounts WHERE invite_code = ?');
+        $q->execute([$code]);
+        if ((int)$q->fetchColumn() === 0) {
+            $db->prepare('UPDATE mp_accounts SET invite_code = ? WHERE id = ?')->execute([$code, $a['id']]);
+            return $code;
+        }
+    }
+    return '';
+}
+
+function invite_info($a) {
+    global $db;
+    $q = $db->prepare('SELECT COUNT(*) AS n, COALESCE(SUM(ref_done), 0) AS done FROM mp_accounts WHERE invited_by = ?');
+    $q->execute([$a['id']]);
+    $r = $q->fetch();
+    return ['code' => invite_code($a), 'invited' => (int)$r['n'], 'done' => (int)$r['done'], 'reward' => REF_ITEM,
+        'need_bosses' => REF_BOSSES, 'by_friend' => !empty($a['invited_by']), 'friend_done' => (int)$a['ref_done'] === 1];
+}
+
+function grant_unlock($id, $item) {
+    global $db;
+    $a = reload($id);
+    if (!$a) return;
+    $u = json_decode($a['unlocks'] ?: '[]', true) ?: [];
+    if (in_array($item, $u, true)) return;
+    $u[] = $item;
+    $db->prepare('UPDATE mp_accounts SET unlocks = ? WHERE id = ?')->execute([json_encode($u), $id]);
+}
+
 function public_account($a) {
     return [
+        'invite' => invite_info($a),
         'id' => $a['id'], 'login' => $a['login'], 'name' => $a['name'],
         'best' => ['bosses' => (int)$a['bosses'], 'level' => (int)$a['level'], 'wave' => (int)$a['wave']],
         'unlocks' => json_decode($a['unlocks'] ?: '[]', true) ?: [],
@@ -194,6 +242,12 @@ function apply_sync($a, $in) {
     $hero = clean_hero(isset($in['hero']) ? $in['hero'] : null);
     $db->prepare('UPDATE mp_accounts SET bosses = ?, level = ?, wave = ?, hero = COALESCE(?, hero) WHERE id = ?')
         ->execute([$best[0], $best[1], $best[2], $hero ? json_encode($hero) : null, $a['id']]);
+    // приглашённый победил первого босса: облик получают он и тот, кто его пригласил
+    if (!empty($a['invited_by']) && (int)$a['ref_done'] === 0 && $best[0] >= REF_BOSSES) {
+        $db->prepare('UPDATE mp_accounts SET ref_done = 1 WHERE id = ?')->execute([$a['id']]);
+        grant_unlock($a['id'], REF_ITEM);
+        grant_unlock($a['invited_by'], REF_ITEM);
+    }
 }
 
 function reload($id) {
@@ -223,8 +277,16 @@ if ($action === 'register') {
     ensure_bots();
     $id = rid();
     $pos = (int)$db->query('SELECT COALESCE(MAX(arena_pos), 0) FROM mp_accounts')->fetchColumn() + 1; // новичок — в конец лестницы
-    $db->prepare('INSERT INTO mp_accounts (id, login, pass_hash, name, arena_pos, created) VALUES (?, ?, ?, ?, ?, ?)')
-        ->execute([$id, $login, password_hash($pass, PASSWORD_DEFAULT), $name, $pos, $now]);
+    $ref = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', isset($in['ref']) ? (string)$in['ref'] : ''));
+    $by = null;
+    if ($ref !== '') { // код друга: кто пригласил
+        $q = $db->prepare('SELECT id FROM mp_accounts WHERE invite_code = ? AND is_bot = 0');
+        $q->execute([$ref]);
+        $by = $q->fetchColumn() ?: null;
+        if (!$by) fail('bad ref');
+    }
+    $db->prepare('INSERT INTO mp_accounts (id, login, pass_hash, name, arena_pos, created, invited_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$id, $login, password_hash($pass, PASSWORD_DEFAULT), $name, $pos, $now, $by]);
     apply_sync(reload($id), $in);
     reply(['token' => new_session($id), 'account' => public_account(reload($id))]);
 }

@@ -17,7 +17,7 @@ import { loadJSON, saveJSON } from "./storage.js";
 import { isNative, keepAwake, openAppSettings, openUrl, restoreBackup, vibrate } from "./platform.js";
 import { LANGS, getLang, setLang, tf, tr } from "./i18n.js";
 import { choiceDialog, confirmDialog, modalOpen, promptAccount, promptName, promptText } from "./ui.js";
-import { Online, errorText, heroSnapshot } from "./online.js";
+import { Online, errorText, heroSnapshot, inviteLink, savedRef } from "./online.js";
 
 const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
@@ -357,14 +357,17 @@ class Game {
 
   /** Рекорд и характеристики героя — в аккаунт (для рейтинга и боёв с этим героем). Без сети — молча позже. */
   accountSync() {
-    if (this.online.loggedIn) this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit)).catch(() => {});
+    if (this.online.loggedIn) { // ответ сервера несёт и награды (например, облик за друга)
+      this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit)).then((r) => this.onAccount(r.account)).catch(() => {});
+    }
   }
 
   /** Вход в аккаунт: имя из аккаунта, покупки и активированные коды — на этом устройстве. */
   onAccount(acc) {
     if (!acc) return;
     if (acc.name && this.profile.rename(acc.name)) this.profile.save();
-    this.applyUnlocks(acc.unlocks || []);
+    const fresh = this.applyUnlocks(acc.unlocks || []);
+    if (fresh.length) this.say(tf("Новый облик: {name}! Наденьте в Лавке образов", { name: fresh.join(", ") }), 5);
   }
 
   /** Платный контент, открытый кодом: облики, эффекты и гриф. Возвращает названия новых вещей. */
@@ -1874,18 +1877,18 @@ class DuelScene extends BattleScene {
 }
 
 // ------------------------------------------------------------------ Мультиплеер: рейтинг, вызов, дуэль
-const MP_TABS = [["rating", "РЕЙТИНГ"], ["challenge", "ВЫЗОВ"], ["duel", "ДУЭЛЬ"]];
+const MP_TABS = [["rating", "РЕЙТИНГ"], ["challenge", "ВЫЗОВ"], ["duel", "ДУЭЛЬ"], ["friends", "ДРУЗЬЯ"]];
 
 /** Раскладка мультиплеера: альбомная или вертикальная во весь экран телефона (крупно, под палец). */
 function mpLayout(g) {
   const P = g.portrait;
-  const tabY = P ? 72 : 30, tabH = P ? 76 : 24, tw = (W - 24 - 16) / 3;
+  const tabY = P ? 72 : 30, tabH = P ? 76 : 24, tw = (W - 24 - 8 * (MP_TABS.length - 1)) / MP_TABS.length;
   const tabs = MP_TABS.map((_, i) => [12 + i * (tw + 8), tabY, tw, tabH]);
   const btnH = P ? 100 : 26, btnY = P ? g.H - btnH - 14 : 326;
   const top = P ? 236 : 88;
   return {
     P, tabs, btnY, btnH, top, fs: P ? 20 : 8, small: P ? 14 : 8, head: top - (P ? 30 : 16), info: P ? 162 : 54,
-    infoFs: P ? 14 : 8, tabFs: P ? 20 : 8, btnFs: P ? 20 : 8, title: P ? [20, 36] : [8, 16], bottom: btnY - (P ? 24 : 12),
+    infoFs: P ? 14 : 8, tabFs: P ? 16 : 8, btnFs: P ? 20 : 8, title: P ? [20, 36] : [8, 16], bottom: btnY - (P ? 24 : 12),
   };
 }
 
@@ -1952,6 +1955,7 @@ class MultiplayerScene extends Scene {
     if (!o.configured) return;
     if (this.tab === "rating") this.run(async () => (this.data.rating = await o.top()));
     if (this.tab === "challenge" && o.loggedIn) this.run(async () => (this.data.arena = await o.arena()));
+    if (this.tab === "friends" && o.loggedIn) this.run(async () => this.game.onAccount((await o.me()).account));
   }
   /** Вход или выход. Окно входа висит, пока вход не удался; «Отмена» — в главное меню. */
   async account() {
@@ -1965,9 +1969,10 @@ class MultiplayerScene extends Scene {
     const best = g.profile.best, hero = heroSnapshot(g.player, g.skin, g.outfit);
     const ok = await promptAccount({
       name: g.profile.name,
+      ref: savedRef(),
       submit: async (a) => {
         try {
-          const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero) : await o.login(a.login, a.password);
+          const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero, a.ref) : await o.login(a.login, a.password);
           g.onAccount(acc);
           g.accountSync();
           g.say(tf("Вы вошли как {name}", { name: acc.name }));
@@ -2034,7 +2039,7 @@ class MultiplayerScene extends Scene {
     const L = mpLayout(this.game), o = this.online;
     const acc = o.loggedIn ? "ВЫЙТИ" : "ВОЙТИ";
     if (this.tab === "rating") return bottomButtons(L, [acc, "ИМЯ", "ОБНОВИТЬ", "НАЗАД"]);
-    if (this.tab === "challenge") return bottomButtons(L, [acc, "ОБНОВИТЬ", "НАЗАД"]);
+    if (this.tab === "challenge" || this.tab === "friends") return bottomButtons(L, [acc, "ОБНОВИТЬ", "НАЗАД"]);
     return bottomButtons(L, [acc, "НАЗАД"]);
   }
   /** «Бросить вызов»: строки списка (окно вокруг игрока) и их высота. */
@@ -2051,6 +2056,26 @@ class MultiplayerScene extends Scene {
   challengeButton(L, i, step) {
     const bw = L.P ? 170 : 90;
     return [W - 14 - bw, L.top + i * step + 4, bw, step - 10];
+  }
+  friendButtons(L) {
+    const h = L.P ? 96 : 30, y = L.P ? L.top + 340 : L.top + 150, w = (W - 24 - 12) / 2;
+    return { copy: [12, y, w, h], share: [24 + w, y, w, h] };
+  }
+  /** Ссылка-приглашение: в буфер обмена или через «Поделиться» телефона. */
+  async invite(how) {
+    const g = this.game, inv = this.online.account && this.online.account.invite;
+    if (!inv || !inv.code) return;
+    const url = inviteLink(inv.code);
+    const text = tf("Тренируйся и сражайся со мной в Ash & Iron! Мой код друга: {code}", { code: inv.code });
+    try {
+      if (how === "share" && navigator.share) await navigator.share({ title: "Ash & Iron", text, url });
+      else {
+        await navigator.clipboard.writeText(`${text} ${url}`);
+        g.say("Ссылка-приглашение скопирована", 3);
+      }
+    } catch (e) {
+      if (!(e && e.name === "AbortError")) g.say(tf("Ваш код друга: {code}", { code: inv.code }), 5);
+    }
   }
   duelButtons(L) {
     const h = L.P ? 120 : 34, w = W - 80, y = L.top + (L.P ? 300 : 96);
@@ -2073,6 +2098,11 @@ class MultiplayerScene extends Scene {
     if (this.tab === "challenge" && this.data.arena && this.data.arena.attempts > 0) {
       const v = this.arenaView(L);
       v.rows.forEach((row, i) => { if (row.can && g.tapped(this.challengeButton(L, i, v.step))) this.challenge(row); });
+    }
+    if (this.tab === "friends") {
+      const b = this.friendButtons(L);
+      if (g.tapped(b.copy)) { sfx.click(); this.invite("copy"); }
+      if (g.tapped(b.share)) { sfx.click(); this.invite("share"); }
     }
     if (this.tab === "duel") {
       const b = this.duelButtons(L);
@@ -2114,6 +2144,7 @@ class MultiplayerScene extends Scene {
     if (o.configured) {
       if (this.tab === "rating") this.drawRating(L);
       else if (this.tab === "challenge") this.drawChallenge(L);
+      else if (this.tab === "friends") this.drawFriends(L);
       else this.drawDuel(L);
     }
     for (const [r, label] of this.buttons()) g.button(r, label, { size: L.btnFs });
@@ -2198,6 +2229,44 @@ class MultiplayerScene extends Scene {
       g.button(b.create, "СОЗДАТЬ КОМНАТУ", { size: L.P ? 24 : 8, color: COL.gold });
       g.button(b.join, "ВОЙТИ ПО КОДУ", { size: L.P ? 24 : 8 });
     }
+  }
+  /** «Друзья»: свой код, ссылка, награда — «Клинок Побратима» на своём герое. */
+  drawFriends(L) {
+    const g = this.game, P = L.P, inv = this.online.account && this.online.account.invite;
+    if (!this.online.loggedIn) return this.drawLoginHint(L);
+    let y = L.top;
+    g.wrap("Пригласи друга — получите оба облик «Клинок Побратима». Его нельзя купить!", P ? 38 : 76)
+      .forEach((line, i) => g.text(line, W / 2, y + i * (P ? 26 : 12), P ? 16 : 8, COL.gold, "center"));
+    y += P ? 64 : 28;
+    // герой с наградой
+    const p = g.player, hs = heroSprite(p.sword, p.owned, "kin", g.outfit), spr = anim(`${hs}_idle`, g.time, 1.5, 2);
+    const k = P ? 5 : 2, hx = P ? 60 : 40, hy = y + (P ? 230 : 100) - spr.height * k;
+    g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
+    for (let i = 0; i < 2; i++) { // духи-побратимы кружат вокруг
+      const a = g.time * 2.4 + i * Math.PI, cx = hx + 12 * k + Math.cos(a) * 14 * k, cy = hy + 18 * k + Math.sin(a) * 6 * k;
+      g.rect([cx - k, cy - k, 2 * k, 2 * k], i ? "rgb(255,220,110)" : "rgb(120,255,220)");
+    }
+    const tx = P ? 260 : 120;
+    g.text("ТВОЙ КОД ДРУГА", tx, y + (P ? 10 : 4), P ? 14 : 8, COL.dim);
+    g.text(inv && inv.code ? inv.code : "...", tx, y + (P ? 40 : 18), P ? 48 : 24, "rgb(120,255,220)");
+    if (inv) {
+      g.text(tf("Пришло друзей: {n}", { n: inv.invited }), tx, y + (P ? 120 : 52), P ? 16 : 8, COL.text);
+      g.text(tf("Победили босса: {n}", { n: inv.done }), tx, y + (P ? 150 : 66), P ? 16 : 8, inv.done ? "rgb(120,220,120)" : COL.text);
+      if (inv.by_friend) {
+        const t = inv.friend_done ? "Вас пригласил друг: облик уже получен" : "Вас пригласил друг: победите первого босса — облик получите вы оба";
+        g.wrap(t, P ? 24 : 40).forEach((line, i) => g.text(line, tx, y + (P ? 186 : 82) + i * (P ? 20 : 10), P ? 12 : 8, "rgb(255,200,120)"));
+      }
+    }
+    const b = this.friendButtons(L);
+    g.button(b.copy, "СКОПИРОВАТЬ ССЫЛКУ", { size: P ? 16 : 8, color: COL.gold });
+    g.button(b.share, "ПОДЕЛИТЬСЯ", { size: P ? 16 : 8 });
+    const how = [
+      "1. Отправь другу ссылку или код.",
+      "2. Друг регистрируется: код подставится сам (или ввести вручную).",
+      "3. Друг побеждает первого босса — облик получаете вы оба.",
+    ];
+    let hy2 = b.copy[1] + b.copy[3] + (P ? 30 : 12);
+    for (const t of how) for (const line of g.wrap(t, P ? 42 : 80)) { g.text(line, 20, hy2, P ? 14 : 8, COL.dim); hy2 += P ? 24 : 11; }
   }
   drawLoginHint(L) {
     const g = this.game;
@@ -2382,8 +2451,8 @@ const COS_LAYOUT = (() => {
     rows.push({ head: KIND_TITLES[kind], y });
     y += 12;
     for (const item of COSMETICS.filter((c) => c.kind === kind)) {
-      rows.push({ item, rect: [12, y, 318, 24] });
-      y += 26;
+      rows.push({ item, rect: [12, y, 318, 22] });
+      y += 23;
     }
   }
   return rows;
@@ -2462,6 +2531,15 @@ class CosmeticsScene extends Scene {
   async action() {
     const g = this.game, it = this.item;
     if (this.busy) return;
+    if (it.invite && !g.store.owns(it.id)) { // облик за друга: купить нельзя — ведём во вкладку «Друзья»
+      const go = await choiceDialog({
+        title: "ОБЛИК ЗА ДРУГА",
+        text: tf("«{name}» нельзя купить: его получают за приглашённого друга. Друг регистрируется по вашему коду и побеждает первого босса — облик получаете вы оба.", { name: it.name }),
+        buttons: [[null, "ОТМЕНА"], ["go", "ПРИГЛАСИТЬ ДРУГА", true]],
+      });
+      if (go === "go") g.change(new MultiplayerScene(g, "friends"));
+      return;
+    }
     if (!g.store.owns(it.id)) {
       this.busy = true;
       const bought = await g.store.buy(it);
@@ -2584,11 +2662,11 @@ class CosmeticsScene extends Scene {
       g.text(c.name, r[0] + 28, r[1] + r[3] / 2 - 20, 16, sel ? COL.gold : COL.text);
       g.text(c.desc, r[0] + 28, r[1] + r[3] / 2 + 4, 12, COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
-      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : g.store.price(c.id);
+      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : g.store.price(c.id);
       g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 - 8, 16, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     const on = g.profile.style[it.kind] === it.id && owned;
-    const label = !owned ? `КУПИТЬ ЗА ${g.store.price(it.id)}` : on ? "СНЯТЬ" : "НАДЕТЬ";
+    const label = !owned ? (it.invite ? "ПОЛУЧИТЬ ЗА ДРУГА" : `КУПИТЬ ЗА ${g.store.price(it.id)}`) : on ? "СНЯТЬ" : "НАДЕТЬ";
     g.button(L.action, label, { selected: true, size: 24, color: owned ? COL.gold : "rgb(120,220,255)" });
     g.button(L.restore, "ВОССТАНОВИТЬ ПОКУПКИ", { size: 16 });
     g.button(L.back, "НАЗАД", { size: 16 });
@@ -2605,12 +2683,12 @@ class CosmeticsScene extends Scene {
       }
       const ci = COS_ITEMS.indexOf(row), sel = ci === this.index, r = row.rect, c = row.item;
       g.button(r, "", { selected: sel });
-      g.rect([r[0] + 6, r[1] + 4, 4, 16], `rgb(${c.color.join(",")})`);
-      g.text(c.name, r[0] + 16, r[1] + 3, 8, sel ? COL.gold : COL.text);
-      g.text(c.desc, r[0] + 16, r[1] + 14, 8, c.price ? "rgb(255,170,80)" : COL.dim);
+      g.rect([r[0] + 6, r[1] + 3, 4, 16], `rgb(${c.color.join(",")})`);
+      g.text(c.name, r[0] + 16, r[1] + 2, 8, sel ? COL.gold : COL.text);
+      g.text(c.desc, r[0] + 16, r[1] + 12, 8, c.price ? "rgb(255,170,80)" : c.invite ? "rgb(120,255,220)" : COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
-      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : g.store.price(c.id);
-      g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
+      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : g.store.price(c.id);
+      g.text(status, r[0] + r[2] - 8, r[1] + 7, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     this.drawPreview();
     const [x, y, w, h] = COS_PREVIEW;
@@ -2619,7 +2697,7 @@ class CosmeticsScene extends Scene {
     g.text("Только облик: сила героя не меняется", x, y + h + 38, 8, COL.dim);
     if (this.msgT > 0) g.text(this.message, x, y + h + 56, 8, COL.gold);
     const on = g.profile.style[it.kind] === it.id && owned;
-    const label = !owned ? `КУПИТЬ ЗА ${g.store.price(it.id)}` : on ? "СНЯТЬ" : "НАДЕТЬ";
+    const label = !owned ? (it.invite ? "ПОЛУЧИТЬ ЗА ДРУГА" : `КУПИТЬ ЗА ${g.store.price(it.id)}`) : on ? "СНЯТЬ" : "НАДЕТЬ";
     g.button(COS_ACTION, label, { selected: true, color: owned ? COL.gold : "rgb(120,220,255)" });
     g.button(COS_RESTORE, "ВОССТАНОВИТЬ ПОКУПКИ");
     g.button(COS_BACK, "НАЗАД");

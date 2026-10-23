@@ -5,6 +5,8 @@ export const COSMETICS = [
   { id: "sword_void", kind: "sword", skin: "void", name: "Клинок Бездны", desc: "обсидиан, живые руны, шлейф тьмы", color: [180, 90, 255] },
   { id: "sword_sun", kind: "sword", skin: "sun", name: "Клинок Рассвета", desc: "золото, сияние и искры", color: [255, 214, 96] },
   { id: "sword_frost", kind: "sword", skin: "frost", name: "Ледяной Клык", desc: "кристалл, иней и снегопад", color: [150, 220, 255] },
+  // только за приглашённого друга (invite: купить нельзя)
+  { id: "sword_kin", kind: "sword", skin: "kin", name: "Клинок Побратима", desc: "ДРУЗЬЯ: награда за друга", color: [90, 230, 200], invite: true },
   { id: "sword_phoenix", kind: "sword", skin: "phoenix", name: "Клинок Феникса", desc: "ЛЕГЕНДА: огонь и крылья феникса", color: [255, 140, 40], price: "3 $" },
   { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "золотые рога, знамя, вихрь сакуры", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
@@ -21,11 +23,12 @@ const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a
 // ------------------------------------------------------------------ Облик меча
 // Геометрия клинка на спрайте героя 32×32 (см. art.compose_hero): в стойке клинок вертикален
 // по x=20, в выпаде — горизонтален по y=13. Длины — по картам мечей в game/art.py.
-const BLADE_LEN = { void: 17, sun: 17, frost: 16, phoenix: 19 };
+const BLADE_LEN = { void: 17, sun: 17, frost: 16, phoenix: 19, kin: 18 };
 const SKIN = {
   void: { glow: [170, 80, 255], hi: [240, 200, 255], parts: [[190, 100, 255], [120, 50, 200], [50, 20, 80]] },
   sun: { glow: [255, 200, 80], hi: [255, 255, 230], parts: [[255, 240, 170], [255, 200, 80], [230, 130, 40]] },
   frost: { glow: [130, 210, 255], hi: [255, 255, 255], parts: [[255, 255, 255], [200, 235, 255], [140, 200, 255]] },
+  kin: { glow: [70, 230, 200], hi: [255, 240, 170], parts: [[120, 255, 220], [255, 220, 110], [60, 180, 160]] },
   phoenix: { glow: [255, 120, 40], hi: [255, 250, 222], parts: [[255, 230, 140], [255, 150, 40], [220, 60, 30]] },
 };
 
@@ -144,7 +147,7 @@ export class SwordAura {
         this.parts.push({ x: hx + 11 + rand(-14, 14), y: hy + rand(0, 10), vx: 0, vy: rand(-6, 2), life: 1.8, max: 1.8, feather: true, col: Math.random() < 0.5 ? [255, 180, 60] : [240, 90, 30] });
       }
     }
-    const rate = { void: 20, sun: 16, frost: 9, phoenix: 34 }[skin];
+    const rate = { void: 20, sun: 16, frost: 9, phoenix: 34, kin: 12 }[skin];
     this.acc += dt * rate;
     while (this.acc >= 1) {
       this.acc -= 1;
@@ -184,6 +187,19 @@ export class SwordAura {
         if (d < 2.5) {
           c.fillStyle = rgba(s.hi, 0.9 - d * 0.3);
           c.fillRect(pts[i][0], pts[i][1], 1, 1);
+        }
+      }
+      // два духа-побратима — бирюзовый и золотой — кружат вокруг клинка спиралью
+      if (skin === "kin") {
+        for (const [ph, col] of [[0, [120, 255, 220]], [Math.PI, [255, 220, 110]]]) {
+          const q = (t * 0.7 + ph / (2 * Math.PI)) % 1;
+          const [bx, by] = pts[Math.min(pts.length - 1, Math.floor(q * pts.length))];
+          const off = Math.round(Math.sin(t * 9 + ph) * 3);
+          const [x, y] = vertical ? [bx + off, by] : [bx, by + off];
+          c.fillStyle = rgba(col, 0.35);
+          c.fillRect(x - 1, y - 1, 3, 3);
+          c.fillStyle = rgba([255, 255, 255], 0.95);
+          c.fillRect(x, y, 1, 1);
         }
       }
       // руны Бездны вспыхивают по очереди

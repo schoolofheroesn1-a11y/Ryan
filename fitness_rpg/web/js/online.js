@@ -6,6 +6,15 @@ import { isIOS } from "./platform.js";
 import { loadJSON, saveJSON } from "./storage.js";
 
 const TOKEN_KEY = "ash-and-iron-token";
+const REF_KEY = "ash-and-iron-ref"; // код друга из ссылки ash-a-iron.com/?ref=КОД
+
+/** Ссылка-приглашение: код друга запоминается при первом заходе и подставляется при регистрации. */
+try {
+  const ref = new URLSearchParams(globalThis.location ? location.search : "").get("ref");
+  if (ref && /^[A-Za-z0-9]{4,10}$/.test(ref)) saveJSON(REF_KEY, ref.toUpperCase());
+} catch (e) { /* нет адреса страницы (тесты) */ }
+export const savedRef = () => loadJSON(REF_KEY, "") || "";
+export const inviteLink = (code) => `https://ash-a-iron.com/?ref=${code}`;
 const ACCOUNT_KEY = "ash-and-iron-account";
 const TIMEOUT_MS = 8000;
 
@@ -21,6 +30,7 @@ const ERRORS = {
   opponent: "Этот соперник уже не рядом с вами в списке",
   fight: "Бой не засчитан",
   "bad code": "Неверный код",
+  "bad ref": "Нет такого кода друга: проверьте или оставьте поле пустым",
   room: "Комната не найдена",
   "room full": "В комнате уже два игрока",
   "own room": "Это ваша комната: дайте код другу",
@@ -119,8 +129,8 @@ export class Online {
   }
 
   /** Результат и герой с этого устройства переносятся в новый аккаунт. */
-  async register(login, password, name, best, hero) {
-    const r = await this.call("register", { login, password, name, best, hero });
+  async register(login, password, name, best, hero, ref = "") {
+    const r = await this.call("register", { login, password, name, best, hero, ref });
     this.remember(r.token, r.account);
     return r.account;
   }

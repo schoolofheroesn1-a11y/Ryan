@@ -122,13 +122,14 @@ export function promptText({ title, text, value = "", ok = "OK", maxLength = 32,
  * Вход или регистрация. submit({mode, login, password, name}) => Promise<текст ошибки | null>.
  * Окно не закрывается, пока вход не удался (под полями — причина ошибки). true — вошли, false — отмена.
  */
-export function promptAccount({ name = "", submit }) {
+export function promptAccount({ name = "", ref = "", submit }) {
   return modal((box, close) => {
     box.appendChild(el("h2", null, "АККАУНТ"));
     box.appendChild(el("p", null, "Мультиплеер работает с аккаунтом: рейтинг, вызовы, дуэли и покупки сохраняются в нём и доступны на любом устройстве."));
     const login = input(box, { placeholder: "логин (латиница)", maxLength: 20 });
     const pass = input(box, { type: "password", placeholder: "пароль (от 6 символов)", maxLength: 72 });
     const nick = input(box, { value: name, placeholder: "имя в игре (для регистрации)", maxLength: 16, caps: "words" });
+    const friend = input(box, { value: ref, placeholder: "код друга (если есть)", maxLength: 10, caps: "characters" });
     const error = el("p", "modal-error");
     box.appendChild(error);
     box.appendChild(el("p", "modal-note", "Имя в игре видят другие игроки. Пароль никому не сообщайте."));
@@ -145,7 +146,7 @@ export function promptAccount({ name = "", submit }) {
       error.classList.remove("bad");
       let msg;
       try {
-        msg = await submit({ mode, login: login.value.trim(), password: pass.value, name: nick.value });
+        msg = await submit({ mode, login: login.value.trim(), password: pass.value, name: nick.value, ref: friend.value.trim() });
       } catch (e) {
         msg = "Нет связи с сервером";
       }
