@@ -49,8 +49,72 @@ def read_time(text):
     return max(2.4, 1.0 + len(text) / 14)
 
 
+# Чужие контакты в меню «Поделиться» (недавние чаты с аватарками) закрываются мозаикой.
+# Меню выезжает и раскрывается, поэтому строка ищется на каждом кадре по значку приложения слева от неё
+# (шаблон — кадр PRIVACY_T, где меню неподвижно). Ниже — сдвиг закрываемой области от левого верха значка.
+PRIVACY_T = 11.6
+PRIVACY_TEMPLATE = (52, 668, 92, 100)        # x, y, ширина, высота значка в исходной записи
+PRIVACY_BOX = (112, -14, 372, 172)           # x0, y0, x1, y1 относительно значка: аватарки и имена
+PRIVACY_RANGE = (10.8, 14.6)
+_track = {}
+
+
+def decode(path, t0, t1, scale=None):
+    vf = f"fps={FPS}" + (f",scale={scale}" if scale else "")
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}", "-i", path, "-vf", vf,
+                          "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, check=True).stdout
+    w, h = (SRC_W, SRC_H) if not scale else map(int, scale.split(":"))
+    n = len(raw) // (w * h)
+    return np.frombuffer(raw[: n * w * h], dtype=np.uint8).reshape(n, h, w).astype(np.float32)
+
+
+def track_contacts(path):
+    """Где строка контактов на каждом кадре (поиск значка по шаблону, в половинном размере)."""
+    from numpy.lib.stride_tricks import sliding_window_view
+    k = 2
+    tpl_frame = decode(path, PRIVACY_T, PRIVACY_T + 0.04, f"{SRC_W // k}:{SRC_H // k}")[0]
+    x, y, w, h = (v // k for v in PRIVACY_TEMPLATE)
+    tpl = tpl_frame[y:y + h, x:x + w]
+    tpl = (tpl - tpl.mean()) / (tpl.std() + 1e-6)
+    frames = decode(path, PRIVACY_RANGE[0], PRIVACY_RANGE[1], f"{SRC_W // k}:{SRC_H // k}")
+    for i, fr in enumerate(frames):
+        win = sliding_window_view(fr[:, :160], (h, w))[::2, ::2]  # значок — в левой части экрана
+        mu = win.mean(axis=(2, 3), keepdims=True)
+        sd = win.std(axis=(2, 3), keepdims=True) + 1e-6
+        score = (((win - mu) / sd) * tpl).mean(axis=(2, 3))
+        yy, xx = np.unravel_index(np.argmax(score), score.shape)
+        if score[yy, xx] > 0.6:
+            _track[round(PRIVACY_RANGE[0] + i / FPS, 3)] = (xx * 2 * k, yy * 2 * k)
+    return _track
+
+
+def hide_contacts(img, t):
+    """Мозаика поверх аватарок и имён, если в этот момент на экране меню «Поделиться»."""
+    if not _track:
+        return img
+    key = min(_track, key=lambda q: abs(q - t))
+    if abs(key - t) > 0.2:  # меню ещё выезжает или уже закрылось — с запасом по времени
+        return img
+    ix, iy = _track[key]
+    if t < min(_track):  # меню выезжает снизу: закрываем всё ниже найденной строки
+        iy, extra = iy, SRC_H
+    else:
+        extra = 0
+    sx, sy = VW / SRC_W, VH / SRC_H
+    x0, y0, x1, y1 = PRIVACY_BOX
+    box = (int((ix + x0) * sx), int((iy + y0) * sy), int((ix + x1) * sx), int((iy + y1 + extra) * sy))
+    box = (max(0, box[0]), max(0, box[1]), min(VW, box[2]), min(VH, box[3]))
+    if box[2] <= box[0] or box[3] <= box[1]:
+        return img
+    part = img.crop(box)
+    tiny = part.resize((max(1, part.width // 22), max(1, part.height // 22)), Image.BILINEAR)
+    img = img.copy()
+    img.paste(tiny.resize(part.size, Image.NEAREST).filter(ImageFilter.GaussianBlur(3)), box[:2])
+    return img
+
+
 def src_frames(path, t0, t1, speed):
-    """Кадры записи экрана (уже в размере VW×VH)."""
+    """Кадры записи экрана (уже в размере VW×VH), чужие контакты закрыты."""
     dur = (t1 - t0) / speed
     vf = f"setpts=PTS/{speed},fps={FPS},scale={VW}:{VH}:flags=lanczos" if speed != 1 else f"fps={FPS},scale={VW}:{VH}:flags=lanczos"
     cmd = ["ffmpeg", "-v", "error", "-ss", f"{t0:.3f}", "-t", f"{t1 - t0 + 0.2:.3f}", "-i", path, "-vf", vf,
@@ -58,7 +122,7 @@ def src_frames(path, t0, t1, speed):
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     size = VW * VH * 3
     n = min(len(raw) // size, max(1, round(dur * FPS)))
-    return [Image.frombytes("RGB", (VW, VH), raw[i * size:(i + 1) * size]) for i in range(n)]
+    return [hide_contacts(Image.frombytes("RGB", (VW, VH), raw[i * size:(i + 1) * size]), t0 + i * speed / FPS) for i in range(n)]
 
 
 def to_screen(x, y):
@@ -156,6 +220,7 @@ def main():
     a = ap.parse_args()
     pf = PixelFont(a.fonts)
     cv = Canvas(pf)
+    print("контакты найдены на кадрах:", len(track_contacts(a.video)))
     tmp = tempfile.mkdtemp()
     vid = os.path.join(tmp, "video.mp4")
     enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS),
