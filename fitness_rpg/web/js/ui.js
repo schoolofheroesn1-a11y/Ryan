@@ -118,21 +118,44 @@ export function promptText({ title, text, value = "", ok = "OK", maxLength = 32,
   });
 }
 
-/** Вход или регистрация. Возвращает {mode: "login"|"register", login, password, name} или null. */
-export function promptAccount({ name = "" } = {}) {
+/**
+ * Вход или регистрация. submit({mode, login, password, name}) => Promise<текст ошибки | null>.
+ * Окно не закрывается, пока вход не удался (под полями — причина ошибки). true — вошли, false — отмена.
+ */
+export function promptAccount({ name = "", submit }) {
   return modal((box, close) => {
     box.appendChild(el("h2", null, "АККАУНТ"));
-    box.appendChild(el("p", null, "Результат, вызовы и покупки сохраняются в аккаунте и доступны на любом устройстве."));
+    box.appendChild(el("p", null, "Мультиплеер работает с аккаунтом: рейтинг, вызовы, дуэли и покупки сохраняются в нём и доступны на любом устройстве."));
     const login = input(box, { placeholder: "логин (латиница)", maxLength: 20 });
     const pass = input(box, { type: "password", placeholder: "пароль (от 6 символов)", maxLength: 72 });
     const nick = input(box, { value: name, placeholder: "имя в игре (для регистрации)", maxLength: 16, caps: "words" });
+    const error = el("p", "modal-error");
+    box.appendChild(error);
     box.appendChild(el("p", "modal-note", "Имя в игре видят другие игроки. Пароль никому не сообщайте."));
-    const send = (mode) => close({ mode, login: login.value.trim(), password: pass.value, name: nick.value });
     const row = el("div", "modal-row");
     const no = el("button", "modal-cancel", "ОТМЕНА");
     const reg = el("button", "modal-cancel", "РЕГИСТРАЦИЯ");
     const yes = el("button", "modal-ok", "ВОЙТИ");
-    no.onclick = () => close(null);
+    let busy = false;
+    const send = async (mode) => {
+      if (busy) return;
+      busy = true;
+      [no, reg, yes].forEach((b) => (b.disabled = true));
+      error.textContent = tr("Связь с сервером...");
+      error.classList.remove("bad");
+      let msg;
+      try {
+        msg = await submit({ mode, login: login.value.trim(), password: pass.value, name: nick.value });
+      } catch (e) {
+        msg = "Нет связи с сервером";
+      }
+      busy = false;
+      [no, reg, yes].forEach((b) => (b.disabled = false));
+      if (!msg) return close(true);
+      error.textContent = tr(msg); // окно остаётся: исправьте и попробуйте снова
+      error.classList.add("bad");
+    };
+    no.onclick = () => !busy && close(false);
     reg.onclick = () => send("register");
     yes.onclick = () => send("login");
     pass.addEventListener("keydown", (e) => { if (e.key === "Enter") send("login"); });

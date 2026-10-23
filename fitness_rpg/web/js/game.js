@@ -21,6 +21,8 @@ import { Online, errorText, heroSnapshot } from "./online.js";
 
 const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
+// Бой на телефоне вертикально: мир крупнее (×3), по бокам срезается пустое место
+const ZOOM = { sx: 44, sw: 640 / 3, k: 3, h: 540 };
 const GROUND_TITLE = 150, GROUND_ARENA = 140;
 const FONT = '"PressStart2P", monospace';
 
@@ -184,9 +186,24 @@ class Game {
     return !!s && (s.needsCamera || s.ownsPanel);
   }
 
+  /** Сейчас бой на телефоне вертикально: картинка мира увеличена. */
+  get zoomed() {
+    return this.portrait && !!this.scene && !!this.scene.zoomWorld;
+  }
+
+  /** Мир -> экран: x, y в пикселях мира 320×180 переводятся в координаты интерфейса. */
+  wx(x) {
+    return this.zoomed ? (x - ZOOM.sx) * ZOOM.k : x * 2;
+  }
+  wy(y) {
+    return this.zoomed ? y * ZOOM.k : y * 2;
+  }
+
   resize() {
     const vw = innerWidth, vh = innerHeight;
     this.portrait = vh > vw * 1.05;
+    this.zoomedNow = this.zoomed;
+    this.gameH = this.zoomedNow ? ZOOM.h : GAME_H; // высота картинки игры над панелью камеры
     // камера видна только там, где нужны упражнения; иначе экран — одна картинка игры
     this.panelOn = this.portrait && this.usesPanel;
     this.H = this.panelOn ? Math.min(1400, Math.max(GAME_H + 200, Math.round((W * vh) / vw))) : GAME_H;
@@ -198,7 +215,7 @@ class Game {
     this.ctx.imageSmoothingEnabled = false;
     // Раскладка панели камеры и кнопок ручного ввода
     if (this.portrait) {
-      const top = GAME_H + 8, btnH = 56;
+      const top = this.gameH + 8, btnH = this.zoomedNow ? 112 : 56; // в бою — крупные кнопки под палец
       const camH = this.H - top - btnH - 24;
       const camW = Math.min(W - 16, Math.round((camH * 4) / 3));
       this.cam = [(W - camW) / 2, top, camW, camH];
@@ -463,7 +480,7 @@ class Game {
     const labels = this.portrait
       ? { pushup: "ОТЖИМ", squat: "ПРИСЕД", jack: "ЗВЕЗДА" }
       : { pushup: "ОТЖИМ [J]", squat: "ПРИСЕД [K]", jack: "ЗВЕЗДА [L]" };
-    for (const [ex, r] of this.manual) this.button(r, labels[ex], { size: this.portrait ? 16 : 8 });
+    for (const [ex, r] of this.manual) this.button(r, labels[ex], { size: this.portrait ? (this.zoomedNow ? 24 : 16) : 8 });
   }
 
   change(scene) {
@@ -471,7 +488,7 @@ class Game {
   }
 
   frame(dt) {
-    if (this.portrait && this.usesPanel !== this.panelOn) this.resize();
+    if (this.portrait && (this.usesPanel !== this.panelOn || this.zoomed !== this.zoomedNow)) this.resize();
     let moves = this.motion.poll();
     // клавиатура (браузер на ПК) и экранные кнопки
     const pushup = ["pushup"], squat = ["squat_down", "squat"], jack = ["jack"];
@@ -511,7 +528,8 @@ class Game {
       ox = Math.round(rand(-2, 2)) * 2;
       oy = Math.round(rand(-2, 2)) * 2;
     }
-    c.drawImage(this.world, ox, oy, W, GAME_H);
+    if (this.zoomedNow) c.drawImage(this.world, ZOOM.sx, 0, ZOOM.sw, CH, ox, oy, W, ZOOM.h);
+    else c.drawImage(this.world, ox, oy, W, GAME_H);
     this.scene.drawUi();
     if (this.portrait && this.scene.needsCamera) {
       this.cameraWidget();
@@ -1005,6 +1023,14 @@ class BattleScene extends Scene {
   get needsCamera() {
     return true;
   }
+  get zoomWorld() {
+    return true; // на телефоне вертикально бой показывается крупнее
+  }
+  /** Кнопка «< КОСТЁР» / «< СДАТЬСЯ»: в портрете — крупная, справа сверху. */
+  backRect() {
+    const g = this.game;
+    return g.portrait ? [W - 212, 12, 200, 60] : [12, GAME_H - 30, 104, 22];
+  }
 
   /** Где сейчас стоит герой (верхний левый угол спрайта) и в какой он позе. */
   heroPose() {
@@ -1191,7 +1217,7 @@ class BattleScene extends Scene {
       }
       return;
     }
-    if (g.key("Escape") || g.tapped([12, GAME_H - 30, 104, 22])) return this.leave();
+    if (g.key("Escape") || g.tapped(this.backRect())) return this.leave();
     if (this.ready > 0 || this.paused) return;
     for (const m of moves) if (m !== "squat") this.act(m); // в бою важен сам момент приседа
   }
@@ -1409,41 +1435,53 @@ class BattleScene extends Scene {
 
   drawUi() {
     const g = this.game, p = g.player, en = this.enemy;
-    this.hitFx.drawFlash(g.ctx, W, GAME_H);
-    g.bar(16, 16, Math.floor(p.maxHp * 1.4), 8, this.hp / p.maxHp, COL.red);
-    g.bar(16, 28, Math.floor(p.maxStamina * 1.6), 6, this.stamina / p.maxStamina, COL.green);
+    this.hitFx.drawFlash(g.ctx, W, g.gameH);
+    const P = g.portrait; // на телефоне вертикально — полоски и зелья крупнее
+    g.bar(16, 16, Math.min(P ? 400 : 999, Math.floor(p.maxHp * 1.4)), P ? 16 : 8, this.hp / p.maxHp, COL.red);
+    g.bar(16, P ? 40 : 28, Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)), P ? 12 : 6, this.stamina / p.maxStamina, COL.green);
+    const ek = P ? 2 : 1, ey = P ? 60 : 39;
     for (let i = 0; i < p.estusMax; i++) {
-      g.rect([15 + i * 12, 39, 10, 14], COL.shadow);
-      g.rect([16 + i * 12, 42, 8, 10], i < this.estus ? "rgb(240,150,50)" : "rgb(60,50,50)");
-      g.rect([18 + i * 12, 40, 4, 2], "rgb(140,120,100)");
+      g.rect([15 + i * 12 * ek, ey, 10 * ek, 14 * ek], COL.shadow);
+      g.rect([16 + i * 12 * ek, ey + 3 * ek, 8 * ek, 10 * ek], i < this.estus ? "rgb(240,150,50)" : "rgb(60,50,50)");
+      g.rect([18 + i * 12 * ek, ey + ek, 4 * ek, 2 * ek], "rgb(140,120,100)");
     }
     if (!g.portrait) {
       g.cameraWidget();
       g.manualButtons();
     }
 
+    // враг: в портрете полоска во всю ширину и крупное имя
+    const [bx, bw, bh, nfs] = P ? [16, W - 32, 16, 16] : [140, 340, 8, 8];
+    const by = g.gameH - (P ? 30 : 32), ny = by - (P ? 24 : 14);
     if (en.boss) { // полоска босса — в золотой рамке
       g.ctx.strokeStyle = COL.gold;
-      g.ctx.strokeRect(137.5, GAME_H - 34.5, 345, 11);
+      g.ctx.strokeRect(bx - 2.5, by - 2.5, bw + 5, bh + 3);
       const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.state === "revive" ? " - ВОССТАЁТ" : en.enraged ? " - ЯРОСТЬ" : "";
-      g.text(`${tr("БОСС")}: ${tr(en.name)} #${en.wave}${tr(extra)}`, 140, GAME_H - 48, 8, en.enraged || en.state === "drink" || en.state === "revive" ? "rgb(255,120,80)" : COL.gold);
+      g.text(`${tr("БОСС")}: ${tr(en.name)} #${en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, en.enraged || en.state === "drink" || en.state === "revive" ? "rgb(255,120,80)" : COL.gold);
     } else {
-      g.text(en.hero ? en.name : `${tr(en.name)} #${en.wave}`, 140, GAME_H - 46, 8);
+      g.text(en.hero ? en.name : `${tr(en.name)} #${en.wave}`, bx, ny, nfs);
     }
-    g.bar(140, GAME_H - 32, 340, 8, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
-    g.text(`Пепел: ${p.souls}`, W - 12, GAME_H - 16, 8, COL.gold, "right");
-    g.gems(W - 12, GAME_H - 32, p, "right");
-    g.button([12, GAME_H - 30, 104, 22], this.backLabel || "< КОСТЁР");
+    g.bar(bx, by, bw, bh, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
+    if (P) { // в портрете пепел и камни — под кнопкой выхода, чтобы не мешать полоске врага
+      g.text(`Пепел: ${p.souls}`, W - 16, 84, 12, COL.gold, "right");
+      g.gems(W - 16, 104, p, "right");
+    } else {
+      g.text(`Пепел: ${p.souls}`, W - 12, g.gameH - 16, 8, COL.gold, "right");
+      g.gems(W - 12, g.gameH - 32, p, "right");
+    }
+    g.button(this.backRect(), this.backLabel || "< КОСТЁР", { size: g.portrait ? 16 : 8 });
 
-    [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "зелье"]]
-      .forEach(([k, a, b], i) => g.text(`[${k}] ${tr(a)}: ${tr(b)}`, 16, 62 + i * 12, 8, COL.dim));
-    g.text("K держать: остаться внизу", 16, 98, 8, "rgb(110,100,100)");
+    if (!g.portrait) { // подсказки клавиш — только на компьютере
+      [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "зелье"]]
+        .forEach(([k, a, b], i) => g.text(`[${k}] ${tr(a)}: ${tr(b)}`, 16, 62 + i * 12, 8, COL.dim));
+      g.text("K держать: остаться внизу", 16, 98, 8, "rgb(110,100,100)");
+    }
 
     const plank = g.motion.ok && g.motion.detector.posture === "планка";
     if (this.paused) {
-      g.rect([0, GAME_H / 2 - 30, W, 60], "rgba(0,0,0,0.75)");
-      g.text("ПАУЗА: ВСТАНЬТЕ В КАДР", W / 2, GAME_H / 2 - 12, 16, COL.gold, "center");
-      g.text("Камера не видит вас, скелет ждёт", W / 2, GAME_H / 2 + 10, 8, COL.dim, "center");
+      g.rect([0, g.gameH / 2 - 30, W, 60], "rgba(0,0,0,0.75)");
+      g.text("ПАУЗА: ВСТАНЬТЕ В КАДР", W / 2, g.gameH / 2 - 12, 16, COL.gold, "center");
+      g.text("Камера не видит вас, скелет ждёт", W / 2, g.gameH / 2 + 10, 8, COL.dim, "center");
     } else if (this.ready > 0) {
       const tips = {
         knight: "Латы держат удары: бей в окно уязвимости",
@@ -1466,7 +1504,7 @@ class BattleScene extends Scene {
       g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
       const top = GROUND_ARENA - (HEAD_Y[en.kind] || 44);
-      g.text("!", Math.round(en.x + (HIT_X[en.kind] || 12)) * 2, 2 * top, 24, "rgb(255,200,60)", "center");
+      g.text("!", g.wx(Math.round(en.x + (HIT_X[en.kind] || 12))), g.wy(top), 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text("Окно для удара: ОТЖИМАЙСЯ!", W / 2, 70, 8, COL.gold, "center");
     } else if (en.state === "drink" && !this.result) {
@@ -1474,7 +1512,7 @@ class BattleScene extends Scene {
       g.bar(W / 2 - 80, 86, 160, 5, en.timer / DRINK_TIME, "rgb(120,220,120)");
     }
 
-    for (const ft of this.texts) g.text(ft.text, Math.round(ft.x * 2), Math.round(ft.y * 2), ft.size, ft.color, "center");
+    for (const ft of this.texts) g.text(ft.text, Math.round(g.wx(ft.x)), Math.round(g.wy(ft.y)), ft.size, ft.color, "center");
     if (this.result) this.drawResult();
   }
 
@@ -1489,16 +1527,16 @@ class BattleScene extends Scene {
         hint: "Звёздочка: следующий бой. Касание: к костру",
       });
     } else if (this.result) {
-      g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
+      g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
-        g.text("ВЫ ПОГИБЛИ", W / 2, GAME_H / 2 - 28, 32, "rgb(170,20,20)", "center");
-        g.text("Пепел остался на месте гибели: победите", W / 2, GAME_H / 2 + 14, 8, COL.dim, "center");
-        g.text("этого скелета, чтобы вернуть его. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
+        g.text("ВЫ ПОГИБЛИ", W / 2, g.gameH / 2 - 28, 32, "rgb(170,20,20)", "center");
+        g.text("Пепел остался на месте гибели: победите", W / 2, g.gameH / 2 + 14, 8, COL.dim, "center");
+        g.text("этого скелета, чтобы вернуть его. Касание: к костру", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
       } else {
         const [ash, red, blue] = this.reward;
-        g.text(en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН", W / 2, GAME_H / 2 - 28, 32, COL.gold, "center");
-        g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, GAME_H / 2 + 12, 8, COL.gold, "center");
-        g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, GAME_H / 2 + 26, 8, COL.text, "center");
+        g.text(en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН", W / 2, g.gameH / 2 - 28, 32, COL.gold, "center");
+        g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, g.gameH / 2 + 12, 8, COL.gold, "center");
+        g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, g.gameH / 2 + 26, 8, COL.text, "center");
       }
     }
   }
@@ -1590,14 +1628,14 @@ class ChallengeScene extends BattleScene {
   }
   drawResult() {
     const g = this.game, o = this.outcome, won = this.result === "won";
-    g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
-    g.text(won ? "ПОБЕДА!" : "ПОРАЖЕНИЕ", W / 2, GAME_H / 2 - 28, 32, won ? COL.gold : "rgb(170,20,20)", "center");
+    g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
+    g.text(won ? "ПОБЕДА!" : "ПОРАЖЕНИЕ", W / 2, g.gameH / 2 - 28, 32, won ? COL.gold : "rgb(170,20,20)", "center");
     let line = "Отправка результата...";
     if (o && o.error) line = o.error;
     else if (o && o.moved) line = tf("Вы поднялись на {pos} место!", { pos: o.account.arena_pos });
     else if (o) line = won ? "Соперник был ниже: место не изменилось" : "Место не изменилось. Попробуйте ещё раз";
-    g.text(line, W / 2, GAME_H / 2 + 12, 8, COL.text, "center");
-    g.text("Касание: к списку соперников", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
+    g.text(line, W / 2, g.gameH / 2 + 12, 8, COL.text, "center");
+    g.text("Касание: к списку соперников", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
   }
 }
 
@@ -1632,7 +1670,23 @@ class DuelScene extends BattleScene {
     this.myAtk = 0; // до удара своего выпада
     this.incoming = []; // выпады соперника в очереди
     this.reason = "";
+    this.meReady = false; // бой начинается, когда оба подтвердили готовность
+    this.oppReady = false;
     this.send({ t: "hp", hp: this.hp, max: p.maxHp });
+  }
+  get started() {
+    return this.meReady && this.oppReady;
+  }
+  /** Кнопка «Я ГОТОВ» поверх картинки боя. */
+  readyRect() {
+    const g = this.game;
+    return g.portrait ? [60, g.gameH - 200, W - 120, 110] : [170, 250, 300, 40];
+  }
+  setReady() {
+    if (this.meReady) return;
+    this.meReady = true;
+    this.send({ t: "ready" });
+    sfx.click();
   }
   send(e) {
     this.outbox.push({ ...e, n: ++this.sent });
@@ -1693,6 +1747,9 @@ class DuelScene extends BattleScene {
       en.set("drink", 0.8);
       this.float("ЗЕЛЬЕ", en.x + 12, 70, "rgb(120,220,120)", 8);
       sfx.heal();
+    } else if (e.t === "ready") {
+      if (!this.oppReady) sfx.alert();
+      this.oppReady = true;
     } else if (e.t === "dead" && !this.result) {
       en.set("dead", 0);
       this.end("won", e.forfeit ? "Соперник сдался" : "");
@@ -1721,6 +1778,7 @@ class DuelScene extends BattleScene {
   update(dt) {
     this.net();
     if (!this.result && this.game.time - this.lastOk > DUEL_LOST) this.end("lost", "Нет связи с сервером");
+    if (!this.started) this.ready = READY_TIME; // отсчёт пойдёт у обоих, когда оба готовы
     super.update(dt);
   }
   updateEnemy(dt) {
@@ -1772,42 +1830,83 @@ class DuelScene extends BattleScene {
   }
   handle(moves) {
     const g = this.game;
+    if (!this.result && !this.started) {
+      if (g.key("Escape") || g.tapped(this.backRect())) return this.leave();
+      if (g.tapped(this.readyRect()) || g.key("Enter", " ") || moves.includes("jack")) this.setReady();
+      return;
+    }
     if (!this.result) return super.handle(moves);
     if (this.resultT >= 1 && (g.taps.length || g.key("Enter", " ", "Escape"))) {
       g.taps.length = 0;
       g.change(new MultiplayerScene(g, "duel"));
     }
   }
+  drawUi() {
+    super.drawUi();
+    if (this.started || this.result) return;
+    const g = this.game, P = g.portrait, r = this.readyRect();
+    g.rect([0, 0, W, g.gameH], "rgba(6,4,10,0.78)");
+    g.text(tf("ДУЭЛЬ: {name}", { name: this.enemy.name }), W / 2, P ? 110 : 60, P ? 24 : 16, COL.gold, "center");
+    const me = this.meReady ? ["Вы: ГОТОВЫ", "rgb(120,220,120)"] : ["Вы: не готовы", COL.dim];
+    const op = this.oppReady ? ["Соперник: ГОТОВ", "rgb(120,220,120)"] : ["Соперник: ждём...", COL.dim];
+    g.text(me[0], W / 2, P ? 170 : 104, P ? 20 : 12, me[1], "center");
+    g.text(op[0], W / 2, P ? 206 : 124, P ? 20 : 12, op[1], "center");
+    g.wrap("Поставьте телефон и отойдите: бой начнётся, когда оба готовы", P ? 40 : 70)
+      .forEach((line, i) => g.text(line, W / 2, (P ? 250 : 150) + i * (P ? 20 : 11), P ? 14 : 8, COL.dim, "center"));
+    g.button(r, this.meReady ? "ЖДЁМ СОПЕРНИКА..." : "Я ГОТОВ", { selected: !this.meReady, size: P ? 28 : 12, color: this.meReady ? COL.dim : COL.gold });
+    if (!this.meReady) g.text("или сделайте звёздочку", W / 2, r[1] + r[3] + (P ? 14 : 6), P ? 14 : 8, COL.dim, "center");
+  }
   drawResult() {
     const g = this.game;
     const [title, col] = { won: ["ПОБЕДА!", COL.gold], dead: ["ПОРАЖЕНИЕ", "rgb(170,20,20)"], lost: ["ДУЭЛЬ ПРЕРВАНА", COL.dim] }[this.result];
-    g.rect([0, GAME_H / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
-    g.text(title, W / 2, GAME_H / 2 - 28, 32, col, "center");
-    if (this.reason) g.text(this.reason, W / 2, GAME_H / 2 + 12, 8, COL.text, "center");
-    g.text("Касание: к дуэлям", W / 2, GAME_H / 2 + 26, 8, COL.dim, "center");
+    g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
+    g.text(title, W / 2, g.gameH / 2 - 28, 32, col, "center");
+    if (this.reason) g.text(this.reason, W / 2, g.gameH / 2 + 12, 8, COL.text, "center");
+    g.text("Касание: к дуэлям", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
   }
 }
 
 // ------------------------------------------------------------------ Мультиплеер: рейтинг, вызов, дуэль
 const MP_TABS = [["rating", "РЕЙТИНГ"], ["challenge", "ВЫЗОВ"], ["duel", "ДУЭЛЬ"]];
 
-/** Раскладка экрана мультиплеера: альбомная или вертикальная во весь экран телефона. */
+/** Раскладка мультиплеера: альбомная или вертикальная во весь экран телефона (крупно, под палец). */
 function mpLayout(g) {
   const P = g.portrait;
-  const tabY = P ? 72 : 30, tabH = P ? 64 : 24, tw = (W - 24 - 16) / 3;
+  const tabY = P ? 72 : 30, tabH = P ? 76 : 24, tw = (W - 24 - 16) / 3;
   const tabs = MP_TABS.map((_, i) => [12 + i * (tw + 8), tabY, tw, tabH]);
-  const btnY = P ? g.H - 96 : 326, btnH = P ? 80 : 26;
-  const top = P ? 214 : 88, step = P ? 44 : 20;
+  const btnH = P ? 100 : 26, btnY = P ? g.H - btnH - 14 : 326;
+  const top = P ? 236 : 88;
   return {
-    P, tabs, btnY, btnH, top, step, fs: P ? 16 : 8, head: top - (P ? 30 : 16), info: P ? 146 : 54, infoFs: P ? 12 : 8,
-    rows: Math.max(4, Math.floor((btnY - 12 - top) / step)), title: P ? [24, 32] : [8, 16],
+    P, tabs, btnY, btnH, top, fs: P ? 20 : 8, small: P ? 14 : 8, head: top - (P ? 30 : 16), info: P ? 162 : 54,
+    infoFs: P ? 14 : 8, tabFs: P ? 20 : 8, btnFs: P ? 20 : 8, title: P ? [20, 36] : [8, 16], bottom: btnY - (P ? 24 : 12),
   };
+}
+
+/** Высота строки списка: в портрете строки растягиваются на весь экран (до 104 px). */
+function mpStep(L, n, reserve = 0) {
+  if (!L.P) return 20;
+  return Math.max(60, Math.min(104, Math.floor((L.bottom - reserve - L.top) / Math.max(n, 7))));
 }
 
 /** Кнопки внизу экрана: делят ширину поровну. */
 function bottomButtons(L, labels) {
   const gap = 8, w = (W - 24 - gap * (labels.length - 1)) / labels.length;
   return labels.map((l, i) => [[12 + i * (w + gap), L.btnY, w, L.btnH], l]);
+}
+
+/** Иконка игрока в списке: его герой с мечом, доспехами и обликами. В альбомной — голова и плечи. */
+function drawAvatar(g, look, x, y, rowH, portrait) {
+  const lk = look || { sword: "rusty", looks: [] };
+  const spr = anim(`${heroSprite(lk.sword, lk.looks || [], lk.skin, lk.outfit)}_idle`, g.time, 1.5, 2);
+  if (!spr) return;
+  const c = g.ctx;
+  if (!portrait) { // голова 18 px (с рогами самурая и плечом гигантского меча — сверху лишнее срезается)
+    const top = Math.max(0, spr.height - 32 - 4);
+    c.drawImage(spr, 0, top, spr.width, 18, x, y - 4, spr.width, 18);
+    return;
+  }
+  const k = Math.max(1, Math.floor((rowH - 6) / spr.height * 2) / 2); // ×1, ×1.5, ×2…
+  c.drawImage(spr, x, y + rowH - 4 - spr.height * k, spr.width * k, spr.height * k);
 }
 
 class MultiplayerScene extends Scene {
@@ -1820,6 +1919,7 @@ class MultiplayerScene extends Scene {
     this.room = null; // своя комната дуэли, пока ждём соперника
     this.waitT = 0;
     game.accountSync();
+    if (this.online.configured && !this.online.loggedIn) this.account(); // без входа — сразу окно авторизации
     this.load();
   }
   get ownsPanel() {
@@ -1846,22 +1946,35 @@ class MultiplayerScene extends Scene {
     if (this.tab === "rating") this.run(async () => (this.data.rating = await o.top()));
     if (this.tab === "challenge" && o.loggedIn) this.run(async () => (this.data.arena = await o.arena()));
   }
+  /** Вход или выход. Окно входа висит, пока вход не удался; «Отмена» — в главное меню. */
   async account() {
     const g = this.game, o = this.online;
     if (o.loggedIn) {
       const ok = await confirmDialog({ title: "АККАУНТ", text: tf("Выйти из аккаунта {login}?", { login: o.account.login }), ok: "ВЫЙТИ" });
-      if (ok) await o.logout();
+      if (!ok) return;
+      await o.logout();
       this.data = {};
-      return this.load();
     }
-    const a = await promptAccount({ name: g.profile.name });
-    if (!a) return;
     const best = g.profile.best, hero = heroSnapshot(g.player, g.skin, g.outfit);
-    await this.run(async () => {
-      const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero) : await o.login(a.login, a.password);
-      g.onAccount(acc);
-      g.say(tf("Вы вошли как {name}", { name: acc.name }));
+    const ok = await promptAccount({
+      name: g.profile.name,
+      submit: async (a) => {
+        try {
+          const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero) : await o.login(a.login, a.password);
+          g.onAccount(acc);
+          g.accountSync();
+          g.say(tf("Вы вошли как {name}", { name: acc.name }));
+          return null;
+        } catch (e) {
+          return errorText(e);
+        }
+      },
     });
+    if (!ok) {
+      this.cancelRoom();
+      if (g.scene === this) g.change(new TitleScene(g));
+      return;
+    }
     this.data = {};
     this.load();
   }
@@ -1917,23 +2030,25 @@ class MultiplayerScene extends Scene {
     if (this.tab === "challenge") return bottomButtons(L, [acc, "ОБНОВИТЬ", "НАЗАД"]);
     return bottomButtons(L, [acc, "НАЗАД"]);
   }
-  /** Строки «Бросить вызов»: окно списка вокруг игрока, сверху — лидеры. */
-  arenaRows(L) {
+  /** «Бросить вызов»: строки списка (окно вокруг игрока) и их высота. */
+  arenaView(L) {
     const a = this.data.arena;
-    if (!a) return [];
+    if (!a) return { rows: [], step: mpStep(L, 7) };
+    const reserve = L.P ? 64 : 24; // место под подсказку
+    const step = mpStep(L, Math.min(a.rows.length, 11), reserve);
+    const room = Math.max(4, Math.floor((L.bottom - reserve - L.top) / step));
     const rows = a.rows, me = rows.findIndex((r) => r.me);
-    const room = L.rows - (L.P ? 0 : 2); // в альбомной — место под подсказку
-    let from = Math.max(0, Math.min(me - Math.floor(room / 2), rows.length - room));
-    return rows.slice(from, from + room);
+    const from = Math.max(0, Math.min(me - Math.floor(room / 2), rows.length - room));
+    return { rows: rows.slice(from, from + room), step };
   }
-  challengeButton(L, i) {
-    const bw = L.P ? 150 : 90;
-    return [W - 14 - bw, L.top + i * L.step - (L.P ? 8 : 4), bw, L.step - (L.P ? 6 : 3)];
+  challengeButton(L, i, step) {
+    const bw = L.P ? 170 : 90;
+    return [W - 14 - bw, L.top + i * step + 4, bw, step - 10];
   }
   duelButtons(L) {
-    const h = L.P ? 96 : 34, w = W - 120, y = L.top + (L.P ? 260 : 96);
-    if (this.room) return { cancel: [60, y + h + 16, w, h] };
-    return { create: [60, y, w, h], join: [60, y + h + 16, w, h] };
+    const h = L.P ? 120 : 34, w = W - 80, y = L.top + (L.P ? 300 : 96);
+    if (this.room) return { cancel: [40, y + h + 24, w, h] };
+    return { create: [40, y, w, h], join: [40, y + h + 24, w, h] };
   }
   handle() {
     const g = this.game, L = mpLayout(g);
@@ -1949,7 +2064,8 @@ class MultiplayerScene extends Scene {
     if (g.key("Escape")) { this.cancelRoom(); return g.change(new TitleScene(g)); }
     if (!this.online.loggedIn || this.busy) return;
     if (this.tab === "challenge" && this.data.arena && this.data.arena.attempts > 0) {
-      this.arenaRows(L).forEach((row, i) => { if (row.can && g.tapped(this.challengeButton(L, i))) this.challenge(row); });
+      const v = this.arenaView(L);
+      v.rows.forEach((row, i) => { if (row.can && g.tapped(this.challengeButton(L, i, v.step))) this.challenge(row); });
     }
     if (this.tab === "duel") {
       const b = this.duelButtons(L);
@@ -1976,70 +2092,87 @@ class MultiplayerScene extends Scene {
     c.fillRect(0, 0, CW, CH);
   }
   drawUi() {
-    const g = this.game, L = mpLayout(g), o = this.online, fs = L.fs;
+    const g = this.game, L = mpLayout(g), o = this.online;
+    if (L.P) g.rect([0, GAME_H, W, g.H - GAME_H], "rgba(10,6,12,1)");
     g.text("МУЛЬТИПЛЕЕР", W / 2, L.title[0], L.title[1], COL.gold, "center");
-    L.tabs.forEach((r, i) => g.button(r, MP_TABS[i][1], { selected: this.tab === MP_TABS[i][0], size: L.P ? 16 : 8 }));
+    L.tabs.forEach((r, i) => g.button(r, MP_TABS[i][1], { selected: this.tab === MP_TABS[i][0], size: L.tabFs }));
     let info;
     if (!o.configured) info = "Мультиплеер недоступен в этой версии игры";
     else if (o.loggedIn) info = tf("Аккаунт: {login} · имя: {name}", { login: o.account.login, name: g.profile.name });
     else info = "Войдите или зарегистрируйтесь: результат и покупки сохранятся в аккаунте";
-    g.wrap(info, L.P ? 48 : 76).slice(0, 2).forEach((line, i) => g.text(line, 14, L.info + i * (L.infoFs + 6), L.infoFs, o.loggedIn ? "rgb(150,220,150)" : COL.dim));
-    if (this.error) g.text(this.error, W / 2, L.btnY - (L.P ? 30 : 16), L.P ? 12 : 8, "rgb(255,130,100)", "center");
-    else if (this.busy) g.text("Связь с сервером...", W / 2, L.btnY - (L.P ? 30 : 16), L.P ? 12 : 8, COL.dim, "center");
+    g.wrap(info, L.P ? 42 : 76).slice(0, 2).forEach((line, i) => g.text(line, 14, L.info + i * (L.infoFs + 6), L.infoFs, o.loggedIn ? "rgb(150,220,150)" : COL.dim));
+    const msgY = L.btnY - (L.P ? 22 : 12);
+    if (this.error) g.text(this.error, W / 2, msgY, L.small, "rgb(255,130,100)", "center");
+    else if (this.busy) g.text("Связь с сервером...", W / 2, msgY, L.small, COL.dim, "center");
     if (o.configured) {
-      if (this.tab === "rating") this.drawRating(L, fs);
-      else if (this.tab === "challenge") this.drawChallenge(L, fs);
-      else this.drawDuel(L, fs);
+      if (this.tab === "rating") this.drawRating(L);
+      else if (this.tab === "challenge") this.drawChallenge(L);
+      else this.drawDuel(L);
     }
-    for (const [r, label] of this.buttons()) g.button(r, label, { size: L.P ? 16 : 8 });
+    for (const [r, label] of this.buttons()) g.button(r, label, { size: L.btnFs });
   }
-  drawRating(L, fs) {
+  /** Строка списка: подсветка своей строки, место, иконка игрока, имя. */
+  drawRowBase(L, y, step, rank, row, isMe, nameCol) {
+    const g = this.game;
+    if (isMe) g.rect([12, y, W - 24, step - 4], "rgba(232,190,92,0.2)");
+    else if (L.P) g.rect([12, y, W - 24, step - 4], "rgba(255,255,255,0.04)");
+    const ty = y + (step - 4 - L.fs) / 2;
+    g.text(`${rank}`, 18, ty, L.fs, nameCol);
+    drawAvatar(g, row.look, L.P ? 66 : 40, L.P ? y : y + 2, step, L.P);
+    return ty;
+  }
+  drawRating(L) {
     const g = this.game, r = this.data.rating, myId = this.online.account && this.online.account.id;
-    const cols = [[20, "#"], [L.P ? 76 : 60, "ИМЯ"], [L.P ? 380 : 400, "БОССЫ"], [L.P ? 476 : 486, "УР."], [L.P ? 548 : 560, "РАУНД"]];
-    cols.forEach(([x, h]) => g.text(h, x, L.head, L.P ? 12 : 8, COL.dim));
-    g.rect([14, L.top - 8, W - 28, 1], "rgb(90,64,50)");
+    const cols = L.P ? [[18, "#"], [138, "ИМЯ"], [410, "БОССЫ"], [500, "УР."], [566, "РАУНД"]] : [[20, "#"], [68, "ИМЯ"], [400, "БОССЫ"], [486, "УР."], [560, "РАУНД"]];
+    cols.forEach(([x, h]) => g.text(h, x, L.head, L.small, COL.dim));
+    g.rect([12, L.top - 6, W - 24, 1], "rgb(90,64,50)");
     if (!r) return;
-    const show = r.rows.slice(0, L.rows).map((row, i) => [i + 1, row]);
+    const step = mpStep(L, Math.min(r.rows.length + 1, 12));
+    const cap = Math.max(4, Math.floor((L.bottom - L.top) / step));
+    const show = r.rows.slice(0, cap).map((row, i) => [i + 1, row]);
     const mine = r.rows.findIndex((x) => x.id === myId);
-    if (r.rank && mine < 0 || mine >= L.rows) { // своё место — последней строкой
-      show.length = Math.min(show.length, L.rows - 1);
-      show.push([r.rank, { id: myId, name: g.profile.name, ...this.online.account.best }]);
+    if ((r.rank && mine < 0) || mine >= cap) { // своё место — последней строкой
+      show.length = Math.min(show.length, cap - 1);
+      show.push([r.rank, { id: myId, name: g.profile.name, look: heroSnapshot(g.player, g.skin, g.outfit), ...this.online.account.best }]);
     }
     show.forEach(([rank, row], i) => {
-      const y = L.top + i * L.step, isMe = row.id === myId;
-      if (isMe) g.rect([14, y - L.step * 0.2, W - 28, L.step * 0.9], "rgba(232,190,92,0.18)");
+      const y = L.top + i * step, isMe = row.id === myId;
       const col = isMe ? COL.gold : rank <= 3 ? "rgb(255,220,150)" : COL.text;
-      [[0, `${rank}`], [1, row.name], [2, `${row.bosses}`], [3, `${row.level}`], [4, `${row.wave}`]]
-        .forEach(([c, v]) => g.text(v, cols[c][0], y, fs, col));
+      const ty = this.drawRowBase(L, y, step, rank, row, isMe, col);
+      const nameFs = L.P ? (row.name.length > 12 ? 14 : 16) : 8;
+      g.text(row.name, cols[1][0], ty + (L.fs - nameFs) / 2, nameFs, col);
+      [[2, row.bosses], [3, row.level], [4, row.wave]].forEach(([c, v]) => g.text(`${v}`, cols[c][0], ty, L.fs, col));
     });
-    if (!r.rows.length) g.text("Пока никого: станьте первым!", W / 2, L.top + 20, fs, COL.dim, "center");
+    if (!r.rows.length) g.text("Пока никого: станьте первым!", W / 2, L.top + 40, L.fs, COL.dim, "center");
   }
-  drawChallenge(L, fs) {
+  drawChallenge(L) {
     const g = this.game, a = this.data.arena;
     if (!this.online.loggedIn) return this.drawLoginHint(L);
-    g.text("#", 20, L.head, L.P ? 12 : 8, COL.dim);
-    g.text("СОПЕРНИК", L.P ? 90 : 60, L.head, L.P ? 12 : 8, COL.dim);
-    g.text("УР.", L.P ? 380 : 400, L.head, L.P ? 12 : 8, COL.dim);
+    const nameX = L.P ? 138 : 68, lvX = L.P ? 400 : 400;
+    g.text("#", 18, L.head, L.small, COL.dim);
+    g.text("СОПЕРНИК", nameX, L.head, L.small, COL.dim);
+    g.text("УР.", lvX, L.head, L.small, COL.dim);
     if (a) {
       const t = tf("Попыток сегодня: {n}/{max}", { n: a.attempts, max: a.per_day }), col = a.attempts ? COL.gold : COL.red;
-      if (L.P) g.text(t, 14, L.info + 22, 12, col); // в портрете — под строкой аккаунта
+      if (L.P) g.text(t, 14, L.info + 24, 14, col);
       else g.text(t, W - 14, L.head, 8, col, "right");
     }
-    g.rect([14, L.top - 8, W - 28, 1], "rgb(90,64,50)");
+    g.rect([12, L.top - 6, W - 24, 1], "rgb(90,64,50)");
     if (!a) return;
-    this.arenaRows(L).forEach((row, i) => {
-      const y = L.top + i * L.step;
-      if (row.me) g.rect([14, y - L.step * 0.2, W - 28, L.step * 0.9], "rgba(232,190,92,0.18)");
+    const v = this.arenaView(L);
+    v.rows.forEach((row, i) => {
+      const y = L.top + i * v.step;
       const col = row.me ? COL.gold : row.bot ? "rgb(170,160,150)" : COL.text;
-      g.text(`${row.pos}`, 20, y, fs, col);
-      g.text(row.bot ? `${row.name} *` : row.name, L.P ? 90 : 60, y, fs, col);
-      g.text(`${row.level}`, L.P ? 380 : 400, y, fs, col);
-      if (row.can) g.button(this.challengeButton(L, i), "ВЫЗОВ", { size: L.P ? 12 : 8, color: a.attempts ? "rgb(255,140,100)" : COL.dim });
+      const ty = this.drawRowBase(L, y, v.step, row.pos, row, row.me, col);
+      const nameFs = L.P ? (row.name.length > 11 ? 14 : 16) : 8;
+      g.text(row.bot ? `${row.name} *` : row.name, nameX, ty + (L.fs - nameFs) / 2, nameFs, col);
+      g.text(`${row.level}`, lvX + (L.P ? 0 : 0), ty, L.fs, col);
+      if (row.can) g.button(this.challengeButton(L, i, v.step), "ВЫЗОВ", { size: L.P ? 16 : 8, color: a.attempts ? "rgb(255,140,100)" : COL.dim });
     });
     const hint = "* бот. Вызов — тем, кто до 3 мест выше или ниже. Победа над тем, кто выше: меняетесь местами";
-    g.wrap(hint, L.P ? 52 : 78).slice(0, 2).forEach((line, i) => g.text(line, 14, L.btnY - (L.P ? 70 : 34) + i * (L.P ? 18 : 10), L.P ? 12 : 8, COL.dim));
+    g.wrap(hint, L.P ? 50 : 78).slice(0, 2).forEach((line, i) => g.text(line, 14, L.bottom - (L.P ? 52 : 22) + i * (L.P ? 20 : 10), L.P ? 12 : 8, COL.dim));
   }
-  drawDuel(L, fs) {
+  drawDuel(L) {
     const g = this.game;
     if (!this.online.loggedIn) return this.drawLoginHint(L);
     const lines = [
@@ -2047,22 +2180,22 @@ class MultiplayerScene extends Scene {
       "Отжимание — выпад, соперник видит замах. Присед — уворот. Звёздочка — зелье.",
     ];
     let y = L.top;
-    for (const t of lines) for (const line of g.wrap(t, L.P ? 44 : 76)) { g.text(line, 20, y, L.P ? 14 : 8, COL.text); y += L.P ? 24 : 12; }
+    for (const t of lines) for (const line of g.wrap(t, L.P ? 38 : 76)) { g.text(line, 20, y, L.P ? 16 : 8, COL.text); y += L.P ? 28 : 12; }
     const b = this.duelButtons(L);
     if (this.room) {
-      g.text("КОД КОМНАТЫ", W / 2, b.cancel[1] - (L.P ? 230 : 96), L.P ? 16 : 8, COL.dim, "center");
-      g.text(this.room, W / 2, b.cancel[1] - (L.P ? 200 : 84), L.P ? 64 : 32, COL.gold, "center");
-      g.text("Скажите код сопернику. Ждём его...", W / 2, b.cancel[1] - (L.P ? 100 : 40), L.P ? 14 : 8, COL.dim, "center");
-      g.button(b.cancel, "ОТМЕНА", { size: L.P ? 16 : 8 });
+      g.text("КОД КОМНАТЫ", W / 2, b.cancel[1] - (L.P ? 260 : 96), L.P ? 20 : 8, COL.dim, "center");
+      g.text(this.room, W / 2, b.cancel[1] - (L.P ? 220 : 84), L.P ? 80 : 32, COL.gold, "center");
+      g.text("Скажите код сопернику. Ждём его...", W / 2, b.cancel[1] - (L.P ? 100 : 40), L.P ? 16 : 8, COL.dim, "center");
+      g.button(b.cancel, "ОТМЕНА", { size: L.btnFs });
     } else {
-      g.button(b.create, "СОЗДАТЬ КОМНАТУ", { size: L.P ? 16 : 8, color: COL.gold });
-      g.button(b.join, "ВОЙТИ ПО КОДУ", { size: L.P ? 16 : 8 });
+      g.button(b.create, "СОЗДАТЬ КОМНАТУ", { size: L.P ? 24 : 8, color: COL.gold });
+      g.button(b.join, "ВОЙТИ ПО КОДУ", { size: L.P ? 24 : 8 });
     }
   }
   drawLoginHint(L) {
     const g = this.game;
-    g.wrap("Вызовы и дуэли доступны после входа в аккаунт: кнопка ВОЙТИ внизу.", L.P ? 40 : 60)
-      .forEach((line, i) => g.text(line, W / 2, L.top + 40 + i * (L.P ? 28 : 14), L.P ? 16 : 8, COL.gold, "center"));
+    g.wrap("Вызовы и дуэли доступны после входа в аккаунт: кнопка ВОЙТИ внизу.", L.P ? 32 : 60)
+      .forEach((line, i) => g.text(line, W / 2, L.top + 60 + i * (L.P ? 32 : 14), L.P ? 20 : 8, COL.gold, "center"));
   }
 }
 

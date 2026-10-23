@@ -260,9 +260,13 @@ if ($action === 'sync') {
 
 // ---------------------------------------------------------------- рейтинг по боссам
 if ($action === 'top') {
-    $rows = $db->query('SELECT id, name, bosses, level, wave FROM mp_accounts WHERE is_bot = 0
+    $rows = $db->query('SELECT id, name, bosses, level, wave, hero FROM mp_accounts WHERE is_bot = 0
         ORDER BY bosses DESC, level DESC, wave DESC, created ASC LIMIT ' . TOP)->fetchAll();
-    foreach ($rows as &$r) foreach (['bosses', 'level', 'wave'] as $k) $r[$k] = (int)$r[$k];
+    foreach ($rows as &$r) {
+        foreach (['bosses', 'level', 'wave'] as $k) $r[$k] = (int)$r[$k];
+        $r['look'] = hero_look(json_decode($r['hero'] ?: 'null', true)); // иконка игрока в списке
+        unset($r['hero']);
+    }
     unset($r);
     $rank = null;
     $a = account_by_token(isset($in['token']) ? $in['token'] : '');
@@ -276,9 +280,16 @@ if ($action === 'top') {
 }
 
 // ---------------------------------------------------------------- бросить вызов
+/** Облик для иконки: меч, доспехи, облики из лавки — без характеристик. */
+function hero_look($hero) {
+    if (!is_array($hero)) return ['sword' => 'rusty', 'looks' => [], 'skin' => null, 'outfit' => null];
+    return ['sword' => isset($hero['sword']) ? $hero['sword'] : 'rusty', 'looks' => isset($hero['looks']) ? $hero['looks'] : [],
+        'skin' => isset($hero['skin']) ? $hero['skin'] : null, 'outfit' => isset($hero['outfit']) ? $hero['outfit'] : null];
+}
+
 function arena_row($r, $me) {
     $hero = json_decode($r['hero'] ?: 'null', true);
-    return ['id' => $r['id'], 'pos' => (int)$r['arena_pos'], 'name' => $r['name'], 'bot' => (bool)$r['is_bot'],
+    return ['id' => $r['id'], 'pos' => (int)$r['arena_pos'], 'name' => $r['name'], 'bot' => (bool)$r['is_bot'], 'look' => hero_look($hero),
         'level' => $hero ? (int)$hero['level'] : (int)$r['level'], 'me' => $r['id'] === $me['id'],
         'can' => $r['id'] !== $me['id'] && abs((int)$r['arena_pos'] - (int)$me['arena_pos']) <= CHALLENGE_REACH];
 }

@@ -56,6 +56,9 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
   background: #0a060c; color: #e8cea0; border: 2px solid #5a4032; margin-bottom: 14px;
 }
 .modal-input:focus { outline: none; border-color: #e8be5c; }
+.modal-error { min-height: 14px; font-size: 10px; line-height: 1.6; margin: 0 0 10px; color: #b4a8a0; }
+.modal-error.bad { color: #ff8a6a; }
+.modal-row button:disabled { opacity: 0.5; }
 .modal-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 .modal-row button {
   font: inherit; font-size: 10px; padding: 12px 14px; cursor: pointer; border: 2px solid #5a4032;
