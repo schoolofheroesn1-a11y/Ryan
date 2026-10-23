@@ -1450,7 +1450,7 @@ class BattleScene extends Scene {
     g.bar(16, 16, Math.min(P ? 400 : 999, Math.floor(p.maxHp * 1.4)), P ? 16 : 8, this.hp / p.maxHp, COL.red);
     g.bar(16, P ? 40 : 28, Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)), P ? 12 : 6, this.stamina / p.maxStamina, COL.green);
     const ek = P ? 2 : 1, ey = P ? 60 : 39;
-    for (let i = 0; i < p.estusMax; i++) {
+    for (let i = 0; i < (this.estusCap ?? p.estusMax); i++) { // в дуэли — одна фляга
       g.rect([15 + i * 12 * ek, ey, 10 * ek, 14 * ek], COL.shadow);
       g.rect([16 + i * 12 * ek, ey + 3 * ek, 8 * ek, 10 * ek], i < this.estus ? "rgb(240,150,50)" : "rgb(60,50,50)");
       g.rect([18 + i * 12 * ek, ey + ek, 4 * ek, 2 * ek], "rgb(140,120,100)");
@@ -1649,7 +1649,9 @@ class ChallengeScene extends BattleScene {
   }
 }
 
-const DUEL_WINDUP = 1.3; // столько видно выпад соперника: успей присесть
+const DUEL_WINDUP = 0.8; // столько видно выпад соперника: успей присесть
+const DUEL_DAMAGE = 1.5; // в дуэли удары сильнее — бой не затягивается
+const DUEL_ESTUS = 1; // в дуэли у каждого одна фляга зелья
 const DUEL_POLL = 0.3; // обмен с сервером ~3 раза в секунду
 const DUEL_LOST = 20; // нет связи дольше — дуэль прерывается
 
@@ -1668,7 +1670,8 @@ class DuelScene extends BattleScene {
     this.location = 2;
     this.newLand = false;
     this.hp = p.maxHp;
-    this.estus = p.estusMax;
+    this.estus = DUEL_ESTUS;
+    this.estusCap = DUEL_ESTUS;
     this.backLabel = "< СДАТЬСЯ";
     this.outbox = [];
     this.sent = 0; // номер последнего своего события (повтор после сбоя связи не применится дважды)
@@ -1677,7 +1680,7 @@ class DuelScene extends BattleScene {
     this.pollT = 0;
     this.inflight = false;
     this.lastOk = game.time;
-    this.myAtk = 0; // до удара своего выпада
+    this.myAtks = []; // до удара своих выпадов: каждое отжимание — выпад, без ожидания предыдущего
     this.incoming = []; // выпады соперника в очереди
     this.reason = "";
     this.meReady = false; // бой начинается, когда оба подтвердили готовность
@@ -1704,7 +1707,6 @@ class DuelScene extends BattleScene {
   act(move) {
     const p = this.game.player;
     if (move === "pushup") {
-      if (this.myAtk > 0) return; // один выпад за раз
       if (this.stamina < p.attackCost) {
         this.exhaustedSound();
         return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
@@ -1712,10 +1714,10 @@ class DuelScene extends BattleScene {
       this.stamina -= p.attackCost;
       if (this.stamina < p.attackCost) this.exhaustedSound();
       this.regenPause = 0.6;
-      this.myAtk = DUEL_WINDUP;
+      this.myAtks.push(DUEL_WINDUP);
       this.action = "dodge"; // замах: герой пригибается перед выпадом
       this.actionT = DUEL_WINDUP;
-      this.send({ t: "atk", dmg: p.damage });
+      this.send({ t: "atk", dmg: Math.round(p.damage * DUEL_DAMAGE) });
       this.float("ВЫПАД!", this.HERO_X + 10, 90, COL.gold, 8);
     } else if (move === "jack") {
       const before = this.estus;
@@ -1795,7 +1797,7 @@ class DuelScene extends BattleScene {
     const en = this.enemy;
     en.timer -= dt;
     if (en.state === "windup" && en.timer <= 0) {
-      en.set("attack", 0.35);
+      en.set("attack", 0.2); // короткий удар: следующий выпад из очереди начинается сразу
       const before = this.hp;
       this.resolveHit();
       this.send({ t: "hp", hp: Math.max(0, this.hp), max: this.game.player.maxHp, dodged: this.hp === before });
@@ -1803,15 +1805,16 @@ class DuelScene extends BattleScene {
       en.set("idle", 0);
     }
     if (en.state === "idle" && this.incoming.length) this.startIncoming(this.incoming.shift());
-    if (this.myAtk > 0) {
-      this.myAtk -= dt;
-      if (this.myAtk <= 0) { // выпад: соперник узнает, успел ли присесть
+    for (let i = 0; i < this.myAtks.length; i++) {
+      this.myAtks[i] -= dt;
+      if (this.myAtks[i] <= 0) { // выпад: соперник узнает, успел ли присесть
         this.action = "attack";
-        this.actionT = 0.35;
+        this.actionT = 0.3;
         this.slashT = SLASH_TIME;
         this.outfitFx.burst(this.game.outfit, this.HERO_X + 44, GROUND_ARENA - 19);
       }
     }
+    this.myAtks = this.myAtks.filter((t) => t > 0);
     const target = en.state === "attack" ? this.HERO_X + 30 : en.homeX;
     en.x += (target - en.x) * Math.min(1, dt * (en.state === "attack" ? 18 : 5));
   }
