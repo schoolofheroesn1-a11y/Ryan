@@ -5,6 +5,7 @@ export const COSMETICS = [
   { id: "sword_void", kind: "sword", skin: "void", name: "Клинок Бездны", desc: "обсидиан, живые руны, шлейф тьмы", color: [180, 90, 255] },
   { id: "sword_sun", kind: "sword", skin: "sun", name: "Клинок Рассвета", desc: "золото, сияние и искры", color: [255, 214, 96] },
   { id: "sword_frost", kind: "sword", skin: "frost", name: "Ледяной Клык", desc: "кристалл, иней и снегопад", color: [150, 220, 255] },
+  { id: "sword_phoenix", kind: "sword", skin: "phoenix", name: "Клинок Феникса", desc: "ЛЕГЕНДА: огонь и крылья феникса", color: [255, 140, 40], price: "3 $" },
   { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "золотые рога, знамя, вихрь сакуры", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
   { id: "hit_souls", kind: "hit", name: "Призраки павших", desc: "души вырываются из врага", color: [190, 170, 255] },
@@ -20,12 +21,27 @@ const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a
 // ------------------------------------------------------------------ Облик меча
 // Геометрия клинка на спрайте героя 32×32 (см. art.compose_hero): в стойке клинок вертикален
 // по x=20, в выпаде — горизонтален по y=13. Длины — по картам мечей в game/art.py.
-const BLADE_LEN = { void: 17, sun: 17, frost: 16 };
+const BLADE_LEN = { void: 17, sun: 17, frost: 16, phoenix: 19 };
 const SKIN = {
   void: { glow: [170, 80, 255], hi: [240, 200, 255], parts: [[190, 100, 255], [120, 50, 200], [50, 20, 80]] },
   sun: { glow: [255, 200, 80], hi: [255, 255, 230], parts: [[255, 240, 170], [255, 200, 80], [230, 130, 40]] },
   frost: { glow: [130, 210, 255], hi: [255, 255, 255], parts: [[255, 255, 255], [200, 235, 255], [140, 200, 255]] },
+  phoenix: { glow: [255, 120, 40], hi: [255, 250, 222], parts: [[255, 230, 140], [255, 150, 40], [220, 60, 30]] },
 };
+
+/** Цвет огня по остатку жизни частицы: белый жар -> золото -> оранжевый -> багровый. */
+const FIRE = [[255, 250, 222], [255, 214, 90], [255, 140, 40], [214, 54, 30], [110, 20, 20]];
+function fireColor(k) {
+  const i = Math.min(FIRE.length - 1, Math.floor((1 - k) * FIRE.length));
+  return FIRE[i];
+}
+
+/** Сила вспышки огненных крыльев Феникса: в стойке — раз в 3 с, в выпаде — полностью. */
+function wingPower(pose, t) {
+  if (pose === "attack") return 1;
+  const ph = t % 3.2;
+  return ph < 1.5 ? Math.sin((ph / 1.5) * Math.PI) : 0;
+}
 
 export function bladePoints(skin, pose, hx, hy) {
   const len = BLADE_LEN[skin];
@@ -48,12 +64,31 @@ export class SwordAura {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       if (skin === "frost") p.vx += Math.sin((p.life + p.x) * 6) * 8 * dt; // снежинки покачиваются
+      if (p.feather) { // перо падает, покачиваясь
+        p.vx = Math.sin(p.life * 5 + p.x) * 6;
+        p.vy = Math.min(p.vy + 20 * dt, 8);
+      }
       p.life -= dt;
     }
     this.parts = this.parts.filter((p) => p.life > 0);
+    const was = this.pose;
+    this.pose = pose;
     if (!skin || !SKIN[skin] || (pose !== "idle" && pose !== "attack")) return;
     const pts = bladePoints(skin, pose, hx, hy);
-    const rate = { void: 20, sun: 16, frost: 9 }[skin];
+    if (skin === "phoenix") {
+      if (pose === "attack" && was !== "attack") { // выпад: взрыв огня и перьев из клинка
+        const [tx, ty] = pts[pts.length - 1];
+        for (let i = 0; i < 22; i++) {
+          const a = rand(-1.6, 1.6), v = rand(18, 60), life = rand(0.4, 0.9);
+          this.parts.push({ x: tx, y: ty, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 10, life, max: life, fire: true });
+        }
+        for (let i = 0; i < 5; i++) this.parts.push({ x: hx + rand(0, 24), y: hy + rand(0, 12), vx: 0, vy: rand(-30, -10), life: 1.6, max: 1.6, feather: true, col: [255, 160, 50] });
+      }
+      if (Math.random() < dt * 2.5) { // горящее перо слетает с крыльев
+        this.parts.push({ x: hx + 11 + rand(-14, 14), y: hy + rand(0, 10), vx: 0, vy: rand(-6, 2), life: 1.8, max: 1.8, feather: true, col: Math.random() < 0.5 ? [255, 180, 60] : [240, 90, 30] });
+      }
+    }
+    const rate = { void: 20, sun: 16, frost: 9, phoenix: 34 }[skin];
     this.acc += dt * rate;
     while (this.acc >= 1) {
       this.acc -= 1;
@@ -61,6 +96,7 @@ export class SwordAura {
       const life = rand(0.6, 1.3);
       const col = SKIN[skin].parts[Math.floor(Math.random() * 3)];
       if (skin === "frost") this.parts.push({ x: x + rand(-3, 3), y, vx: rand(-3, 3), vy: rand(5, 11), life, max: life, col });
+      else if (skin === "phoenix") this.parts.push({ x: x + rand(-2, 2), y, vx: rand(-6, 6), vy: rand(-30, -12), life: life * 0.7, max: life * 0.7, fire: true });
       else this.parts.push({ x: x + rand(-1, 1), y, vx: rand(-4, 4), vy: rand(-18, -7), life, max: life, col });
     }
     if (skin === "sun" && (!this.twinkle || this.twinkle.life <= 0) && Math.random() < dt * 1.6) {
@@ -111,8 +147,40 @@ export class SwordAura {
     }
     for (const p of this.parts) {
       const k = p.life / p.max;
-      c.fillStyle = rgba(p.col, Math.min(1, k * 1.5));
+      if (p.feather) { // перо: 2×1 с тлеющим кончиком
+        c.fillStyle = rgba(p.col, Math.min(1, k * 2));
+        c.fillRect(Math.round(p.x), Math.round(p.y), 2, 1);
+        c.fillStyle = rgba([255, 240, 180], Math.min(1, k * 2));
+        c.fillRect(Math.round(p.x) + 2, Math.round(p.y), 1, 1);
+        continue;
+      }
+      c.fillStyle = rgba(p.fire ? fireColor(k) : p.col, Math.min(1, k * 1.5));
       c.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+    }
+  }
+
+  /** То, что рисуется ЗА героем: огненные крылья Феникса. hx, hy — левый верх тела 24×32. */
+  drawBehind(c, skin, pose, hx, hy, t) {
+    if (skin !== "phoenix" || (pose !== "idle" && pose !== "attack")) return;
+    const k = wingPower(pose, t);
+    if (k <= 0.02) return;
+    const cx = hx + 11, cy = hy + 11; // между лопатками
+    for (const side of [-1, 1]) {
+      for (let f = 0; f < 7; f++) { // семь перьев в крыле: нижние — длинные и почти горизонтальные, верхние — короче
+        const ang = ((12 - f * 14) * Math.PI) / 180;
+        const len = (24 - f * 1.8) * (0.45 + 0.55 * k);
+        for (let i = 2; i < len; i++) {
+          const q = i / len;
+          const lift = Math.sin(q * Math.PI * 0.9) * 5; // перо выгнуто дугой вверх
+          const flick = Math.sin(t * 18 + f * 1.9 + i * 0.7) * q * 1.2;
+          const x = cx + side * (4 + Math.cos(ang) * i), y = cy + Math.sin(ang) * i - lift + flick;
+          c.fillStyle = rgba(fireColor(1 - q), k * (0.95 - q * 0.3));
+          c.fillRect(Math.round(x), Math.round(y), 1, q < 0.7 ? 2 : 1); // перо толще у основания
+        }
+        const tx = cx + side * (4 + Math.cos(ang) * len), ty = cy + Math.sin(ang) * len - Math.sin(Math.PI * 0.9) * 5;
+        c.fillStyle = rgba([255, 245, 200], k * (0.5 + 0.5 * Math.sin(t * 12 + f))); // раскалённый кончик
+        c.fillRect(Math.round(tx), Math.round(ty), 1, 1);
+      }
     }
   }
 }
@@ -134,12 +202,21 @@ export function drawSkinSlash(c, x, y, skin, k) {
   arc(radius, 3, s.glow, 0.9);
   arc(radius - 3, 1, s.hi, 1);
   if (skin === "void") arc(radius - 5, 2, [30, 0, 50], 0.9);
+  if (skin === "phoenix") { // огненная дуга шире и с языками пламени наружу
+    arc(radius + 5, 4, [214, 54, 30], 0.35);
+    arc(radius - 1, 2, [255, 214, 90], 0.9);
+  }
   for (let deg = -75; deg <= sweep; deg += 25) {
     const rad = (deg * Math.PI) / 180;
     const ax = x + Math.cos(rad) * radius * 0.55, ay = y + Math.sin(rad) * radius;
     if (skin === "sun") { // лучи
       c.fillStyle = rgba([255, 230, 140], 0.8 * fade);
       for (let i = 2; i < 7; i++) c.fillRect(Math.floor(ax + Math.cos(rad) * i), Math.floor(ay + Math.sin(rad) * i), 1, 1);
+    } else if (skin === "phoenix") { // языки пламени и искры
+      for (let i = 1; i < 6; i++) {
+        c.fillStyle = rgba(fireColor(i / 6), fade * (1 - i / 7));
+        c.fillRect(Math.floor(ax + Math.cos(rad) * i + rand(-1, 1)), Math.floor(ay + Math.sin(rad) * i - i * 0.6), 1, 1);
+      }
     } else if (skin === "frost") { // осколки льда
       c.fillStyle = rgba([220, 245, 255], fade);
       const fx = Math.floor(ax + Math.cos(rad) * 5 * k * 3), fy = Math.floor(ay + Math.sin(rad) * 5 * k * 3);

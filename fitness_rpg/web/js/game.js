@@ -638,6 +638,7 @@ class TitleScene extends Scene {
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
     const heroIdle = anim(`${heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
+    this.aura.drawBehind(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t); // огненные крылья Феникса
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
     this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
     this.outfitFx.draw(c);
@@ -1409,6 +1410,7 @@ class BattleScene extends Scene {
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
     else spr = IMG[`${hero}_${this.action}_0`];
     const hx = this.HERO_X + (this.action === "attack" ? 10 : this.action === "dodge" ? -6 : 0);
+    this.aura.drawBehind(c, skin, this.action === "attack" ? "attack" : this.action === "idle" ? "idle" : "", hx, GROUND_ARENA - 32, t);
     if (this.action === "dodge") {
       c.globalAlpha = 0.3;
       c.drawImage(spr, hx + 8, GROUND_ARENA - spr.height);
@@ -2375,8 +2377,8 @@ const COS_LAYOUT = (() => {
     rows.push({ head: KIND_TITLES[kind], y });
     y += 12;
     for (const item of COSMETICS.filter((c) => c.kind === kind)) {
-      rows.push({ item, rect: [12, y, 318, 26] });
-      y += 28;
+      rows.push({ item, rect: [12, y, 318, 24] });
+      y += 26;
     }
   }
   return rows;
@@ -2531,6 +2533,7 @@ class CosmeticsScene extends Scene {
     const dummy = this.dummyFlash > 0 ? IMG.skeleton_hurt_0 : IMG.skeleton_idle_0;
     c.drawImage(dummy, 96, 80 - dummy.height);
     const heroSpr = this.attacking ? IMG[`${hs}_attack_0`] : anim(`${hs}_idle`, t, 1.5, 2);
+    this.aura.drawBehind(c, skin, pose, hx, 48, t);
     c.drawImage(heroSpr, hx, 80 - heroSpr.height);
     this.aura.draw(c, skin, pose, hx, 48, t);
     this.outfitFx.draw(c);
@@ -2592,12 +2595,12 @@ class CosmeticsScene extends Scene {
       }
       const ci = COS_ITEMS.indexOf(row), sel = ci === this.index, r = row.rect, c = row.item;
       g.button(r, "", { selected: sel });
-      g.rect([r[0] + 6, r[1] + 5, 4, 16], `rgb(${c.color.join(",")})`);
-      g.text(c.name, r[0] + 16, r[1] + 4, 8, sel ? COL.gold : COL.text);
-      g.text(c.desc, r[0] + 16, r[1] + 15, 8, COL.dim);
+      g.rect([r[0] + 6, r[1] + 4, 4, 16], `rgb(${c.color.join(",")})`);
+      g.text(c.name, r[0] + 16, r[1] + 3, 8, sel ? COL.gold : COL.text);
+      g.text(c.desc, r[0] + 16, r[1] + 14, 8, c.price ? "rgb(255,170,80)" : COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
       const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : g.store.price(c.id);
-      g.text(status, r[0] + r[2] - 8, r[1] + 9, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
+      g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     this.drawPreview();
     const [x, y, w, h] = COS_PREVIEW;

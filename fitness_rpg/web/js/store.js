@@ -104,7 +104,8 @@ export class Store {
   /** Цена: из магазина, если он подключён; иначе 1 $ (в App Store ближайшая — 0,99 $), гриф — 10 $. */
   price(id) {
     const p = this.products[id];
-    return p && p.priceString ? p.priceString : PAID_ITEMS[id] || "1 $";
+    const own = COSMETICS.find((c) => c.id === id); // у легендарных обликов своя цена
+    return p && p.priceString ? p.priceString : PAID_ITEMS[id] || (own && own.price) || "1 $";
   }
 
   tipPrice(tip) {

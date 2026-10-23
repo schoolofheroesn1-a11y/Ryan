@@ -93,7 +93,7 @@ function int_in($v, $min, $max, $def) {
 
 const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'barbell'];
 const RELICS = ['armor', 'kingarmor', 'amulet'];
-const SKINS = ['void', 'sun', 'frost'];
+const SKINS = ['void', 'sun', 'frost', 'phoenix'];
 const OUTFITS = ['samurai'];
 
 /** Характеристики героя для боёв с ним (бот играет его снаряжением и силой). */

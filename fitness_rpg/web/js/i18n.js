@@ -73,6 +73,8 @@ const EN = {
   "Костёр: прокачка": "Bonfire: level up",
   "Лавка образов": "Cosmetics shop",
   "Рейтинг": "Leaderboard",
+  "ЛЕГЕНДА: огонь и крылья феникса": "LEGEND: fire and phoenix wings",
+  "Клинок Феникса": "Phoenix Blade",
   "ДУЭЛЬ: {name}": "DUEL: {name}",
   "Вы: ГОТОВЫ": "You: READY",
   "Вы: не готовы": "You: not ready",
