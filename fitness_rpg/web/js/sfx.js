@@ -79,6 +79,8 @@ function noise(dur, vol = 0.15, delay = 0, lowpass = 0) {
 export const sfx = {
   hit: () => { noise(0.12, 0.2); tone(180, 0.1, { slide: -100 }); },
   crit: () => { noise(0.15, 0.25); tone(320, 0.15, { slide: -200 }); tone(640, 0.1, { delay: 0.05, vol: 0.08 }); },
+  // струя пламени Клинка Феникса: рёв огня (глухой шум) и низкий гул
+  flame: () => { noise(0.45, 0.22, 0, 900); noise(0.3, 0.12, 0.05, 2400); tone(90, 0.45, { type: "sawtooth", slide: -40, vol: 0.08 }); },
   hurt: () => { tone(140, 0.3, { type: "sawtooth", slide: -90, vol: 0.18 }); noise(0.2, 0.15); },
   dodge: () => tone(500, 0.12, { type: "triangle", slide: 300, vol: 0.1 }),
   heal: () => [0, 0.08, 0.16].forEach((d, i) => tone(440 * (1 + i * 0.25), 0.15, { type: "triangle", delay: d, vol: 0.1 })),

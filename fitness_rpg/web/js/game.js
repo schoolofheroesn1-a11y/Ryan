@@ -1079,6 +1079,11 @@ class BattleScene extends Scene {
       en.flash = 0.15;
       this.game.shake = 0.12;
       crit ? sfx.crit() : sfx.hit();
+      if (crit && this.game.skin === "phoenix") { // Клинок Феникса: на крите из острия бьёт струя пламени
+        const cx = HIT_X[en.kind] || 12, cy = en.boss ? 24 : en.kind === "bat" ? 34 : 18;
+        this.aura.jet(this.HERO_X + 10 + 37, GROUND_ARENA - 19, Math.round(en.x) + cx, GROUND_ARENA - cy);
+        sfx.flame();
+      }
       const label = crit ? `${dmg} КРИТ!` : en.kind === "knight" ? `${dmg} БРОНЯ` : `${dmg}`;
       this.float(label, en.x + 12, 90, crit ? COL.gold : COL.text);
       const hit = this.game.style("hit");
@@ -2497,6 +2502,11 @@ class CosmeticsScene extends Scene {
       this.slashT = SLASH_TIME;
       const hit = this.item.kind === "hit" ? this.item.id : this.game.style("hit");
       if (hit) this.hitFx.spawn(hit, 108, 64);
+      this.demoHits = (this.demoHits || 0) + 1;
+      if (this.previewSkin === "phoenix" && this.demoHits % 2 === 0) { // показать струю пламени на крите
+        this.aura.jet(34 + 37, 61, 108, 62);
+        sfx.flame();
+      }
       this.outfitFx.burst(this.previewOutfit, 72, 61);
       this.dummyFlash = 0.15;
     }

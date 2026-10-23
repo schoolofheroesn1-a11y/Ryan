@@ -57,9 +57,65 @@ export class SwordAura {
     this.parts = [];
     this.acc = 0;
     this.twinkle = null;
+    this.jets = []; // огненные струи Феникса на критах
+  }
+
+  /** Крит Клинком Феникса: из острия (x0, y0) к врагу (x1, y1) бьёт струя пламени. */
+  jet(x0, y0, x1, y1) {
+    this.jets.push({ x0, y0, x1, y1, t: 0, dur: 0.42, acc: 0, hit: false });
+  }
+
+  updateJets(dt) {
+    for (const j of this.jets) {
+      j.t += dt;
+      const dx = j.x1 - j.x0, dy = j.y1 - j.y0, dist = Math.hypot(dx, dy) || 1;
+      const reach = Math.min(1, j.t / 0.12); // струя дотягивается до врага за 0,12 с
+      if (j.t < j.dur) { // пламя рвётся вдоль струи
+        j.acc += dt * 260;
+        while (j.acc >= 1) {
+          j.acc -= 1;
+          const q = Math.random() * reach, life = rand(0.18, 0.45), sp = rand(40, 110);
+          this.parts.push({
+            x: j.x0 + dx * q + rand(-1, 1), y: j.y0 + dy * q + rand(-2, 2) * q,
+            vx: (dx / dist) * sp + rand(-10, 10), vy: (dy / dist) * sp + rand(-22, 6), life, max: life, fire: true,
+          });
+        }
+      }
+      if (!j.hit && reach >= 1) { // взрыв огня на враге
+        j.hit = true;
+        for (let i = 0; i < 40; i++) {
+          const a = rand(0, Math.PI * 2), v = rand(15, 65), life = rand(0.3, 0.8);
+          this.parts.push({ x: j.x1, y: j.y1, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 15, life, max: life, fire: true });
+        }
+        for (let i = 0; i < 6; i++) this.parts.push({ x: j.x1 + rand(-6, 6), y: j.y1 + rand(-6, 4), vx: 0, vy: rand(-25, -8), life: 1.4, max: 1.4, feather: true, col: [255, 170, 60] });
+      }
+    }
+    this.jets = this.jets.filter((j) => j.t < j.dur + 0.1);
+  }
+
+  /** Ядро струи: раскалённая линия с колыханием, к концу — шире и краснее. */
+  drawJets(c, t) {
+    for (const j of this.jets) {
+      const fade = j.t < j.dur ? 1 : Math.max(0, 1 - (j.t - j.dur) / 0.1);
+      const reach = Math.min(1, j.t / 0.12);
+      const dx = j.x1 - j.x0, dy = j.y1 - j.y0, n = Math.max(2, Math.ceil(Math.hypot(dx, dy) * reach));
+      for (let i = 0; i <= n; i++) {
+        const q = i / Math.max(1, Math.hypot(dx, dy));
+        const wob = Math.sin(t * 40 + i * 0.6) * (0.5 + q * 2);
+        const x = Math.round(j.x0 + dx * q), y = Math.round(j.y0 + dy * q + wob);
+        const w = 1 + Math.floor(q * 3);
+        c.fillStyle = rgba([214, 54, 30], 0.55 * fade);
+        c.fillRect(x, y - w - 1, 1, 2 * w + 3);
+        c.fillStyle = rgba([255, 160, 40], 0.85 * fade);
+        c.fillRect(x, y - w, 1, 2 * w + 1);
+        c.fillStyle = rgba([255, 250, 222], fade);
+        c.fillRect(x, y, 1, 1);
+      }
+    }
   }
 
   update(dt, skin, pose, hx, hy) {
+    this.updateJets(dt);
     for (const p of this.parts) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -145,6 +201,7 @@ export class SwordAura {
         c.fillRect(x - 1, y - 1, 3, 3);
       }
     }
+    this.drawJets(c, t);
     for (const p of this.parts) {
       const k = p.life / p.max;
       if (p.feather) { // перо: 2×1 с тлеющим кончиком
