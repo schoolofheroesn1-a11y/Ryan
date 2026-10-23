@@ -237,6 +237,52 @@ def build_epic(dur, drop=1.2, bpm=140):
     return m
 
 
+def build_tutorial(dur, bpm=112):
+    """Третий трек — спокойный и весёлый «городской» чиптюн: до мажор (C–Am–F–G), подпрыгивающий бас-треугольник,
+    мелодия узким квадратом, мягкие арпеджио и хэты. Для видео-инструкций, где текст надо читать."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + SR)
+    prog = [("C", ["C", "E", "G"]), ("A", ["A", "C", "E"]), ("F", ["F", "A", "C"]), ("G", ["G", "B", "D"])]
+    # мелодия на 4 такта (по восьмым): ступени аккорда и проходящие ноты
+    tune = [("E", 5), ("G", 5), ("C", 6), ("G", 5), ("E", 5), ("D", 5), ("C", 5), ("D", 5),
+            ("E", 5), ("C", 5), ("A", 4), ("C", 5), ("E", 5), ("D", 5), ("C", 5), ("B", 4),
+            ("A", 4), ("C", 5), ("F", 5), ("A", 5), ("G", 5), ("F", 5), ("E", 5), ("F", 5),
+            ("G", 5), ("B", 4), ("D", 5), ("G", 5), ("F", 5), ("E", 5), ("D", 5), ("B", 4)]
+    fifth = {"C": "G", "A": "E", "F": "C", "G": "D"}
+    end = dur - 2.5
+    for b in range(int(end / beat)):
+        t = b * beat
+        root, chord = prog[(b // 4) % 4]
+        phrase = (b // 16) % 2  # каждая вторая фраза — с мелодией, между ними только аккомпанемент
+        mix_at(m, KICK, t, 0.45 if b % 2 == 0 else 0.0)
+        mix_at(m, HAT, t + beat / 2, 0.12)
+        if b % 4 == 2:
+            mix_at(m, SNARE, t, 0.18)
+        # бас: корень — квинта, треугольник
+        bn = root if b % 2 == 0 else fifth[root]
+        note = tri(hz(bn, 2 if b % 2 == 0 else 3), beat * 0.9) * env(int(SR * beat * 0.9), 0.004, 0.25)
+        mix_at(m, note, t, 0.5)
+        # арпеджио шестнадцатыми — тихо
+        for k in range(4):
+            n = chord[(b * 4 + k) % 3]
+            a = square(hz(n, 4), beat / 4 * 0.7, 0.25) * env(int(SR * beat / 4 * 0.7), 0.002, 0.04)
+            mix_at(m, a, t + k * beat / 4, 0.035)
+        if phrase == 1 or b < 16:
+            for k in range(2):
+                nm, oc = tune[(b * 2 + k) % len(tune)]
+                f = hz(nm, oc)
+                ln = beat / 2 * 0.85
+                note = square(f, ln, 0.125) * env(int(SR * ln), 0.003, 0.12)
+                vib = 1 + 0.004 * np.sin(2 * np.pi * 6 * t_(ln))  # лёгкое вибрато
+                mix_at(m, note * vib, t + k * beat / 2, 0.07)
+    # финал: аккорд до мажор арпеджио вверх и затухание
+    for k, (n, o) in enumerate((("C", 5), ("E", 5), ("G", 5), ("C", 6))):
+        note = square(hz(n, o), 1.6 - k * 0.2, 0.25) * env(int(SR * (1.6 - k * 0.2)), 0.003, 0.6)
+        mix_at(m, note, end + k * 0.12, 0.08)
+    mix_at(m, tri(hz("C", 2), 2.0) * np.linspace(1, 0, int(SR * 2.0)), end, 0.5)
+    return m[: int(SR * dur)]
+
+
 def sfx(kind):
     if kind == "thunder":  # молния «Гнева грозы»: треск и низкий раскат
         crack = hp(noise(0.5), 0.6) * env(int(SR * 0.5), 0.001, 0.12)

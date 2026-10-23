@@ -1,10 +1,9 @@
-"""Видео-инструкция «Как поставить Ash & Iron на экран "Домой"» (iPhone, Safari) с озвучкой.
+"""Видео-инструкция «Как поставить Ash & Iron на экран "Домой"» (iPhone, Safari): текстом и с 8-битной музыкой.
 
 Берёт запись экрана iPhone, делит её на шаги: на каждом шаге видео останавливается, место нажатия
-подсвечивается (затемнение вокруг и пульсирующее кольцо), сверху — номер шага, снизу — субтитры,
-голос (RHVoice, голос «Арина») объясняет, что нажать. Вертикальное 1080×1920, 30 к/с, H.264 + AAC.
-
-Нужно: ffmpeg, RHVoice-test с русским голосом (apt install rhvoice rhvoice-russian).
+подсвечивается (затемнение вокруг и пульсирующее кольцо), сверху — номер шага, снизу — что нажать.
+Кадр держится столько, сколько нужно, чтобы прочитать подпись. Музыка — music.build_tutorial.
+Вертикальное 1080×1920, 30 к/с, H.264 + AAC. Нужен ffmpeg.
 Запуск:
   python howto.py --video IMG_7723.MP4 --fonts FONTS_DIR --icon ../../web/assets/icon_512.png --out howto.mp4
 """
@@ -19,54 +18,35 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from compose import BG, FPS, GOLD, H, RED, W, WHITE, PixelFont, caption_image, fit_size
-from music import SR, hz, lp, mix_at, t_
+from music import SR, build_tutorial, mix_at, t_
 
-VOICE = "arina"
-VX, VY, VW, VH = 194, 236, 692, 1500     # где на кадре стоит запись экрана (576×1248 -> 692×1500)
+VX, VY, VW, VH = 217, 226, 646, 1400     # где на кадре стоит запись экрана (576×1248 -> 646×1400)
 SRC_W, SRC_H = 576, 1248
 DIM = (8, 5, 10)
 
 # Шаги: заголовок, субтитры, текст озвучки, куски записи до остановки [(начало, конец, скорость)],
 # кадр остановки и место нажатия (в пикселях исходной записи), куски после остановки.
 STEPS = [
-    dict(title=["ШАГ 1", "ОТКРОЙ ССЫЛКУ"], sub="Ссылка на игру — в нашем Telegram: ash-a-iron.com",
-         voice="Шаг первый. Откройте ссылку на игру. Она есть в нашем Телеграм-канале.",
+    dict(title=["ШАГ 1", "ОТКРОЙ ССЫЛКУ"], sub="Открой ссылку на игру: она есть в нашем Telegram-канале. Адрес: ash-a-iron.com",
          clips=[(0.0, 1.75, 1.0)], freeze=1.75, tap=(335, 462)),
-    dict(title=["ШАГ 2", "ОТКРОЙ В SAFARI"], sub="Сайт открылся внутри Telegram? Нажми значок компаса",
-         voice="Шаг второй. Если сайт открылся прямо в Телеграме, нажмите на значок компаса внизу, чтобы открыть его в браузере Сафари.",
+    dict(title=["ШАГ 2", "ОТКРОЙ В SAFARI"], sub="Сайт открылся внутри Telegram? Нажми значок компаса внизу справа: игра откроется в Safari",
          clips=[(2.25, 4.4, 1.0)], freeze=4.45, tap=(487, 1171), after=[(4.75, 7.0, 2.5)]),
-    dict(title=["ШАГ 3", "НАЖМИ «...»"], sub="Три точки — внизу справа",
-         voice="Шаг третий. Внизу справа нажмите на три точки.",
+    dict(title=["ШАГ 3", "НАЖМИ «...»"], sub="В Safari внизу справа нажми на три точки «...»",
          clips=[(7.0, 7.35, 1.0)], freeze=7.4, tap=(493, 1158)),
-    dict(title=["ШАГ 4", "«ПОДЕЛИТЬСЯ»"], sub="Первый пункт меню",
-         voice="Шаг четвёртый. Выберите пункт «Поделиться».",
+    dict(title=["ШАГ 4", "«ПОДЕЛИТЬСЯ»"], sub="В меню выбери первый пункт: «Поделиться»",
          clips=[(7.75, 8.6, 1.0)], freeze=10.3, tap=(325, 748)),
-    dict(title=["ШАГ 5", "«ПОКАЗАТЬ БОЛЬШЕ»"], sub="Стрелка справа в нижнем ряду",
-         voice="Шаг пятый. Нажмите стрелку «Показать больше».",
+    dict(title=["ШАГ 5", "«ПОКАЗАТЬ БОЛЬШЕ»"], sub="Нажми стрелку «Показать больше» в нижнем ряду",
          clips=[(11.0, 12.0, 1.0)], freeze=12.2, tap=(480, 1093)),
-    dict(title=["ШАГ 6", "«НА ЭКРАН ДОМОЙ»"], sub="Пункт «Добавить на экран Домой»",
-         voice="Шаг шестой. Выберите «Добавить на экран Домой».",
+    dict(title=["ШАГ 6", "«НА ЭКРАН ДОМОЙ»"], sub="В списке выбери «Добавить на экран Домой»",
          clips=[(12.75, 13.3, 1.0)], freeze=13.4, tap=(281, 1115)),
-    dict(title=["ШАГ 7", "«ДОБАВИТЬ»"], sub="«Открыть как веб-приложение» — оставь включённым",
-         voice="Шаг седьмой. Оставьте включённым пункт «Открыть как веб-приложение» и нажмите «Добавить» в правом верхнем углу.",
+    dict(title=["ШАГ 7", "«ДОБАВИТЬ»"], sub="Оставь включённым «Открыть как веб-приложение» и нажми «Добавить» вверху справа",
          clips=[(14.5, 15.6, 1.0)], freeze=16.3, tap=(468, 154)),
 ]
-INTRO_VOICE = "Как поставить игру Эш энд Айрон на главный экран айфона. Всего семь простых шагов."
-OUTRO_VOICE = "Готово! Иконка игры появится на главном экране. Игра откроется на весь экран, как обычное приложение. Приятной тренировки!"
 
 
-def say(text, path):
-    subprocess.run(["RHVoice-test", "-p", VOICE, "-o", path], input=text.encode("utf-8"), check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    with wave.open(path) as w:
-        data = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768
-        rate = w.getframerate()
-        if w.getnchannels() == 2:
-            data = data.reshape(-1, 2).mean(axis=1)
-    if rate != SR:  # простая передискретизация до частоты микса
-        x = np.linspace(0, len(data) - 1, int(len(data) * SR / rate))
-        data = np.interp(x, np.arange(len(data)), data)
-    return data
+def read_time(text):
+    """Сколько держать кадр, чтобы спокойно прочитать подпись (≈14 знаков в секунду, не меньше 2,4 с)."""
+    return max(2.4, 1.0 + len(text) / 14)
 
 
 def src_frames(path, t0, t1, speed):
@@ -131,7 +111,7 @@ class Canvas:
         words, lines, cur = sub.split(), [], ""
         for w_ in words:
             nxt = f"{cur} {w_}".strip()
-            if pf.width(nxt, 30) > W - 80 and cur:
+            if pf.width(nxt, 32) > W - 80 and cur:
                 lines.append(cur)
                 cur = w_
             else:
@@ -139,9 +119,9 @@ class Canvas:
         lines.append(cur)
         d = ImageDraw.Draw(f, "RGBA")
         y0 = VY + VH + 34
-        d.rounded_rectangle([30, y0 - 16, W - 30, y0 + len(lines) * 44 + 4], radius=18, fill=(10, 6, 12, 220), outline=(90, 64, 50, 255), width=3)
-        for i, line in enumerate(lines[:3]):
-            pf.draw(d, ((W - pf.width(line, 30)) // 2, y0 + i * 44), line, 30, WHITE, stroke=3, stroke_fill=(8, 6, 12))
+        d.rounded_rectangle([30, y0 - 16, W - 30, y0 + len(lines[:4]) * 50 + 4], radius=18, fill=(10, 6, 12, 220), outline=(90, 64, 50, 255), width=3)
+        for i, line in enumerate(lines[:4]):
+            pf.draw(d, ((W - pf.width(line, 32)) // 2, y0 + i * 50), line, 32, WHITE, stroke=3, stroke_fill=(8, 6, 12))
 
 
 def spotlight(f, cx, cy, t, strength):
@@ -162,18 +142,6 @@ def spotlight(f, cx, cy, t, strength):
     d.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(255, 255, 255, int(150 * strength)), outline=(255, 214, 96, int(255 * strength)), width=4)
 
 
-def soft_pad(dur):
-    """Тихая подложка: медленные аккорды ре минор, чтобы голос звучал не в пустоте."""
-    m = np.zeros(int(SR * dur) + SR)
-    chords = [["D", "F", "A"], ["A#", "D", "F"], ["F", "A", "C"], ["C", "E", "G"]]
-    bar = 4.0
-    for i in range(int(dur / bar) + 1):
-        tone = sum(np.sin(2 * np.pi * hz(n, 3 if k == 0 else 4) * t_(bar)) for k, n in enumerate(chords[i % 4]))
-        e = np.minimum(1, np.linspace(0, 4, int(SR * bar))) * np.minimum(1, np.linspace(4, 0, int(SR * bar)))
-        mix_at(m, lp(tone, 0.05) * e / 3, i * bar, 0.6)
-    return m[: int(SR * dur)]
-
-
 def click():
     n = int(SR * 0.05)
     return np.sin(2 * np.pi * 1400 * t_(0.05)) * np.exp(-np.linspace(0, 12, n)) * 0.5
@@ -192,7 +160,7 @@ def main():
     vid = os.path.join(tmp, "video.mp4")
     enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS),
                             "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", vid], stdin=subprocess.PIPE)
-    voices, clicks = [], []  # (время начала, звук)
+    clicks = []  # (время, звук нажатия)
     n = 0
 
     def put(img):
@@ -201,12 +169,10 @@ def main():
         n += 1
 
     # ---------------- вступление: иконка игры и заголовок
-    vo = say(INTRO_VOICE, os.path.join(tmp, "intro.wav"))
-    voices.append((0.3, vo))
     icon = Image.open(a.icon).convert("RGBA").resize((360, 360), Image.NEAREST)
     mask = Image.new("L", icon.size, 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, 359, 359], radius=80, fill=255)
-    intro = int((0.3 + len(vo) / SR + 0.4) * FPS)
+    intro = int(3.0 * FPS)
     head = caption_image(pf, ["КАК ПОСТАВИТЬ ИГРУ", "НА ЭКРАН «ДОМОЙ»"], [fit_size(pf, "КАК ПОСТАВИТЬ ИГРУ", 54), fit_size(pf, "НА ЭКРАН «ДОМОЙ»", 64)], [WHITE, GOLD])
     for i in range(intro):
         f = cv.bg.copy()
@@ -222,20 +188,19 @@ def main():
 
     # ---------------- шаги
     for si, st in enumerate(STEPS):
-        vo = say(st["voice"], os.path.join(tmp, f"step{si}.wav"))
-        t_step = n / FPS
-        voices.append((t_step + 0.15, vo))
         age = 0
         for t0, t1, sp in st["clips"]:
             for fr in src_frames(a.video, t0, t1, sp):
                 put(cv.frame(fr, st["title"], st["sub"], min(1.0, age / 6)))
                 age += 1
         freeze = src_frames(a.video, st["freeze"], st["freeze"] + 0.05, 1.0)[0]
-        hold = max(int(1.4 * FPS), int((t_step + 0.15 + len(vo) / SR + 0.35) * FPS) - n)
+        hold = int(read_time(st["sub"]) * FPS)
         clicks.append((n / FPS + hold / FPS - 0.25, click()))
         for i in range(hold):
-            f = cv.frame(freeze, st["title"], st["sub"], min(1.0, age / 6))
+            f = cv.frame(freeze)
             spotlight(f, *st["tap"], i / FPS, min(1.0, i / 6))
+            cv.title(f, st["title"], min(1.0, age / 6))  # подписи — поверх затемнения, чтобы читались
+            cv.subtitle(f, st["sub"])
             put(f)
             age += 1
         for t0, t1, sp in st.get("after", []):
@@ -243,9 +208,7 @@ def main():
                 put(cv.frame(fr, st["title"], st["sub"]))
 
     # ---------------- финал: главный экран с иконкой игры
-    vo = say(OUTRO_VOICE, os.path.join(tmp, "outro.wav"))
-    voices.append((n / FPS + 0.2, vo))
-    outro = int((0.2 + len(vo) / SR + 1.2) * FPS)
+    outro = int(5.0 * FPS)
     rnd = np.random.default_rng(3)
     apps = [tuple(int(c) for c in rnd.integers(40, 110, 3)) for _ in range(24)]
     for i in range(outro):
@@ -280,9 +243,7 @@ def main():
 
     # ---------------- звук: голос, щелчки нажатий и тихая подложка
     dur = n / FPS
-    mix = soft_pad(dur) * 0.07
-    for t, snd in voices:
-        mix_at(mix, snd, t, 1.0)
+    mix = build_tutorial(dur) * 0.8
     for t, snd in clicks:
         mix_at(mix, snd, t, 0.5)
     mix = mix[: int(SR * dur)]
@@ -294,7 +255,7 @@ def main():
         w.setframerate(SR)
         w.writeframes((mix * 32767).astype(np.int16).tobytes())
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", vid, "-i", wav, "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
-                    "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ac", "2", "-movflags", "+faststart", "-shortest", a.out], check=True)
+                    "-af", "loudnorm=I=-15:TP=-1.5:LRA=11", "-ac", "2", "-movflags", "+faststart", "-shortest", a.out], check=True)
     print(f"Готово: {a.out} ({dur:.1f} с)")
 
 
