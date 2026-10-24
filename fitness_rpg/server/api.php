@@ -60,6 +60,11 @@ try {
             try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
         }
     }
+    try { // медали дуэлей и итог комнаты: тоже добавляются к уже созданным таблицам
+        $db->query('SELECT medals FROM mp_accounts LIMIT 0');
+    } catch (Exception $e) {
+        try { $db->exec('ALTER TABLE mp_accounts ADD COLUMN medals INT NOT NULL DEFAULT 0'); } catch (Exception $e2) { /* уже есть */ }
+    }
     $db->exec("CREATE TABLE IF NOT EXISTS mp_sessions (token_hash CHAR(64) PRIMARY KEY, account_id CHAR(16) NOT NULL, created INT NOT NULL)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_fights (id CHAR(16) PRIMARY KEY, account_id CHAR(16) NOT NULL, opp_id CHAR(16) NOT NULL, created INT NOT NULL, done INT NOT NULL DEFAULT 0)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_hits (ip_hash CHAR(64) NOT NULL, kind VARCHAR(8) NOT NULL, t INT NOT NULL)$cs");
@@ -67,6 +72,11 @@ try {
         host_seen INT NOT NULL, guest_seen INT NOT NULL DEFAULT 0, created INT NOT NULL)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_events (room CHAR(4) NOT NULL, side INT NOT NULL, seq INT NOT NULL, payload TEXT NOT NULL, t INT NOT NULL,
         PRIMARY KEY (room, side, seq))$cs");
+    try {
+        $db->query('SELECT done FROM mp_rooms LIMIT 0');
+    } catch (Exception $e) {
+        try { $db->exec('ALTER TABLE mp_rooms ADD COLUMN done INT NOT NULL DEFAULT 0'); } catch (Exception $e2) { /* уже есть */ }
+    }
 } catch (Exception $e) {
     fail('database unavailable', 503);
 }
@@ -216,6 +226,7 @@ function public_account($a) {
         'best' => ['bosses' => (int)$a['bosses'], 'level' => (int)$a['level'], 'wave' => (int)$a['wave']],
         'unlocks' => json_decode($a['unlocks'] ?: '[]', true) ?: [],
         'arena_pos' => (int)$a['arena_pos'],
+        'medals' => isset($a['medals']) ? (int)$a['medals'] : 0,
         'attempts' => attempts_left($a),
     ];
 }
@@ -396,7 +407,7 @@ if ($action === 'challenge_end') {
     if ($won) {
         $o = reload($f['opp_id']);
         $me = reload($a['id']);
-        if ($o && (int)$o['arena_pos'] < (int)$me['arena_pos']) { // победа над тем, кто выше: меняемся местами
+        if ($o && (int)$o['arena_pos'] !== (int)$me['arena_pos']) { // победа: встаём на место соперника, он — на наше
             $db->beginTransaction();
             $db->prepare('UPDATE mp_accounts SET arena_pos = ? WHERE id = ?')->execute([(int)$me['arena_pos'], $o['id']]);
             $db->prepare('UPDATE mp_accounts SET arena_pos = ? WHERE id = ?')->execute([(int)$o['arena_pos'], $me['id']]);
@@ -440,6 +451,25 @@ function duel_opponent($r, $side) {
     if (!$id) return null;
     $o = reload($id);
     return ['name' => $o['name'], 'hero' => json_decode($o['hero'] ?: 'null', true) ?: clean_hero([])];
+}
+
+/**
+ * Медали дуэлей: проигравший (он сам сообщает «dead», в том числе когда сдаётся) теряет одну, но не ниже нуля,
+ * победитель получает одну. Считается один раз за комнату и только если бой начался — оба нажали «готов».
+ */
+function duel_medals($r, $loserSide) {
+    global $db;
+    if (!$r['guest_id']) return;
+    $q = $db->prepare("SELECT COUNT(DISTINCT side) FROM mp_events WHERE room = ? AND payload LIKE '%\"t\":\"ready\"%'");
+    $q->execute([$r['code']]);
+    if ((int)$q->fetchColumn() < 2) return;
+    $u = $db->prepare('UPDATE mp_rooms SET done = 1 WHERE code = ? AND done = 0');
+    $u->execute([$r['code']]);
+    if ($u->rowCount() !== 1) return; // итог уже засчитан
+    $loser = $loserSide === 0 ? $r['host_id'] : $r['guest_id'];
+    $winner = $loserSide === 0 ? $r['guest_id'] : $r['host_id'];
+    $db->prepare('UPDATE mp_accounts SET medals = medals + 1 WHERE id = ?')->execute([$winner]);
+    $db->prepare('UPDATE mp_accounts SET medals = CASE WHEN medals > 0 THEN medals - 1 ELSE 0 END WHERE id = ?')->execute([$loser]);
 }
 
 if ($action === 'duel_create') {
@@ -489,6 +519,7 @@ if ($action === 'duel_sync') {
         foreach ($events as $e) {
             $p = json_encode($e);
             if (is_array($e) && strlen($p) <= 300) $ins->execute([$r['code'], $side, ++$seq, $p, $now]);
+            if (is_array($e) && isset($e['t']) && $e['t'] === 'dead') duel_medals($r, $side);
         }
     }
     $q = $db->prepare('SELECT seq, payload FROM mp_events WHERE room = ? AND side = ? AND seq > ? ORDER BY seq LIMIT 50');

@@ -1643,8 +1643,8 @@ class ChallengeScene extends BattleScene {
     g.text(won ? "ПОБЕДА!" : "ПОРАЖЕНИЕ", W / 2, g.gameH / 2 - 28, 32, won ? COL.gold : "rgb(170,20,20)", "center");
     let line = "Отправка результата...";
     if (o && o.error) line = o.error;
-    else if (o && o.moved) line = tf("Вы поднялись на {pos} место!", { pos: o.account.arena_pos });
-    else if (o) line = won ? "Соперник был ниже: место не изменилось" : "Место не изменилось. Попробуйте ещё раз";
+    else if (o && o.moved) line = tf("Вы заняли {pos} место соперника!", { pos: o.account.arena_pos });
+    else if (o) line = won ? "Место не изменилось" : "Место не изменилось. Попробуйте ещё раз";
     g.text(line, W / 2, g.gameH / 2 + 12, 8, COL.text, "center");
     g.text("Касание: к списку соперников", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
   }
@@ -1688,6 +1688,8 @@ class DuelScene extends BattleScene {
     this.myAtks = []; // до удара своих выпадов: каждое отжимание — выпад, без ожидания предыдущего
     this.incoming = []; // выпады соперника в очереди
     this.reason = "";
+    this.medals0 = game.online.account ? game.online.account.medals || 0 : 0; // медали до боя
+    this.medals = null; // после боя — с сервера
     this.meReady = false; // бой начинается, когда оба подтвердили готовность
     this.oppReady = false;
     this.send({ t: "hp", hp: this.hp, max: p.maxHp });
@@ -1850,11 +1852,26 @@ class DuelScene extends BattleScene {
     this.result = result;
     this.resultT = 0;
     this.reason = reason;
+    if (result !== "lost") this.fetchMedals();
     if (result === "won") {
       this.enemy.set("dead", 0);
       sfx.win();
       vibrate([40, 30, 40]);
     }
+  }
+  /** Медали после боя: сервер засчитывает итог, когда проигравший сообщил о поражении. */
+  fetchMedals(tries = 4) {
+    const g = this.game;
+    setTimeout(() => {
+      if (g.scene !== this) return;
+      g.online.me()
+        .then((r) => {
+          const m = r.account.medals || 0;
+          if (m !== this.medals0 || tries <= 1 || this.medals0 === 0) this.medals = m;
+          else this.fetchMedals(tries - 1); // итог ещё не дошёл до сервера — спросим снова
+        })
+        .catch(() => { if (tries > 1) this.fetchMedals(tries - 1); });
+    }, 1200);
   }
   die() {
     this.send({ t: "dead" });
@@ -1901,8 +1918,16 @@ class DuelScene extends BattleScene {
     const [title, col] = { won: ["ПОБЕДА!", COL.gold], dead: ["ПОРАЖЕНИЕ", "rgb(170,20,20)"], lost: ["ДУЭЛЬ ПРЕРВАНА", COL.dim] }[this.result];
     g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
     g.text(title, W / 2, g.gameH / 2 - 28, 32, col, "center");
-    if (this.reason) g.text(this.reason, W / 2, g.gameH / 2 + 12, 8, COL.text, "center");
-    g.text("Касание: к дуэлям", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
+    if (this.reason) g.text(this.reason, W / 2, g.gameH / 2 + 4, 8, COL.text, "center");
+    if (this.result !== "lost") {
+      const d = this.medals == null ? null : this.medals - this.medals0;
+      const t = d == null ? "Медали: подсчёт..." : d > 0 ? tf("+{d} медаль · всего {n}", { d, n: this.medals })
+        : d < 0 ? tf("-1 медаль · всего {n}", { n: this.medals }) : tf("Медалей: {n}", { n: this.medals });
+      const P = g.portrait, fs = P ? 14 : 8;
+      drawMedal(g, W / 2 - tr(t).length * fs / 2 - (P ? 30 : 16), g.gameH / 2 + (P ? 8 : 11), P ? 2 : 1);
+      g.text(t, W / 2, g.gameH / 2 + 15, fs, d > 0 ? COL.gold : d < 0 ? "rgb(255,130,100)" : COL.text, "center");
+    }
+    g.text("Касание: к дуэлям", W / 2, g.gameH / 2 + (g.portrait ? 36 : 30), 8, COL.dim, "center");
   }
 }
 
@@ -1932,6 +1957,18 @@ function mpStep(L, n, reserve = 0) {
 function bottomButtons(L, labels) {
   const gap = 8, w = (W - 24 - gap * (labels.length - 1)) / labels.length;
   return labels.map((l, i) => [[12 + i * (w + gap), L.btnY, w, L.btnH], l]);
+}
+
+/** Пиксельная медаль дуэли 12×16 (×k): красно-синяя лента и золотой диск со звездой. */
+function drawMedal(g, x, y, k = 1, dim = false) {
+  const px = (cx, cy, w, h, col) => g.rect([x + cx * k, y + cy * k, w * k, h * k], col);
+  px(2, 0, 3, 6, dim ? "rgb(90,60,60)" : "rgb(200,40,50)");
+  px(7, 0, 3, 6, dim ? "rgb(60,70,90)" : "rgb(60,110,230)");
+  px(1, 5, 10, 10, "rgb(60,40,20)");
+  px(2, 6, 8, 8, dim ? "rgb(130,120,100)" : "rgb(232,190,92)");
+  px(3, 7, 3, 2, dim ? "rgb(170,160,140)" : "rgb(255,240,170)");
+  px(5, 8, 2, 4, dim ? "rgb(100,90,70)" : "rgb(170,110,30)");
+  px(4, 9, 4, 2, dim ? "rgb(100,90,70)" : "rgb(170,110,30)");
 }
 
 /** Иконка игрока в списке: его герой с мечом, доспехами и обликами. В альбомной — голова и плечи. */
@@ -1985,7 +2022,7 @@ class MultiplayerScene extends Scene {
     if (!o.configured) return;
     if (this.tab === "rating") this.run(async () => (this.data.rating = await o.top()));
     if (this.tab === "challenge" && o.loggedIn) this.run(async () => (this.data.arena = await o.arena()));
-    if (this.tab === "friends" && o.loggedIn) this.run(async () => this.game.onAccount((await o.me()).account));
+    if ((this.tab === "friends" || this.tab === "duel") && o.loggedIn) this.run(async () => this.game.onAccount((await o.me()).account));
   }
   /** Вход или выход. Окно входа висит, пока вход не удался; «Отмена» — в главное меню. */
   async account() {
@@ -2074,18 +2111,44 @@ class MultiplayerScene extends Scene {
   }
   /** «Бросить вызов»: строки списка (окно вокруг игрока) и их высота. */
   arenaView(L) {
-    const a = this.data.arena;
-    if (!a) return { rows: [], step: mpStep(L, 7) };
-    const reserve = L.P ? 64 : 24; // место под подсказку
-    const step = mpStep(L, Math.min(a.rows.length, 11), reserve);
+    const a = this.data.arena, top = L.top + this.podiumH(L);
+    if (!a) return { rows: [], step: mpStep(L, 7), top };
+    const reserve = (L.P ? 64 : 24) + (top - L.top); // место под тройку лидеров и подсказку
+    const pos = a.pos;
+    const rows = a.rows.filter((r) => Math.abs(r.pos - pos) <= 8); // окно вокруг игрока (тройка — отдельно, сверху)
+    const step = mpStep(L, Math.min(rows.length, 11), reserve);
     const room = Math.max(4, Math.floor((L.bottom - reserve - L.top) / step));
-    const rows = a.rows, me = rows.findIndex((r) => r.me);
+    const me = rows.findIndex((r) => r.me);
     const from = Math.max(0, Math.min(me - Math.floor(room / 2), rows.length - room));
-    return { rows: rows.slice(from, from + room), step };
+    return { rows: rows.slice(from, from + room), step, top };
+  }
+  /** Высота панели «тройка лидеров» над списком соперников. */
+  podiumH(L) {
+    return L.P ? 186 : 50;
   }
   challengeButton(L, i, step) {
     const bw = L.P ? 170 : 90;
-    return [W - 14 - bw, L.top + i * step + 4, bw, step - 10];
+    return [W - 14 - bw, this.arenaView(L).top + i * step + 4, bw, step - 10];
+  }
+  /** Первые 3 места лестницы: карточки с героем, именем и уровнем. */
+  drawPodium(L, a) {
+    const g = this.game, P = L.P, y = L.head - (P ? -6 : 2), h = this.podiumH(L) - (P ? 16 : 8);
+    const gap = 8, w = (W - 24 - gap * 2) / 3;
+    const cols = ["rgb(255,215,90)", "rgb(210,215,225)", "rgb(220,150,90)"];
+    if (!P) g.text("ТОП-3", W / 2, y - 11, 8, COL.gold, "center"); // в портрете места подписаны на карточках
+    for (let i = 0; i < 3; i++) {
+      const row = a.rows.find((r) => r.pos === i + 1), x = 12 + i * (w + gap);
+      g.rect([x, y, w, h], row && row.me ? "rgba(232,190,92,0.25)" : "rgba(255,255,255,0.06)");
+      g.rect([x, y, w, P ? 4 : 2], cols[i]);
+      if (!row) continue;
+      g.text(`${i + 1}`, x + (P ? 10 : 4), y + (P ? 14 : 6), P ? 28 : 8, cols[i]);
+      if (P) drawAvatar(g, row.look, x + 10, y + 48, h - 48, true);
+      else drawAvatar(g, row.look, x + 16, y + 8, 18, false);
+      const tx = P ? x + 86 : x + 40, fs = P ? (row.name.length > 7 ? 12 : 16) : 8;
+      const name = row.name.length > (P ? 10 : 12) ? row.name.slice(0, P ? 9 : 11) + "." : row.name;
+      g.text(row.bot ? `${name}*` : name, tx, y + (P ? 60 : 8), fs, row.me ? COL.gold : COL.text);
+      g.text(tf("ур. {n}", { n: row.level }), tx, y + (P ? 92 : 22), P ? 14 : 8, COL.dim);
+    }
   }
   friendButtons(L) {
     const h = L.P ? 96 : 30, y = L.P ? L.top + 340 : L.top + 150, w = (W - 24 - 12) / 2;
@@ -2217,19 +2280,20 @@ class MultiplayerScene extends Scene {
     const g = this.game, a = this.data.arena;
     if (!this.online.loggedIn) return this.drawLoginHint(L);
     const nameX = L.P ? 138 : 68, lvX = L.P ? 400 : 400;
-    g.text("#", 18, L.head, L.small, COL.dim);
-    g.text("СОПЕРНИК", nameX, L.head, L.small, COL.dim);
-    g.text("УР.", lvX, L.head, L.small, COL.dim);
+    const v = this.arenaView(L), head = v.top - (L.top - L.head);
+    if (a) this.drawPodium(L, a);
+    g.text("#", 18, head, L.small, COL.dim);
+    g.text("СОПЕРНИК", nameX, head, L.small, COL.dim);
+    g.text("УР.", lvX, head, L.small, COL.dim);
     if (a) {
       const t = tf("Попыток сегодня: {n}/{max}", { n: a.attempts, max: a.per_day }), col = a.attempts ? COL.gold : COL.red;
       if (L.P) g.text(t, 14, L.info + 24, 14, col);
-      else g.text(t, W - 14, L.head, 8, col, "right");
+      else g.text(t, W - 14, head, 8, col, "right");
     }
-    g.rect([12, L.top - 6, W - 24, 1], "rgb(90,64,50)");
+    g.rect([12, v.top - 6, W - 24, 1], "rgb(90,64,50)");
     if (!a) return;
-    const v = this.arenaView(L);
     v.rows.forEach((row, i) => {
-      const y = L.top + i * v.step;
+      const y = v.top + i * v.step;
       const col = row.me ? COL.gold : row.bot ? "rgb(170,160,150)" : COL.text;
       const ty = this.drawRowBase(L, y, v.step, row.pos, row, row.me, col);
       const nameFs = L.P ? (row.name.length > 11 ? 14 : 16) : 8;
@@ -2237,7 +2301,7 @@ class MultiplayerScene extends Scene {
       g.text(`${row.level}`, lvX + (L.P ? 0 : 0), ty, L.fs, col);
       if (row.can) g.button(this.challengeButton(L, i, v.step), "ВЫЗОВ", { size: L.P ? 16 : 8, color: a.attempts ? "rgb(255,140,100)" : COL.dim });
     });
-    const hint = "* бот. Вызов — тем, кто до 3 мест выше или ниже. Победа над тем, кто выше: меняетесь местами";
+    const hint = "* бот. Вызов — тем, кто до 3 мест выше или ниже. Победа: вы встаёте на место соперника";
     g.wrap(hint, L.P ? 50 : 78).slice(0, 2).forEach((line, i) => g.text(line, 14, L.bottom - (L.P ? 52 : 22) + i * (L.P ? 20 : 10), L.P ? 12 : 8, COL.dim));
   }
   drawDuel(L) {
@@ -2256,6 +2320,12 @@ class MultiplayerScene extends Scene {
       g.text("Скажите код сопернику. Ждём его...", W / 2, b.cancel[1] - (L.P ? 100 : 40), L.P ? 16 : 8, COL.dim, "center");
       g.button(b.cancel, "ОТМЕНА", { size: L.btnFs });
     } else {
+      const m = (this.online.account && this.online.account.medals) || 0, k = L.P ? 3 : 1;
+      const my = y + (L.P ? 6 : 2);
+      drawMedal(g, 20, my, k);
+      g.text(tf("Медали дуэлей: {n}", { n: m }), 20 + 16 * k, my + (L.P ? 8 : 4), L.P ? 22 : 8, COL.gold);
+      g.wrap("Победа: +1 медаль. Поражение: -1 (не ниже нуля)", L.P ? 34 : 70)
+        .forEach((line, i) => g.text(line, 20 + 16 * k, my + (L.P ? 38 + i * 20 : 14 + i * 10), L.P ? 13 : 8, COL.dim));
       g.button(b.create, "СОЗДАТЬ КОМНАТУ", { size: L.P ? 24 : 8, color: COL.gold });
       g.button(b.join, "ВОЙТИ ПО КОДУ", { size: L.P ? 24 : 8 });
     }
