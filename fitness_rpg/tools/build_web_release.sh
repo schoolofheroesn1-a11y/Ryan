@@ -19,7 +19,7 @@ python3 tools/flatten_release.py "$OUT" dist/ash-and-iron-web
 rm -rf "$OUT"
 OUT=dist/ash-and-iron-web
 touch "$OUT/.nojekyll"  # GitHub Pages отдаёт файлы как есть, без Jekyll
-cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html "$OUT/"
+cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html deploy/offer.html deploy/prices.html deploy/contacts.html "$OUT/"
 # архив для своего хостинга (sweb): игра + .htaccess + сервер мультиплеера, всё в корне архива
 H=dist/ash-a-iron-hosting
 rm -rf "$H" dist/ash-a-iron-hosting.zip && cp -r "$OUT" "$H"
