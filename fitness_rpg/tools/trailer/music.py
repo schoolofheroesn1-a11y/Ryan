@@ -237,6 +237,62 @@ def build_epic(dur, drop=1.2, bpm=140):
     return m
 
 
+def build_duel(dur, drop=1.7, bpm=132):
+    """Трек для дуэлей: ми минор (Em–C–G–D), бочка на каждую долю, бегущее арпеджио и «дуэльный» мотив."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + SR)
+    prog = [("E", ["E", "G", "B"]), ("C", ["C", "E", "G"]), ("G", ["G", "B", "D"]), ("D", ["D", "F#", "A"])]
+    hook = [("B", 5), (None, 0), ("B", 5), ("A", 5), ("G", 5), (None, 0), ("E", 5), ("F#", 5),
+            ("G", 5), (None, 0), ("G", 5), ("A", 5), ("B", 5), ("D", 6), ("B", 5), (None, 0)]
+    kick = sine_sweep(150, 45, 0.22) * env(int(SR * 0.22), 0.001, 0.12)
+    # вступление: нарастающий гул и арпеджио без ударных
+    for b in range(int(drop / (beat / 4))):
+        t = b * beat / 4
+        nm = ["E", "G", "B", "E"][b % 4]
+        f = hz(nm, 4 if b % 4 < 3 else 5)
+        mix_at(m, square(f, beat / 4 * 0.7, 0.125) * env(int(SR * beat / 4 * 0.7), 0.002, 0.05), t, 0.05 + 0.05 * t / drop)
+    mix_at(m, hp(noise(drop)) * np.linspace(0, 1, int(SR * drop)) ** 3, 0, 0.2)
+    end = dur - 1.6
+    n = int((end - drop) / beat)
+    for b in range(n):
+        t = drop + b * beat
+        root, chord = prog[(b // 4) % 4]
+        mix_at(m, kick, t, 0.9)
+        if b % 2 == 1:
+            mix_at(m, SNARE, t, 0.5)
+        for k in range(4):
+            mix_at(m, HAT, t + k * beat / 4, 0.08 if k % 2 else 0.13)
+        # бас: октавы шестнадцатыми с паузой на долю бочки
+        for k in range(1, 4):
+            oc = 2 if k % 2 else 3
+            note = np.tanh(2.5 * lp(square(hz(root, oc), beat / 4 * 0.8, 0.5), 0.25)) * env(int(SR * beat / 4 * 0.8), 0.002, 0.06)
+            mix_at(m, note, t + k * beat / 4, 0.22)
+        # арпеджио аккорда
+        for k in range(4):
+            nm = chord[k % 3] if k < 3 else chord[1]
+            f = hz(nm, 5)
+            mix_at(m, square(f, beat / 4 * 0.6, 0.125) * env(int(SR * beat / 4 * 0.6), 0.001, 0.04), t + k * beat / 4, 0.035)
+        # мотив: восьмые, треугольник + квадрат
+        for k in range(2):
+            nm, oc = hook[(b * 2 + k) % len(hook)]
+            if nm is None:
+                continue
+            f = hz(nm, oc)
+            ln = beat / 2 * 0.85
+            note = (0.7 * tri(f, ln) + 0.5 * square(f, ln, 0.5)) * env(int(SR * ln), 0.003, 0.18)
+            mix_at(m, note, t + k * beat / 2, 0.08)
+        if b % 16 == 15:  # сбивка малым в конце фразы
+            for k in range(4):
+                mix_at(m, SNARE, t + k * beat / 4, 0.25 + 0.08 * k)
+    mix_at(m, CRASH, drop, 0.5)
+    tail = dur - end
+    pad = sum(square(hz(nn, o) * (1 + det), tail, 0.5) for nn, o in (("E", 3), ("B", 3), ("E", 4), ("G", 4)) for det in (0, 0.004))
+    mix_at(m, lp(pad / 10, 0.05) * np.linspace(1, 0, int(SR * tail)) ** 1.5, end, 0.6)
+    mix_at(m, kick, end, 1.0)
+    mix_at(m, CRASH, end, 0.45)
+    return m
+
+
 def build_tutorial(dur, bpm=112):
     """Третий трек — спокойный и весёлый «городской» чиптюн: до мажор (C–Am–F–G), подпрыгивающий бас-треугольник,
     мелодия узким квадратом, мягкие арпеджио и хэты. Для видео-инструкций, где текст надо читать."""
@@ -347,6 +403,8 @@ def main(out, events_path):
     style = spec.get("style")
     if style == "epic":
         mus = build_epic(dur, spec.get("drop", 1.2))
+    elif style == "duel":
+        mus = build_duel(dur, spec.get("drop", 1.7))
     elif style == "promo":
         mus = build_promo(dur, spec.get("drop", 2.0))
     else:
