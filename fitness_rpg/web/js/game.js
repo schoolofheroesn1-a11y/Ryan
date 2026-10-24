@@ -1006,6 +1006,7 @@ class BattleScene extends Scene {
     this.action = "idle";
     this.actionT = 0;
     this.invuln = 0;
+    this.holdLow = true; // удержанный присед защищает (в дуэли — нет: только короткий уворот)
     this.regenPause = 0;
     this.hurtT = 0;
     this.texts = [];
@@ -1270,7 +1271,7 @@ class BattleScene extends Scene {
     this.actionT -= dt;
     if (this.actionT <= 0) this.action = "idle";
     this.invuln = Math.max(0, this.invuln - dt);
-    if ((d && d.low) || g.manualLow) { // пока игрок внизу — удар проходит над ним, герой в присяде
+    if (this.holdLow && ((d && d.low) || g.manualLow)) { // пока игрок внизу — удар проходит над ним, герой в присяде
       this.invuln = Math.max(this.invuln, 0.15);
       this.action = "dodge";
       this.actionT = Math.max(this.actionT, 0.1);
@@ -1652,6 +1653,8 @@ class ChallengeScene extends BattleScene {
 const DUEL_WINDUP = 0.8; // столько видно выпад соперника: успей присесть
 const DUEL_DAMAGE = 1.5; // в дуэли удары сильнее — бой не затягивается
 const DUEL_ESTUS = 1; // в дуэли у каждого одна фляга зелья
+const DUEL_DODGE_COST = 10; // присед в дуэли тратит немного сил: нельзя увёртываться без конца
+const DUEL_GUARD = 1.0; // присед защищает столько секунд, потом нужно встать и присесть снова
 const DUEL_POLL = 0.3; // обмен с сервером ~3 раза в секунду
 const DUEL_LOST = 20; // нет связи дольше — дуэль прерывается
 
@@ -1672,6 +1675,8 @@ class DuelScene extends BattleScene {
     this.hp = p.maxHp;
     this.estus = DUEL_ESTUS;
     this.estusCap = DUEL_ESTUS;
+    this.holdLow = false; // сидеть внизу бесполезно: защищает только сам момент приседа
+    this.guardHint = false;
     this.backLabel = "< СДАТЬСЯ";
     this.outbox = [];
     this.sent = 0; // номер последнего своего события (повтор после сбоя связи не применится дважды)
@@ -1726,8 +1731,25 @@ class DuelScene extends BattleScene {
         this.send({ t: "heal" });
         this.send({ t: "hp", hp: this.hp, max: p.maxHp });
       }
+    } else if (move === "squat_down" || move === "pushup_down") {
+      // Уворот: присед стоит немного сил и защищает DUEL_GUARD секунд (низ отжимания — часть выпада, он бесплатный)
+      if (move === "squat_down") {
+        if (this.stamina < DUEL_DODGE_COST) {
+          this.exhaustedSound();
+          return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+        }
+        this.stamina -= DUEL_DODGE_COST;
+        this.regenPause = Math.max(this.regenPause, 0.3);
+      }
+      const en = this.enemy;
+      const untilStrike = en.state === "windup" ? Math.min(en.timer + 0.25, DUEL_GUARD + 0.25) : 0;
+      this.invuln = Math.max(this.invuln, DUEL_GUARD, untilStrike);
+      this.action = "dodge";
+      this.actionT = this.invuln;
+      this.guardHint = true;
+      sfx.dodge();
     } else {
-      super.act(move); // уворот — как в обычном бою
+      super.act(move);
     }
   }
   startIncoming(dmg) {
@@ -1792,6 +1814,11 @@ class DuelScene extends BattleScene {
     if (!this.result && this.game.time - this.lastOk > DUEL_LOST) this.end("lost", "Нет связи с сервером");
     if (!this.started) this.ready = READY_TIME; // отсчёт пойдёт у обоих, когда оба готовы
     super.update(dt);
+    const d = this.game.motion.ok ? this.game.motion.detector : null;
+    if (this.guardHint && this.invuln <= 0 && !this.result) {
+      this.guardHint = false; // защита кончилась, а игрок всё ещё внизу — подсказка встать
+      if ((d && d.low) || this.game.manualLow) this.float("Встаньте и присядьте снова", this.HERO_X + 10, 80, COL.dim, 8);
+    }
   }
   updateEnemy(dt) {
     const en = this.enemy;
@@ -2218,7 +2245,7 @@ class MultiplayerScene extends Scene {
     if (!this.online.loggedIn) return this.drawLoginHint(L);
     const lines = [
       "Бой с живым игроком в реальном времени: у каждого свой телефон и камера.",
-      "Отжимание — выпад, соперник видит замах. Присед — уворот. Звёздочка — зелье.",
+      "Отжимание — выпад, соперник видит замах. Присед — уворот на секунду, тратит немного сил. Звёздочка — зелье.",
     ];
     let y = L.top;
     for (const t of lines) for (const line of g.wrap(t, L.P ? 38 : 76)) { g.text(line, 20, y, L.P ? 16 : 8, COL.text); y += L.P ? 28 : 12; }

@@ -144,7 +144,7 @@ const EN = {
   "Попыток сегодня: {n}/{max}": "Attempts today: {n}/{max}",
   "* бот. Вызов — тем, кто до 3 мест выше или ниже. Победа над тем, кто выше: меняетесь местами": "* bot. Challenge anyone up to 3 places above or below. Beat someone above you to swap places",
   "Бой с живым игроком в реальном времени: у каждого свой телефон и камера.": "Real-time fight with a live player: each on their own phone and camera.",
-  "Отжимание — выпад, соперник видит замах. Присед — уворот. Звёздочка — зелье.": "Push-up: lunge, the opponent sees the windup. Squat: dodge. Jumping jack: potion.",
+  "Отжимание — выпад, соперник видит замах. Присед — уворот на секунду, тратит немного сил. Звёздочка — зелье.": "Push-up: lunge, the opponent sees the windup. Squat: a one-second dodge that costs a little stamina. Jumping jack: potion.",
   "КОД КОМНАТЫ": "ROOM CODE",
   "Скажите код сопернику. Ждём его...": "Tell the code to your opponent. Waiting...",
   "СОЗДАТЬ КОМНАТУ": "CREATE ROOM",
@@ -296,6 +296,7 @@ const EN = {
   // --- бой
   "НЕУЯЗВИМ": "IMMUNE",
   "Нет сил!": "No stamina!",
+  "Встаньте и присядьте снова": "Stand up and squat again",
   "{#} КРИТ!": "{#} CRIT!",
   "{#} БРОНЯ": "{#} ARMOR",
   "ПРЕРВАН!": "INTERRUPTED!",
