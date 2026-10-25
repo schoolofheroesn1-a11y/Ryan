@@ -46,21 +46,26 @@ export function rewards(wave) {
 
 // --- Локации ---
 // После 3-го Костяного Рыцаря (раунд 15) открываются подступы к замку,
-// после 3-го Главы разбойников (раунд 30) — кладбище
+// после 3-го Главы разбойников (раунд 30) — кладбище, после 3-го Короля-Призрака (раунд 45) — Алая Бездна
 export const LOCATIONS = {
   1: { name: "Склеп", bg: "arena_bg" },
   2: { name: "Подступы к замку", bg: "castle_bg" },
   3: { name: "Кладбище", bg: "graveyard_bg" },
+  4: { name: "Алая Бездна", bg: "abyss_bg" },
 };
+export const LAST_LOCATION = 4;
 export const CASTLE_FROM_WAVE = 16;
 export const GRAVEYARD_FROM_WAVE = 31;
-export const locationFor = (wave) => (wave >= GRAVEYARD_FROM_WAVE ? 3 : wave >= CASTLE_FROM_WAVE ? 2 : 1);
+export const ABYSS_FROM_WAVE = 46;
+export const locationFor = (wave) =>
+  (wave >= ABYSS_FROM_WAVE ? 4 : wave >= GRAVEYARD_FROM_WAVE ? 3 : wave >= CASTLE_FROM_WAVE ? 2 : 1);
 /** Первая волна локации. */
-export const locationStart = (loc) => ({ 1: 1, 2: CASTLE_FROM_WAVE, 3: GRAVEYARD_FROM_WAVE })[loc];
+export const locationStart = (loc) => ({ 1: 1, 2: CASTLE_FROM_WAVE, 3: GRAVEYARD_FROM_WAVE, 4: ABYSS_FROM_WAVE })[loc];
 
 /**
  * Кто ждёт на этой волне: skeleton / bandit / zombie / bat и боссы локаций —
- * knight (склеп), chief (замок), wraith (кладбище: Король-Призрак).
+ * knight (склеп), chief (замок), wraith (кладбище: Король-Призрак), seraph (Алая Бездна: Алый Серафим).
+ * В Бездне — бесы (imp), адские гончие (hound) и Пустые (husk).
  */
 export function enemyKind(wave) {
   const loc = locationFor(wave);
@@ -69,6 +74,10 @@ export function enemyKind(wave) {
     if (isBossWave(wave)) return "chief";
     return wave % 2 === 0 ? "bandit" : "skeleton";
   }
-  if (isBossWave(wave)) return "wraith";
-  return ["zombie", "bat", "skeleton"][wave % 3];
+  if (loc === 3) {
+    if (isBossWave(wave)) return "wraith";
+    return ["zombie", "bat", "skeleton"][wave % 3];
+  }
+  if (isBossWave(wave)) return "seraph";
+  return ["husk", "imp", "hound"][wave % 3];
 }

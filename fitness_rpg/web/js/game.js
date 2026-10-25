@@ -4,7 +4,7 @@
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
 import {
-  BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item,
+  ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
 import { Player, STATS } from "./player.js";
@@ -326,7 +326,7 @@ class Game {
       this.say(`Тест: следующий бой - босс (#${p.wave})`);
     }
     if (this.codes.includes("F4")) {
-      const loc = Math.min(3, locationFor(p.wave) + 1);
+      const loc = Math.min(LAST_LOCATION, locationFor(p.wave) + 1);
       p.wave = Math.max(p.wave, locationStart(loc));
       this.say(tf("Тест: {loc} (#{n})", { loc: LOCATIONS[loc].name, n: p.wave }));
     }
@@ -985,8 +985,10 @@ class Skeleton {
   static NAMES = {
     skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников",
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
+    imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
   };
-  static BOSSES = ["knight", "chief", "wraith"];
+  static BOSSES = ["knight", "chief", "wraith", "seraph"];
+  static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
 
   constructor(wave) {
     this.wave = wave;
@@ -1005,6 +1007,9 @@ class Skeleton {
     this.steal = 0; // сколько пепла крадёт удар
     this.potion = false; // глава разбойников один раз пьёт зелье
     this.reincarnate = false; // Король-Призрак один раз встаёт после смерти
+    this.aura = 0; // доля здоровья героя, которую аура сжигает каждую секунду (Алый Серафим)
+    this.stage2 = false; // Алый Серафим: вторая стадия с половины здоровья
+    this.transforms = false;
     this.homeX = 200;
     if (this.kind === "bandit") { // быстрый и хлипкий, крадёт пепел
       this.maxHp = Math.floor(baseHp * 0.8);
@@ -1047,6 +1052,32 @@ class Skeleton {
       this.maxCombo = 2;
       this.reincarnate = true;
       this.homeX = 184;
+    } else if (this.kind === "imp") { // бес: хрупкий, быстрый, кусает сериями
+      this.maxHp = Math.floor(baseHp * 0.65);
+      this.damage = Math.floor(baseDmg * 0.85);
+      this.windupTime = Math.max(1.5, this.windupTime * 0.85);
+      this.comboChance = 0.45;
+      this.maxCombo = 2;
+    } else if (this.kind === "hound") { // гончая: короткий бросок и тяжёлый укус
+      this.maxHp = baseHp;
+      this.damage = Math.floor(baseDmg * 1.3);
+      this.windupTime = Math.max(1.5, this.windupTime * 0.9);
+      this.comboChance = 0.1;
+    } else if (this.kind === "husk") { // Пустой: живучий, бьёт когтями
+      this.maxHp = Math.floor(baseHp * 1.4);
+      this.damage = Math.floor(baseDmg * 1.05);
+      this.windupTime += 0.1;
+      this.comboChance = 0.25;
+    } else if (this.kind === "seraph") { // Алый Серафим: аура жжёт героя, с половины здоровья — вторая стадия
+      this.maxHp = Math.floor(baseHp * 1.8);
+      this.damage = Math.floor(baseDmg * 1.1);
+      this.windupTime += 0.1;
+      this.maxPoise = 5;
+      this.comboChance = 0.35;
+      this.maxCombo = 2;
+      this.aura = SERAPH_AURA;
+      this.transforms = true;
+      this.homeX = 178;
     }
     this.hp = this.maxHp;
     this.poise = this.maxPoise;
@@ -1068,11 +1099,15 @@ class Skeleton {
 }
 
 const DRINK_TIME = 2.5; // сколько глава разбойников пьёт зелье
+const SERAPH_AURA = 0.03; // аура Алого Серафима: 3% здоровья героя в секунду
+const TRANSFORM_TIME = 2.2; // перерождение Серафима во вторую стадию (неуязвим)
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 26, hound: 8, husk: 10 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 62, hound: 28, husk: 40 };
+/** Высота «центра» врага над землёй для эффектов удара. */
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 30 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -1088,7 +1123,8 @@ class BattleScene extends Scene {
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
     this.location = locationFor(p.wave);
-    this.newLand = p.wave === CASTLE_FROM_WAVE || p.wave === GRAVEYARD_FROM_WAVE; // первый бой на новой земле
+    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave); // первый бой на новой земле
+    this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
     this.burnT = 0;
     this.ghosts = []; // призрачное пламя Короля-Призрака
     // Здоровье и зелья переносятся между боями до отдыха у костра
@@ -1158,7 +1194,7 @@ class BattleScene extends Scene {
   act(move) {
     const p = this.game.player, en = this.enemy;
     if (move === "pushup") {
-      if (en.state === "revive") return this.float("НЕУЯЗВИМ", en.x + 12, 90, "rgb(120,255,230)", 8);
+      if (en.state === "revive" || en.state === "transform") return this.float("НЕУЯЗВИМ", en.x + 12, 90, "rgb(120,255,230)", 8);
       if (this.stamina < p.attackCost) {
         this.exhaustedSound();
         return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
@@ -1179,7 +1215,7 @@ class BattleScene extends Scene {
       this.game.shake = 0.12;
       crit ? sfx.crit() : sfx.hit();
       if (crit && this.game.skin === "phoenix") { // Клинок Феникса: на крите из острия бьёт струя пламени
-        const cx = HIT_X[en.kind] || 12, cy = en.boss ? 24 : en.kind === "bat" ? 34 : 18;
+        const cx = HIT_X[en.kind] || 12, cy = hitY(en);
         this.aura.jet(this.HERO_X + 10 + 37, GROUND_ARENA - 19, Math.round(en.x) + cx, GROUND_ARENA - cy);
         sfx.flame();
       }
@@ -1187,7 +1223,7 @@ class BattleScene extends Scene {
       this.float(label, en.x + 12, 90, crit ? COL.gold : COL.text);
       const hit = this.game.style("hit");
       if (hit) { // купленный эффект удара
-        const cx = HIT_X[en.kind] || 12, cy = en.boss ? 24 : en.kind === "bat" ? 34 : 18;
+        const cx = HIT_X[en.kind] || 12, cy = hitY(en);
         this.hitFx.spawn(hit, Math.round(en.x) + cx, GROUND_ARENA - cy);
         hit === "hit_storm" ? sfx.thunder() : sfx.souls();
       }
@@ -1261,6 +1297,10 @@ class BattleScene extends Scene {
   /** Здоровье врага кончилось: Король-Призрак один раз возрождается, остальные погибают. */
   defeat() {
     const en = this.enemy;
+    if (en.transforms && !en.stage2) { // Серафима не убить в первой стадии: сначала перерождение
+      en.hp = Math.max(1, Math.floor(en.maxHp * 0.3));
+      return;
+    }
     if (en.reincarnate) {
       en.reincarnate = false;
       en.hp = 0;
@@ -1355,7 +1395,8 @@ class BattleScene extends Scene {
     this.aura.update(dt, this.game.skin, pose, hx, hy);
     this.outfitFx.update(dt, this.game.outfit, hx, hy);
     this.hitFx.update(dt);
-    if (en.kind === "wraith") this.updateGhosts(dt);
+    if (en.kind === "wraith" || en.kind === "seraph") this.updateGhosts(dt);
+    this.auraHitT = Math.max(0, (this.auraHitT || 0) - dt);
     if (this.result) {
       this.resultT += dt;
       if (this.victory) this.victory.update(dt);
@@ -1391,7 +1432,7 @@ class BattleScene extends Scene {
     const p = this.game.player, en = this.enemy;
     // Радиатор: жар обжигает врага каждую секунду (не во время возрождения)
     const burn = p.weapon.burn || 0;
-    if (burn && en.state !== "revive" && en.state !== "dead") {
+    if (burn && en.state !== "revive" && en.state !== "transform" && en.state !== "dead") {
       this.burnT += dt;
       if (this.burnT >= BURN_EVERY) {
         this.burnT -= BURN_EVERY;
@@ -1399,6 +1440,31 @@ class BattleScene extends Scene {
         this.float(`-${burn}`, en.x + 20, 100, "rgb(255,150,60)", 8);
         if (en.hp <= 0) return this.defeat();
       }
+    }
+
+    // Аура Алого Серафима: каждую секунду жжёт долю здоровья героя (броня не спасает)
+    if (en.aura && en.state !== "dead") {
+      this.auraT += dt;
+      if (this.auraT >= 1) {
+        this.auraT -= 1;
+        const dmg = Math.max(1, Math.ceil(p.maxHp * en.aura));
+        this.hp -= dmg;
+        this.auraHitT = 0.25;
+        this.float(`-${dmg}`, this.HERO_X + 4, 100, "rgb(255,70,50)", 8);
+        if (this.hp <= 0) {
+          this.hp = 0;
+          return this.die();
+        }
+      }
+    }
+    // Серафим на половине здоровья перерождается: второе крыло, рога, раскалённые метки — и злее
+    if (en.transforms && !en.stage2 && en.state !== "transform" && en.hp > 0 && en.hp <= en.maxHp / 2) {
+      en.comboLeft = 0;
+      en.set("transform", TRANSFORM_TIME);
+      this.float("ВТОРАЯ СТАДИЯ!", en.x + 12, 50, "rgb(255,90,50)");
+      this.game.shake = 0.5;
+      sfx.thunder();
+      sfx.alert();
     }
 
     // ИИ скелета: ожидание -> замах (окно для приседа) -> удар -> уязвимость
@@ -1431,6 +1497,16 @@ class BattleScene extends Scene {
         en.windupTime *= 0.9;
         en.set("idle", 1);
       }
+    } else if (en.state === "transform" && en.timer <= 0) {
+      en.stage2 = true;
+      en.enraged = true;
+      en.windupTime = Math.max(1.3, en.windupTime * 0.8); // быстрее замах
+      en.damage = Math.floor(en.damage * 1.25);
+      en.comboChance = 0.6;
+      en.maxCombo = 2;
+      this.game.shake = 0.4;
+      sfx.crit();
+      en.set("idle", 0.6);
     } else if (en.state === "drink" && en.timer <= 0) {
       const heal = Math.floor(en.maxHp * 0.2);
       en.hp = Math.min(en.maxHp, en.hp + heal);
@@ -1446,8 +1522,10 @@ class BattleScene extends Scene {
   /** Призрачное бирюзовое пламя вокруг Короля-Призрака. */
   updateGhosts(dt) {
     const en = this.enemy;
-    if (en.state !== "dead" && Math.random() < dt * (en.state === "revive" ? 60 : 18)) {
-      this.ghosts.push({ x: en.x + rand(14, 48), y: GROUND_ARENA - rand(4, 46), vy: -rand(8, 20), life: rand(0.6, 1.3) });
+    const rate = en.state === "revive" || en.state === "transform" ? 60 : en.stage2 ? 34 : 18;
+    if (en.state !== "dead" && Math.random() < dt * rate) {
+      const w = en.kind === "seraph" ? 60 : 48;
+      this.ghosts.push({ x: en.x + rand(6, w), y: GROUND_ARENA - rand(4, 52), vy: -rand(8, 20), life: rand(0.6, 1.3) });
     }
     for (const gp of this.ghosts) {
       gp.y += gp.vy * dt;
@@ -1494,24 +1572,27 @@ class BattleScene extends Scene {
     }
 
     let spr;
-    const kind = { knight: "boss" }[en.kind] || en.kind;
+    const kind = en.kind === "seraph" && en.stage2 ? "seraph2" : { knight: "boss" }[en.kind] || en.kind;
+    if (en.aura && en.state !== "dead") this.drawAura(c, en, t); // багровое марево за Серафимом
     if (en.hero) spr = rivalSprite(en, t);
     else if (en.state === "drink") spr = anim("chief_drink", t, 4, 2);
     else if (en.state === "revive") spr = anim("wraith_revive", t, 4, 2);
+    else if (en.state === "transform") spr = anim("seraph_transform", t, 5, 2);
     else if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
     else if (en.flash > 0) spr = IMG[`${kind}_hurt_0`];
     else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
     else if (en.state === "attack") spr = IMG[`${kind}_attack_0`];
     else if (en.boss && en.enraged) spr = anim(`${kind}_enraged`, t, 1.5, 2);
-    else spr = anim(`${kind}_idle`, t, en.kind === "bat" ? 8 : 1.5, 2); // мышь машет крыльями
+    else spr = anim(`${kind}_idle`, t, Skeleton.FLYING.includes(en.kind) ? 8 : en.kind === "seraph" ? 2.5 : 1.5, 2); // крылья машут
     const ex = Math.round(en.x) - (en.state === "attack" ? 8 : 0);
     // летучая мышь висит в воздухе и пикирует при атаке, погибшая лежит на земле
-    const lift = en.kind !== "bat" || en.state === "dead" ? 0 : en.state === "attack" ? 10 : 30 + Math.round(Math.sin(t * 4) * 3);
+    const lift = !Skeleton.FLYING.includes(en.kind) || en.state === "dead" ? 0 : en.state === "attack" ? 10 : 30 + Math.round(Math.sin(t * 4) * 3);
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
     else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
-    if (en.kind === "wraith") {
+    if (en.kind === "wraith" || en.kind === "seraph") {
+      const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"] : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
       for (const gp of this.ghosts) {
-        c.fillStyle = gp.life > 0.8 ? "rgb(200,255,240)" : gp.life > 0.4 ? "rgb(110,240,200)" : "rgb(40,120,110)";
+        c.fillStyle = gp.life > 0.8 ? pal[0] : gp.life > 0.4 ? pal[1] : pal[2];
         c.fillRect(Math.floor(gp.x), Math.floor(gp.y), 1, 1);
       }
     }
@@ -1549,9 +1630,26 @@ class BattleScene extends Scene {
     }
   }
 
+  /** Аура Серафима: пульсирующее багровое марево и жар, доходящий до героя. */
+  drawAura(c, en, t) {
+    const cx = Math.round(en.x) + 30, cy = GROUND_ARENA - 28;
+    const pulse = 0.5 + 0.5 * Math.sin(t * (en.stage2 ? 6 : 3.5));
+    const big = en.state === "transform" ? 1.4 : en.stage2 ? 1.15 : 1;
+    for (const [r, a] of [[44, 0.07], [34, 0.1], [24, 0.13]]) {
+      c.fillStyle = `rgba(255,${en.stage2 ? 70 : 30},30,${a + 0.05 * pulse})`;
+      c.beginPath();
+      c.ellipse(cx, cy, r * big, r * 0.9 * big, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    // волна жара по земле к герою
+    c.fillStyle = `rgba(255,60,30,${0.12 + 0.1 * pulse})`;
+    c.fillRect(this.HERO_X - 6, GROUND_ARENA - 2, cx - this.HERO_X + 6, 2);
+  }
+
   drawUi() {
     const g = this.game, p = g.player, en = this.enemy;
     this.hitFx.drawFlash(g.ctx, W, g.gameH);
+    if (this.auraHitT > 0) g.rect([0, 0, W, g.gameH], `rgba(255,30,20,${this.auraHitT * 0.5})`); // жар ауры — краснеет экран
     const P = g.portrait; // на телефоне вертикально — полоски и зелья крупнее
     g.bar(16, 16, Math.min(P ? 400 : 999, Math.floor(p.maxHp * 1.4)), P ? 16 : 8, this.hp / p.maxHp, COL.red);
     g.bar(16, P ? 40 : 28, Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)), P ? 12 : 6, this.stamina / p.maxStamina, COL.green);
@@ -1572,8 +1670,10 @@ class BattleScene extends Scene {
     if (en.boss) { // полоска босса — в золотой рамке
       g.ctx.strokeStyle = COL.gold;
       g.ctx.strokeRect(bx - 2.5, by - 2.5, bw + 5, bh + 3);
-      const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.state === "revive" ? " - ВОССТАЁТ" : en.enraged ? " - ЯРОСТЬ" : "";
-      g.text(`${tr("БОСС")}: ${tr(en.name)} #${en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, en.enraged || en.state === "drink" || en.state === "revive" ? "rgb(255,120,80)" : COL.gold);
+      const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.state === "revive" ? " - ВОССТАЁТ"
+        : en.state === "transform" ? " - ПЕРЕРОЖДЕНИЕ" : en.stage2 ? " - II СТАДИЯ" : en.enraged ? " - ЯРОСТЬ" : en.aura ? " - АУРА" : "";
+      const hot = en.enraged || en.state === "drink" || en.state === "revive" || en.state === "transform";
+      g.text(`${tr("БОСС")}: ${tr(en.name)} #${en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, hot ? "rgb(255,120,80)" : COL.gold);
     } else {
       g.text(en.hero ? en.name : `${tr(en.name)} #${en.wave}`, bx, ny, nfs);
     }
@@ -1605,6 +1705,10 @@ class BattleScene extends Scene {
         zombie: "Медленный, но живучий",
         bat: "Хрупкая, но кусает сериями",
         wraith: "Один раз восстанет из мёртвых: добей дважды",
+        seraph: "Аура жжёт 3% здоровья в секунду. С половины здоровья — вторая стадия",
+        imp: "Мелкий и быстрый: кусает сериями",
+        hound: "Короткий бросок и тяжёлый укус",
+        husk: "Живучий, бьёт когтями",
         rival: "Соперник бьётся снаряжением и силой своего героя",
       };
       if (this.newLand) g.text(`${tr("НОВАЯ ЗЕМЛЯ")}: ${tr(LOCATIONS[this.location].name).toUpperCase()}`, W / 2, 44, 8, "rgb(150,200,140)", "center");

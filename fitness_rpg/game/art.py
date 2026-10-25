@@ -1744,6 +1744,13 @@ class Art:
         self.zombie = make_zombie_frames()
         self.bat = make_bat_frames()
         self.wraith = make_wraith_frames()
+        from game import abyss  # Алая Бездна: фон, демоны и Алый Серафим (две стадии)
+        self.abyss_bg = abyss.make_abyss_background()
+        self.seraph = abyss.make_seraph_frames(False)
+        self.seraph2 = abyss.make_seraph_frames(True)
+        self.imp = abyss.make_imp_frames()
+        self.hound = abyss.make_hound_frames()
+        self.husk = abyss.make_husk_frames()
 
     def hero_for(self, sword, owned):
         """Кадры героя с этим мечом и обликом по реликвиям из owned."""
