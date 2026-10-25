@@ -46,102 +46,122 @@ def _poly(s, col, pts):
 
 
 # ---------------------------------------------------------------- Алый Серафим
-SERAPH_W, SERAPH_H = 68, 58
+# Парит над землёй: тонкий чёрный силуэт с белыми мазками (плечо, лопатки, спина, нога), каре,
+# рука указывает на героя, за спиной — огромное крыло с белыми костями и «стекающей» перепонкой.
+# Ноги сходятся в острый хвост. Вторая стадия: второе крыло, рога, метки раскаляются.
+SERAPH_W, SERAPH_H = 92, 86
+OX = 10  # запас слева под выпад когтем
+RIM = (74, 22, 28)  # тёплый отсвет по краю силуэта (свет углей снизу)
+WING_IN, WING_IN2 = (26, 8, 12), (58, 14, 20)
+WING_IN_2, WING_IN2_2 = (52, 10, 14), (104, 22, 20)
 
 
-def _wing(s, root, arc, ends, memb, memb2, bone):
-    """Крыло летучей мыши: кость-дуга, пальцы вниз и перепонка с фестонами между ними."""
-    pts = [root] + arc
+def _wing2(s, root, arc, ends, tip, memb, memb2, bone, bone2):
+    """Крыло: толстая кость-дуга, пальцы веером вниз, перепонка стекает острыми языками."""
     edge = []
-    for i in range(len(ends)):
-        edge.append(ends[i])
-        if i + 1 < len(ends):  # фестон: край перепонки поднимается между пальцами
-            mx, my = (ends[i][0] + ends[i + 1][0]) // 2, (ends[i][1] + ends[i + 1][1]) // 2 - 9
-            edge.append((mx, my))
-    _poly(s, memb, pts + list(reversed(edge)) + [(root[0] + 2, root[1] + 10)])
-    for a, b in zip(arc, arc[1:]):  # тёмно-алый отсвет под костью
-        _poly(s, memb2, [a, b, (b[0], b[1] + 4), (a[0], a[1] + 4)])
-    fingers = arc[1:] if len(arc) == len(ends) + 1 else arc[-len(ends):]
-    for f, e in zip(fingers, ends):
-        _line(s, bone, f, e)
-    _line(s, bone, root, arc[0], 2)
-    for a, b in zip(arc, arc[1:]):
-        _line(s, bone, a, b, 2)
+    for i, e in enumerate(ends):
+        edge.append(e)
+        if i + 1 < len(ends):
+            n = ends[i + 1]
+            edge.append(((e[0] + n[0]) // 2, (e[1] + n[1]) // 2 - 12))  # глубокий вырез между пальцами
+    _poly(s, memb, [root] + arc + [tip] + list(reversed(edge)) + [(root[0] + 1, root[1] + 14)])
+    for (fx, fy), (ex, ey) in zip(arc, ends):  # тёмно-алая тень вдоль каждого пальца
+        _poly(s, memb2, [(fx, fy + 2), (fx + 2, fy + 3), (ex + 1, ey - 6), (ex, ey - 6)])
+    for (fx, fy), (ex, ey) in zip(arc, ends):  # пальцы: у основания толще
+        mx, my = (fx * 2 + ex) // 3, (fy * 2 + ey) // 3
+        _line(s, bone, (fx, fy), (mx, my), 2)
+        _line(s, bone, (mx, my), (ex, ey))
+        _line(s, bone2, (mx + 1, my + 1), (ex + 1, ey - 2))
+    pts = [root] + arc + [tip]
+    for p0, p1 in zip(pts, pts[1:]):  # главная кость — широкий белый мазок
+        _line(s, bone, p0, p1, 3)
+    for p0, p1 in zip(pts[1:], pts[2:]):
+        _line(s, bone2, (p0[0], p0[1] + 2), (p1[0], p1[1] + 2))
 
 
 def seraph(stage2=False, pose="idle", flap=0):
-    """Алый Серафим. pose: idle (копьё у ноги), raised (замах над головой), swing (выпад влево)."""
+    """pose: idle (указывает на героя), raised (рука вскинута, в ладони копится сгусток), swing (выпад когтем)."""
     s = pygame.Surface((SERAPH_W, SERAPH_H), pygame.SRCALPHA)
-    mark = MARK if stage2 else BONE
-    mark2 = MARK2 if stage2 else BONE2
-    memb, memb2 = (MEMB_2, MEMB2_2) if stage2 else (MEMB, MEMB2)
-    up = -2 if flap else 0
-    if stage2:  # второе крыло прорастает за головой
-        _wing(s, (25, 16), [(19, 6 + up), (12, 1 + up), (5, 2 + up)], [(7, 20), (12, 24), (18, 22)], memb, memb2, mark2)
-    # главное крыло — за спиной (справа)
-    _wing(s, (33, 18), [(40, 9 + up), (46, 6 + up), (52, 4 + up), (58, 5 + up), (63, 8 + up), (66, 13 + up)],
-          [(41, 36), (46, 43), (52, 47), (57, 43), (62, 36), (66, 28)], memb, memb2, mark)
-    # ноги: передняя шагнула вперёд
-    _poly(s, BODY, [(24, 34), (28, 34), (26, 45), (22, 57), (18, 57), (23, 45)])
-    _poly(s, BODY, [(28, 34), (31, 34), (31, 45), (32, 57), (29, 57), (28, 45)])
-    _line(s, mark, (26, 36), (20, 56))
-    _line(s, BODY2, (31, 35), (31, 56))
-    # торс: широкие плечи, узкая талия
-    _poly(s, BODY, [(21, 17), (35, 17), (33, 25), (31, 35), (24, 35), (23, 25)])
-    _line(s, BODY2, (34, 17), (31, 34))
-    _line(s, mark, (33, 18), (25, 32), 2)       # косая кость через грудь
-    _line(s, mark, (22, 19), (24, 24))           # рёбра
-    _line(s, mark, (31, 21), (31, 25))
-    _line(s, mark, (22, 17), (26, 17))           # наплечная кость
-    _line(s, mark2, (25, 27), (28, 27))
-    # голова и шея, капюшон-грива назад
-    pygame.draw.rect(s, BODY, (26, 14, 4, 4))
-    pygame.draw.ellipse(s, BODY, (23, 4, 9, 11))
-    _poly(s, BODY, [(30, 5), (35, 9), (34, 16), (30, 13)])
-    _poly(s, mark, [(23, 8), (27, 6), (27, 9), (24, 11)])  # костяная маска
-    if stage2:  # рога
-        _poly(s, mark, [(24, 6), (21, 0), (25, 4)])
-        _poly(s, mark, [(29, 5), (32, 0), (31, 6)])
-        s.set_at((24, 8), EYE2)
-        s.set_at((25, 8), EYE2)
-        s.set_at((24, 9), MARK)
+    mark, mark2 = (MARK, MARK2) if stage2 else (BONE, BONE2)
+    memb, memb2 = (WING_IN_2, WING_IN2_2) if stage2 else (WING_IN, WING_IN2)
+    o = OX
+    f = (-3, -4) if flap == 1 else (2, 3) if flap == 2 else (0, 0)  # взмах: дуга и концы крыла
+
+    def P(x, y):
+        return (x + o, y)
+
+    if stage2:  # второе крыло — за головой, меньше и темнее
+        _wing2(s, P(27, 22), [P(22, 12 + f[0]), P(15, 6 + f[0]), P(8, 5 + f[0]), P(2, 9 + f[0])],
+               [P(20, 40 + f[1]), P(14, 46 + f[1]), P(8, 44 + f[1]), P(3, 36 + f[1])], P(0, 16 + f[0]),
+               (40, 8, 12), (90, 18, 20), MARK2, (120, 30, 24))
+    # главное крыло: от лопатки вверх-вправо и длинным остриём вниз
+    _wing2(s, P(40, 22), [P(46, 14 + f[0]), P(53, 8 + f[0]), P(60, 5 + f[0]), P(67, 5 + f[0]), P(73, 9 + f[0]), P(77, 16 + f[0])],
+           [P(44, 54 + f[1]), P(51, 63 + f[1]), P(58, 70 + f[1]), P(65, 68 + f[1]), P(71, 60 + f[1]), P(76, 50 + f[1])],
+           P(80, 30 + f[0]), memb, memb2, mark, mark2)
+    # хвост вместо ног: бёдра сходятся в длинное острие
+    _poly(s, BODY, [P(27, 42), P(37, 42), P(36, 54), P(33, 66), P(31, 77), P(29, 85), P(28, 74), P(27, 60), P(26, 50)])
+    _line(s, mark, P(27, 50), P(28, 64), 2)  # белая полоса по ноге
+    _line(s, mark, P(28, 64), P(29, 80))
+    _line(s, RIM, P(36, 44), P(32, 70))
+    # торс: вполоборота, видны лопатки
+    _poly(s, BODY, [P(23, 21), P(31, 19), P(41, 20), P(43, 26), P(40, 34), P(37, 43), P(27, 43), P(25, 34), P(22, 27)])
+    _line(s, RIM, P(41, 25), P(37, 42))
+    _line(s, mark, P(39, 22), P(35, 30), 3)  # большой мазок через спину
+    _line(s, mark, P(35, 30), P(30, 41), 2)
+    pygame.draw.ellipse(s, mark, (*P(24, 26), 3, 7))  # лопатки
+    pygame.draw.ellipse(s, mark, (*P(37, 27), 3, 6))
+    _line(s, mark, P(25, 21), P(31, 20), 2)  # верх плеча
+    _line(s, mark2, P(25, 35), P(26, 39))
+    _line(s, mark2, P(40, 31), P(38, 37))
+    # голова: каре с завитком у шеи, белая прядь сверху
+    pygame.draw.rect(s, BODY, (*P(29, 15), 4, 6))
+    pygame.draw.ellipse(s, BODY, (*P(26, 6), 8, 11))
+    # каре: прямая чёлка, волосы до линии челюсти, кончики загибаются наружу
+    _poly(s, BODY, [P(27, 7), P(31, 5), P(35, 7), P(36, 12), P(37, 15), P(39, 17), P(36, 17), P(34, 15), P(33, 11)])
+    _poly(s, mark, [P(28, 7), P(31, 6), P(33, 7), P(30, 9)])  # белая прядь
+    _line(s, RIM, P(36, 9), P(37, 14))
+    if stage2:
+        _poly(s, MARK, [P(28, 7), P(25, 0), P(30, 5)])  # рога
+        _poly(s, MARK, [P(32, 5), P(36, 0), P(34, 7)])
+        s.set_at(P(27, 11), EYE2)
+        s.set_at(P(28, 11), EYE2)
     else:
-        s.set_at((24, 8), EYE)
-    blade = (MARK, EYE2) if stage2 else (BONE, BONE2)
-    if pose == "idle":  # рука вниз, копьё стоит у ноги
-        _line(s, BODY, (22, 18), (18, 25), 3)
-        _line(s, BODY, (18, 25), (15, 31), 3)
-        _line(s, BODY2, (14, 9), (14, 56))
-        _poly(s, blade[0], [(14, 1), (16, 8), (14, 11), (12, 8)])
-        _line(s, blade[1], (14, 3), (14, 9))
-    elif pose == "raised":  # копьё над головой, остриём к герою
-        _line(s, BODY, (22, 18), (19, 11), 3)
-        _line(s, BODY, (19, 11), (21, 5), 3)
-        _line(s, BODY2, (8, 5), (44, 3))
-        _poly(s, blade[0], [(0, 6), (8, 3), (11, 5), (8, 8)])
-        _line(s, blade[1], (2, 6), (9, 5))
-    else:  # выпад: рука и копьё вытянуты влево
-        _line(s, BODY, (22, 18), (15, 20), 3)
-        _line(s, BODY, (15, 20), (8, 21), 3)
-        _line(s, BODY2, (8, 21), (30, 21))
-        _poly(s, blade[0], [(0, 21), (8, 18), (10, 21), (8, 24)])
-        _line(s, blade[1], (2, 21), (8, 21))
-    return outlined(s)
+        s.set_at(P(27, 11), EYE)
+    # рука (ближняя к герою)
+    if pose == "idle":  # указывает на героя
+        _line(s, BODY, P(25, 22), P(14, 24), 3)
+        _line(s, BODY, P(14, 24), P(4, 24), 2)
+        _line(s, BODY, P(4, 24), P(0, 23))
+        _line(s, mark, P(22, 22), P(16, 23))
+    elif pose == "raised":  # рука вскинута, в ладони — сгусток пламени
+        _line(s, BODY, P(25, 22), P(21, 13), 3)
+        _line(s, BODY, P(21, 13), P(22, 4), 2)
+        orb = (255, 120, 60) if stage2 else (230, 50, 40)
+        pygame.draw.circle(s, orb, P(22, 3), 3)
+        s.set_at(P(22, 3), (255, 240, 200))
+        s.set_at(P(21, 2), (255, 200, 140))
+    else:  # выпад: из пальцев — костяные когти
+        _line(s, BODY, P(25, 22), P(12, 23), 3)
+        _line(s, BODY, P(12, 23), P(2, 23), 2)
+        for dy in (-2, 0, 2):
+            _line(s, mark, P(2, 23 + dy // 2), P(-9, 23 + dy))
+    return outlined(s, (6, 2, 4))
 
 
 def make_seraph_frames(stage2=False):
     idle = seraph(stage2, "idle", 0)
-    idle2 = seraph(stage2, "idle", 1)
+    up = seraph(stage2, "idle", 1)
+    down = seraph(stage2, "idle", 2)
     raised = seraph(stage2, "raised", 1)
-    swing = seraph(stage2, "swing", 0)
+    swing = seraph(stage2, "swing", 2)
     glow = (255, 120, 60) if stage2 else (255, 60, 40)
     frames = {
-        "idle": [idle, idle2],
-        "windup": [tinted(raised, glow, 0.35), raised],
+        "idle": [idle, up, idle, down],
+        "windup": [tinted(raised, glow, 0.3), raised],
         "attack": [swing],
         "hurt": [tinted(idle, (255, 255, 255), 0.8)],
-        "dead": [crouched(tinted(idle, (50, 20, 20), 0.5))],
-        "enraged": [idle, idle2],
+        "dead": [crouched(tinted(down, (50, 30, 30), 0.5))],
+        "enraged": [idle, up, idle, down],
     }
     if not stage2:  # перерождение: сжимается в багровом свете и раскрывается во второй облик
         frames["transform"] = [tinted(crouched(idle), (255, 40, 30), 0.6), tinted(seraph(True, "idle", 1), (255, 200, 160), 0.5)]
@@ -262,69 +282,94 @@ def make_husk_frames():
 
 # ---------------------------------------------------------------- фон
 def make_abyss_background(w=320, h=180, seed=46):
-    """Алая Бездна: багровое небо «мазками», чёрное солнце, рёбра исполина на горизонте,
-    обсидиановые шпили и чёрная скала с раскалёнными трещинами."""
+    """Алая Бездна: пепельные сумерки. Тёмное небо в дымке, затменное солнце с тонкой алой каймой
+    за пеленой облаков, руины собора и рёбра исполина в тумане, пепельная равнина с тлеющими трещинами.
+    Красного немного — только угли, кайма солнца и отсвет у горизонта."""
     rnd = random.Random(seed)
     surf = pygame.Surface((w, h))
     horizon = 108
-    stops = [(0.0, (96, 4, 8)), (0.6, (150, 12, 14)), (1.0, (196, 40, 22))]
+    stops = [(0.0, (12, 9, 14)), (0.45, (30, 18, 26)), (0.8, (66, 34, 38)), (1.0, (104, 58, 52))]
     for y in range(horizon):
         t = y / (horizon - 1)
         for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
             if t0 <= t <= t1:
                 pygame.draw.line(surf, _lerp(c0, c1, (t - t0) / (t1 - t0)), (0, y), (w, y))
                 break
-    for _ in range(900):  # мазки краски: небо неровное, как на холсте
+    for _ in range(500):  # неровное небо: лёгкие мазки
         x, y = rnd.randrange(w), rnd.randrange(horizon)
-        base = surf.get_at((x, y))
-        k = rnd.uniform(-22, 18)
-        col = (max(0, min(255, int(base.r + k))), max(0, int(base.g + k * 0.15)), max(0, int(base.b + k * 0.12)))
-        pygame.draw.rect(surf, col, (x, y, rnd.randint(2, 7), rnd.randint(1, 2)))
-    # чёрное солнце с алой короной
-    sx, sy = 232, 38
-    for r, col in ((24, (170, 30, 20)), (20, (230, 80, 40)), (18, (255, 150, 80)), (16, (14, 6, 8))):
-        pygame.draw.circle(surf, col, (sx, sy), r)
-    for _ in range(40):  # протуберанцы
-        a = rnd.uniform(0, 6.283)
-        r0 = 18 + rnd.randint(0, 6)
-        surf.set_at((int(sx + math.cos(a) * r0), int(sy + math.sin(a) * r0)), (255, 190, 120))
-    # летающие обломки скал
-    for cx, cy, sz in ((52, 30, 6), (84, 18, 4), (150, 46, 5), (286, 70, 4), (120, 70, 3)):
-        _poly(surf, (24, 6, 10), [(cx - sz, cy), (cx - sz // 2, cy - sz // 2), (cx + sz, cy - 1), (cx + sz // 2, cy + sz)])
-    # рёбра исполина на горизонте
-    bone_far = (82, 30, 30)
-    _line(surf, bone_far, (150, horizon - 6), (300, horizon - 10), 3)
-    for i, x in enumerate(range(158, 296, 16)):
-        hgt = 34 - abs(i - 4) * 3
-        pygame.draw.arc(surf, bone_far, (x - 4, horizon - 8 - hgt, 18, hgt * 2), 1.3, 3.1, 2)
+        c = surf.get_at((x, y))
+        k = rnd.uniform(-8, 8)
+        pygame.draw.rect(surf, (max(0, min(255, int(c.r + k))), max(0, min(255, int(c.g + k * 0.7))), max(0, min(255, int(c.b + k * 0.7)))),
+                         (x, y, rnd.randint(3, 9), 1))
+    for _ in range(40):  # редкие звёзды в верхней части
+        surf.set_at((rnd.randrange(w), rnd.randrange(36)), rnd.choice([(120, 110, 120), (80, 70, 84)]))
+    # затменное солнце: чёрный диск, тонкая алая кайма и тусклое гало
+    sx, sy = 226, 36
+    halo = pygame.Surface((w, h), pygame.SRCALPHA)
+    for r, a in ((34, 14), (27, 22), (22, 34)):
+        pygame.draw.circle(halo, (170, 60, 50, a), (sx, sy), r)
+    surf.blit(halo, (0, 0))
+    pygame.draw.circle(surf, (190, 70, 50), (sx, sy), 18)
+    pygame.draw.circle(surf, (240, 150, 110), (sx, sy), 17)
+    pygame.draw.circle(surf, (10, 6, 10), (sx, sy), 16)
+    # облака-пелена поверх солнца и неба
+    clouds = pygame.Surface((w, h), pygame.SRCALPHA)
+    for _ in range(26):
+        cx, cy = rnd.randrange(-20, w), rnd.randrange(16, 80)
+        pygame.draw.ellipse(clouds, (36, 24, 32, rnd.randint(70, 130)), (cx, cy, rnd.randint(40, 90), rnd.randint(4, 8)))
+    surf.blit(clouds, (0, 0))
+    # дальние руины собора в тумане
+    far = (44, 30, 38)
+    for x0, wd, ht in ((20, 18, 40), (44, 10, 26), (58, 14, 48)):
+        pygame.draw.rect(surf, far, (x0, horizon - ht, wd, ht))
+        _poly(surf, far, [(x0 - 1, horizon - ht), (x0 + wd // 2, horizon - ht - 14), (x0 + wd + 1, horizon - ht)])
+    for x in (26, 63, 66):  # пустые стрельчатые окна
+        pygame.draw.rect(surf, (70, 42, 46), (x, horizon - 30, 3, 8))
+    # рёбра исполина: силуэты в дымке
+    rib = (52, 34, 40)
+    _line(surf, rib, (150, horizon - 5), (306, horizon - 9), 3)
+    for i, x in enumerate(range(160, 300, 15)):
+        hgt = 38 - abs(i - 4) * 4
+        pygame.draw.arc(surf, rib, (x - 4, horizon - 7 - hgt, 18, hgt * 2), 1.3, 3.1, 3)
     # дальние скалы
-    pts, y = [(0, h)], 98
+    pts, y = [(0, h)], 100
     for x in range(0, w + 6, 6):
-        y = max(90, min(104, y + rnd.randint(-3, 3)))
+        y = max(94, min(106, y + rnd.randint(-2, 2)))
         pts.append((x, y))
     pts.append((w, h))
-    _poly(surf, (64, 10, 12), pts)
-    # обсидиановые шпили по краям (середина свободна для боя)
-    for x0, top, wd in ((4, 28, 14), (22, 52, 10), (34, 70, 8), (276, 60, 9), (290, 34, 13), (308, 54, 10)):
-        _poly(surf, (14, 6, 10), [(x0, horizon + 4), (x0 + wd // 2, top), (x0 + wd, horizon + 4)])
-        _line(surf, (60, 14, 18), (x0 + wd // 2, top + 3), (x0 + wd // 2 + 1, horizon))
-    # земля: чёрная скала
+    _poly(surf, (38, 26, 32), pts)
+    # туман у горизонта — светлая полоса, на её фоне читаются чёрные силуэты
+    fog = pygame.Surface((w, h), pygame.SRCALPHA)
+    for i in range(18):
+        a = int(60 * (1 - abs(i - 9) / 9))
+        pygame.draw.line(fog, (150, 104, 98, a), (0, horizon - 24 + i * 2), (w, horizon - 24 + i * 2), 2)
+    surf.blit(fog, (0, 0))
+    # обсидиановые шпили по краям
+    for x0, top, wd in ((2, 38, 12), (16, 62, 8), (282, 58, 8), (296, 30, 14), (312, 66, 8)):
+        _poly(surf, (14, 10, 14), [(x0, horizon + 6), (x0 + wd // 2, top), (x0 + wd, horizon + 6)])
+        _line(surf, (60, 36, 40), (x0 + wd // 2 + 1, top + 4), (x0 + wd // 2 + 2, horizon + 2))
+    # пепельная равнина
     for yy in range(horizon, h):
         t = (yy - horizon) / (h - horizon)
-        pygame.draw.line(surf, _lerp((104, 26, 22), (62, 14, 14), t), (0, yy), (w, yy))
-    for _ in range(int(w * (h - horizon) * 0.05)):
+        pygame.draw.line(surf, _lerp((74, 56, 56), (30, 22, 26), t), (0, yy), (w, yy))
+    for _ in range(int(w * (h - horizon) * 0.06)):
         x, yy = rnd.randrange(w), rnd.randrange(horizon + 2, h)
-        surf.set_at((x, yy), rnd.choice([(120, 36, 28), (70, 16, 16), (136, 44, 32)]))
-    # раскалённые трещины
-    for _ in range(14):
-        x, yy = rnd.randrange(w), rnd.randrange(horizon + 8, h - 4)
-        for _ in range(rnd.randint(3, 6)):
-            nx, ny = x + rnd.randint(-10, 10), yy + rnd.randint(-2, 3)
-            _line(surf, (230, 70, 30), (x, yy), (nx, ny))
-            if rnd.random() < 0.5:
-                surf.set_at((x, yy), (255, 150, 60))
+        surf.set_at((x, yy), rnd.choice([(86, 68, 66), (52, 38, 40), (40, 30, 32), (96, 78, 74)]))
+    for _ in range(18):  # камни
+        x, yy = rnd.randrange(w), rnd.randrange(horizon + 6, h)
+        pygame.draw.ellipse(surf, (24, 18, 22), (x, yy, rnd.randint(3, 7), 2))
+    # тлеющие трещины — редкие, тусклые
+    for _ in range(8):
+        x, yy = rnd.randrange(w), rnd.randrange(horizon + 10, h - 4)
+        for _ in range(rnd.randint(3, 5)):
+            nx, ny = x + rnd.randint(-9, 9), yy + rnd.randint(-2, 3)
+            _line(surf, (120, 36, 24), (x, yy), (nx, ny))
+            if rnd.random() < 0.35:
+                surf.set_at((x, yy), (230, 110, 50))
             x, yy = nx, ny
-    # пепел и искры в воздухе
-    for _ in range(70):
-        surf.set_at((rnd.randrange(w), rnd.randrange(h - 10)), rnd.choice([(255, 140, 60), (255, 200, 120), (60, 20, 20)]))
+    # падающий пепел и редкие искры
+    for _ in range(90):
+        surf.set_at((rnd.randrange(w), rnd.randrange(h - 10)), rnd.choice([(120, 110, 112), (90, 80, 84), (150, 140, 140)]))
+    for _ in range(14):
+        surf.set_at((rnd.randrange(w), rnd.randrange(40, h - 20)), (240, 130, 60))
     return surf

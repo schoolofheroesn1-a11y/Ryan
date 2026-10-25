@@ -1077,7 +1077,7 @@ class Skeleton {
       this.maxCombo = 2;
       this.aura = SERAPH_AURA;
       this.transforms = true;
-      this.homeX = 178;
+      this.homeX = 160; // широкое крыло не заходит под окошко камеры справа
     }
     this.hp = this.maxHp;
     this.poise = this.maxPoise;
@@ -1104,10 +1104,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 26, hound: 8, husk: 10 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 62, hound: 28, husk: 40 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 8, husk: 10 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 28, husk: 40 };
+const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 30 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -1524,8 +1525,8 @@ class BattleScene extends Scene {
     const en = this.enemy;
     const rate = en.state === "revive" || en.state === "transform" ? 60 : en.stage2 ? 34 : 18;
     if (en.state !== "dead" && Math.random() < dt * rate) {
-      const w = en.kind === "seraph" ? 60 : 48;
-      this.ghosts.push({ x: en.x + rand(6, w), y: GROUND_ARENA - rand(4, 52), vy: -rand(8, 20), life: rand(0.6, 1.3) });
+      const [x0, x1, y1] = en.kind === "seraph" ? [24, 90, 92] : [14, 48, 46];
+      this.ghosts.push({ x: en.x + rand(x0, x1), y: GROUND_ARENA - rand(4, y1), vy: -rand(8, 20), life: rand(0.6, 1.3) });
     }
     for (const gp of this.ghosts) {
       gp.y += gp.vy * dt;
@@ -1583,10 +1584,18 @@ class BattleScene extends Scene {
     else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
     else if (en.state === "attack") spr = IMG[`${kind}_attack_0`];
     else if (en.boss && en.enraged) spr = anim(`${kind}_enraged`, t, 1.5, 2);
-    else spr = anim(`${kind}_idle`, t, Skeleton.FLYING.includes(en.kind) ? 8 : en.kind === "seraph" ? 2.5 : 1.5, 2); // крылья машут
+    else if (en.kind === "seraph") spr = anim(`${kind}_idle`, t, 4, 4); // медленные взмахи крыла
+    else spr = anim(`${kind}_idle`, t, Skeleton.FLYING.includes(en.kind) ? 8 : 1.5, 2); // крылья машут
     const ex = Math.round(en.x) - (en.state === "attack" ? 8 : 0);
     // летучая мышь висит в воздухе и пикирует при атаке, погибшая лежит на земле
-    const lift = !Skeleton.FLYING.includes(en.kind) || en.state === "dead" ? 0 : en.state === "attack" ? 10 : 30 + Math.round(Math.sin(t * 4) * 3);
+    let lift = !Skeleton.FLYING.includes(en.kind) || en.state === "dead" ? 0 : en.state === "attack" ? 10 : 30 + Math.round(Math.sin(t * 4) * 3);
+    if (en.kind === "seraph" && en.state !== "dead") { // парит, покачиваясь; для выпада снижается
+      lift = en.state === "attack" ? 4 : SERAPH_HOVER + Math.round(Math.sin(t * 1.8) * 3);
+      c.fillStyle = "rgba(8,4,8,0.55)"; // тень на земле
+      c.beginPath();
+      c.ellipse(Math.round(en.x) + 41, GROUND_ARENA - 1, 18 - lift / 3, 2, 0, 0, Math.PI * 2);
+      c.fill();
+    }
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
     else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
     if (en.kind === "wraith" || en.kind === "seraph") {
@@ -1632,18 +1641,18 @@ class BattleScene extends Scene {
 
   /** Аура Серафима: пульсирующее багровое марево и жар, доходящий до героя. */
   drawAura(c, en, t) {
-    const cx = Math.round(en.x) + 30, cy = GROUND_ARENA - 28;
+    const cx = Math.round(en.x) + 50, cy = GROUND_ARENA - 50;
     const pulse = 0.5 + 0.5 * Math.sin(t * (en.stage2 ? 6 : 3.5));
     const big = en.state === "transform" ? 1.4 : en.stage2 ? 1.15 : 1;
     for (const [r, a] of [[44, 0.07], [34, 0.1], [24, 0.13]]) {
-      c.fillStyle = `rgba(255,${en.stage2 ? 70 : 30},30,${a + 0.05 * pulse})`;
+      c.fillStyle = `rgba(${en.stage2 ? 230 : 190},${en.stage2 ? 60 : 30},30,${a * 0.8 + 0.04 * pulse})`;
       c.beginPath();
       c.ellipse(cx, cy, r * big, r * 0.9 * big, 0, 0, Math.PI * 2);
       c.fill();
     }
     // волна жара по земле к герою
     c.fillStyle = `rgba(255,60,30,${0.12 + 0.1 * pulse})`;
-    c.fillRect(this.HERO_X - 6, GROUND_ARENA - 2, cx - this.HERO_X + 6, 2);
+    c.fillRect(this.HERO_X - 6, GROUND_ARENA - 2, Math.round(en.x) + 41 - this.HERO_X + 6, 2);
   }
 
   drawUi() {
