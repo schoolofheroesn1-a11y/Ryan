@@ -848,7 +848,7 @@ def _body_rows(rows, width, look):
             _put(rows, x, 10, "g")
         for x in (10, 12, 15, 17):  # и на набедренных пластинах
             _put(rows, x, 18, "g")
-    if look in ("amulet", "both", "king_amulet"):
+    if look in ("amulet", "both", "king_amulet", "wing_amulet"):
         _put(rows, 11, 9, "g")
         _put(rows, 15, 9, "g")
         for x, ch in ((12, "Y"), (13, "y"), (14, "Y")):
