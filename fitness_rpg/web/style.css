@@ -45,6 +45,8 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
   position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
   background: rgba(5, 3, 8, 0.78); padding: 16px; box-sizing: border-box;
 }
+/* игра без камеры повёрнута на 90° (телефон держат вертикально): окна поворачиваются вместе с ней */
+body.rot .modal { inset: auto; top: 0; left: 100vw; width: 100vh; height: 100vw; transform-origin: top left; transform: rotate(90deg); }
 .modal-box {
   width: min(440px, 100%); background: #140c12; border: 2px solid #e8be5c; padding: 20px;
   box-shadow: 0 0 0 4px #2a1414, 0 12px 40px rgba(0, 0, 0, 0.7); box-sizing: border-box;

@@ -23,6 +23,7 @@ const CW = 320, CH = 180;
 const W = 640, GAME_H = 360;
 // Бой на телефоне вертикально: мир крупнее (×3), по бокам срезается пустое место
 const ZOOM = { sx: 44, sw: 640 / 3, k: 3, h: 540 };
+const SIDE_MIN = 56; // ширина боковой панели с кнопками (широкий экран без камеры), меньше — кнопки внутри картинки
 const GROUND_TITLE = 150, GROUND_ARENA = 140;
 const FONT = '"PressStart2P", monospace';
 
@@ -151,6 +152,8 @@ class Game {
     }
     this.motion = new Motion();
     this.useCamera = useCamera;
+    this.wideMode = !useCamera; // без камеры — всегда горизонтально, по бокам картинки крупные кнопки
+    this.side = 0;
     this.time = 0;
     this.shake = 0;
     this.keys = [];
@@ -170,8 +173,12 @@ class Game {
       this.codes.push(e.code);
     });
     canvas.addEventListener("pointerdown", (e) => {
-      const r = canvas.getBoundingClientRect();
-      this.taps.push({ x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * this.H });
+      const r = canvas.getBoundingClientRect(), cw = W + 2 * this.side;
+      if (this.rotated) { // холст повёрнут на 90° по часовой: его верх — у правого края экрана
+        this.taps.push({ x: ((e.clientY - r.top) / r.height) * cw - this.side, y: ((r.right - e.clientX) / r.width) * this.H });
+      } else {
+        this.taps.push({ x: ((e.clientX - r.left) / r.width) * cw - this.side, y: ((e.clientY - r.top) / r.height) * this.H });
+      }
       e.preventDefault();
     });
   }
@@ -201,18 +208,28 @@ class Game {
   }
 
   resize() {
-    const vw = innerWidth, vh = innerHeight;
-    this.portrait = vh > vw * 1.05;
+    let vw = innerWidth, vh = innerHeight;
+    // без камеры игра горизонтальная: если телефон держат вертикально (поворот экрана заблокирован),
+    // картинка поворачивается сама — достаточно повернуть телефон
+    this.rotated = this.wideMode && vh > vw;
+    if (this.rotated) [vw, vh] = [vh, vw];
+    document.body.classList.toggle("rot", this.rotated);
+    this.portrait = !this.wideMode && vh > vw * 1.05;
     this.zoomedNow = this.zoomed;
     this.gameH = this.zoomedNow ? ZOOM.h : GAME_H; // высота картинки игры над панелью камеры
     // камера видна только там, где нужны упражнения; иначе экран — одна картинка игры
     this.panelOn = this.portrait && this.usesPanel;
     this.H = this.panelOn ? Math.min(1400, Math.max(GAME_H + 200, Math.round((W * vh) / vw))) : GAME_H;
-    this.canvas.width = W;
+    // широкий экран телефона: поля по бокам картинки 16:9 — панели с кнопками, как у приставки
+    const side = this.wideMode && !this.portrait ? Math.min(180, Math.floor((Math.round((GAME_H * vw) / vh) - W) / 2)) : 0;
+    this.side = side >= SIDE_MIN ? side : 0;
+    const cw = W + 2 * this.side;
+    this.canvas.width = cw;
     this.canvas.height = this.H;
-    const scale = Math.min(vw / W, vh / this.H);
-    this.canvas.style.width = `${Math.floor(W * scale)}px`;
+    const scale = Math.min(vw / cw, vh / this.H);
+    this.canvas.style.width = `${Math.floor(cw * scale)}px`;
     this.canvas.style.height = `${Math.floor(this.H * scale)}px`;
+    this.canvas.style.transform = this.rotated ? "rotate(90deg)" : "";
     this.ctx.imageSmoothingEnabled = false;
     // Раскладка панели камеры и кнопок ручного ввода
     if (this.portrait) {
@@ -224,6 +241,10 @@ class Game {
       this.cam = [(W - camW) / 2, top, camW, camH];
       const y = this.H - btnH - 8, bw = (W - 32) / 3;
       this.manual = ["pushup", "squat", "jack"].map((ex, i) => [ex, [8 + i * (bw + 8), y, bw, btnH]]);
+    } else if (this.side) { // слева — удар во всю высоту, справа — уворот и зелье
+      const sw = this.side - 12, h = this.H - 24, top = Math.round(h * 0.6);
+      this.cam = [W - 136, 12, 120, 90];
+      this.manual = [["pushup", [-this.side + 6, 12, sw, h]], ["squat", [W + 6, 12, sw, top]], ["jack", [W + 6, 20 + top, sw, h - top - 8]]];
     } else {
       this.cam = [W - 136, 12, 120, 90];
       this.manual = ["pushup", "squat", "jack"].map((ex, i) => [ex, [W - 136, 110 + i * 30, 120, 26]]);
@@ -451,6 +472,7 @@ class Game {
   }
 
   cameraWidget() {
+    if (this.side) return; // игра без камеры на широком экране: окошко камеры не нужно
     const [x, y, w, h] = this.cam;
     this.rect([x - 2, y - 2, w + 4, h + 4], COL.shadow);
     this.ctx.strokeStyle = "rgb(60,46,50)";
@@ -478,10 +500,25 @@ class Game {
   /** Кнопки «ручного» упражнения: без камеры — основной ввод, с камерой — запасной. */
   manualButtons() {
     if (!this.portrait && this.motion.ok) return;
+    if (this.side) return this.sideButtons();
     const labels = this.portrait
       ? { pushup: "ОТЖИМ", squat: "ПРИСЕД", jack: "ЗВЕЗДА" }
       : { pushup: "ОТЖИМ [J]", squat: "ПРИСЕД [K]", jack: "ЗВЕЗДА [L]" };
     for (const [ex, r] of this.manual) this.button(r, labels[ex], { size: this.portrait ? (this.zoomedNow ? 24 : 16) : 8 });
+  }
+
+  /** Боковые кнопки широкого экрана: крупные, во всю высоту панели. */
+  sideButtons() {
+    const labels = { pushup: ["ОТЖИМ", "удар"], squat: ["ПРИСЕД", "уворот"], jack: ["ЗВЕЗДА", "зелье"] };
+    const cols = { pushup: "rgb(255,170,110)", squat: "rgb(140,200,255)", jack: "rgb(150,230,140)" };
+    for (const [ex, r] of this.manual) {
+      this.button(r, "");
+      const [a, b] = labels[ex].map(tr);
+      const size = [16, 12, 8].find((sz) => a.length * sz <= r[2] - 8) || 8;
+      const cy = r[1] + r[3] / 2;
+      this.text(a, r[0] + r[2] / 2, cy - size, size, cols[ex], "center");
+      this.text(b, r[0] + r[2] / 2, cy + 6, 8, COL.dim, "center");
+    }
   }
 
   change(scene) {
@@ -521,6 +558,12 @@ class Game {
 
     const c = this.ctx;
     c.imageSmoothingEnabled = false;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.side) { // боковые панели широкого экрана
+      c.fillStyle = "rgb(6,4,8)";
+      c.fillRect(0, 0, W + 2 * this.side, this.H);
+      c.setTransform(1, 0, 0, 1, this.side, 0); // дальше всё рисуется в координатах картинки 640×360
+    }
     c.fillStyle = "rgb(10,6,12)";
     c.fillRect(0, 0, W, this.H);
     let ox = 0, oy = 0;
@@ -532,6 +575,7 @@ class Game {
     if (this.zoomedNow) c.drawImage(this.world, ZOOM.sx, 0, ZOOM.sw, CH, ox, oy, W, ZOOM.h);
     else c.drawImage(this.world, ox, oy, W, GAME_H);
     this.scene.drawUi();
+    if (this.side && this.scene.manual && this.scene.needsCamera) this.sideButtons();
     if (this.portrait && this.scene.needsCamera) {
       this.cameraWidget();
       if (this.scene.manual) this.manualButtons();
@@ -1543,7 +1587,7 @@ class BattleScene extends Scene {
     }
     g.button(this.backRect(), this.backLabel || "< КОСТЁР", { size: g.portrait ? 16 : 8 });
 
-    if (!g.portrait) { // подсказки клавиш — только на компьютере
+    if (!g.portrait && !g.side) { // подсказки клавиш — только на компьютере
       [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "зелье"]]
         .forEach(([k, a, b], i) => g.text(`[${k}] ${tr(a)}: ${tr(b)}`, 16, 62 + i * 12, 8, COL.dim));
     }
@@ -1568,7 +1612,7 @@ class BattleScene extends Scene {
       if (tips[en.kind]) g.text(tips[en.kind], W / 2, 140, 8, COL.dim, "center");
       g.text("ПРИГОТОВЬТЕСЬ", W / 2, 60, 16, COL.gold, "center");
       g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
-      g.text("Отойдите, чтобы тело было в кадре", W / 2, 124, 8, COL.dim, "center");
+      g.text(g.useCamera ? "Отойдите, чтобы тело было в кадре" : "Бой начинается", W / 2, 124, 8, COL.dim, "center");
     } else if (en.state === "windup" && !this.result) {
       const k = Math.max(0, Math.min(1, en.timer / en.windupTime));
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
@@ -2986,6 +3030,7 @@ class CameraScene extends Scene {
     const g = this.game;
     if (moves.some((m) => m === "pushup" || m === "squat" || m === "jack")) sfx.rep();
     if (g.key("Escape", "Enter") || g.tapped([W / 2 - 60, GAME_H - 30, 120, 22])) g.change(new SettingsScene(g));
+    if (g.tapped([240, 300, 160, 24])) { sfx.click(); return g.change(new TutorialScene(g, new CameraScene(g))); }
     if (g.tapped([20, 300, 200, 24])) {
       if (g.motion.denied && isNative()) openAppSettings(); // доступ запрещён — включается только в Настройках iOS
       else if (!g.motion.ok && !g.motion.starting) g.motion.start();
@@ -3020,11 +3065,143 @@ class CameraScene extends Scene {
     else if ((!g.motion.ok && !g.motion.starting) || (g.motion.ok && g.motion.status !== "камера активна")) {
       g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
     }
+    g.button([240, 300, 160, 24], "ОБУЧЕНИЕ", { color: COL.gold });
     g.button([W / 2 - 60, GAME_H - 30, 120, 22], "НАЗАД");
     if (!g.portrait) {
       g.cameraWidget();
       g.manualButtons();
     }
+  }
+}
+
+// ------------------------------------------------------------------ Обучение движениям (первый вход с камерой)
+const TUTORIAL_KEY = "ash-and-iron-tutorial";
+const TUTORIAL = [
+  { ex: "stand", title: "ВСТАНЬТЕ В КАДР", pose: "idle", lines: [
+    "Поставьте телефон на пол у стены и отойдите на 2-3 м.",
+    "Всё тело — от головы до ног — должно быть в кадре.",
+    "В бою кнопок нет: играете только движениями." ] },
+  { ex: "squat", need: 2, title: "ПРИСЕД — УВОРОТ", pose: "dodge", lines: [
+    "Встаньте к телефону боком и присядьте 2 раза.",
+    "В бою присед спасает от удара на 1 секунду и тратит немного сил.",
+    "Сидеть внизу бесполезно: встаньте и присядьте снова." ] },
+  { ex: "pushup", need: 2, title: "ОТЖИМАНИЕ — УДАР", pose: "attack", lines: [
+    "Боком к телефону отожмитесь 2 раза.",
+    "Каждое отжимание — удар мечом.",
+    "Удар тратит силы: следите за зелёной полоской." ] },
+  { ex: "jack", need: 1, title: "ЗВЁЗДОЧКА — ЗЕЛЬЕ", pose: "heal", lines: [
+    "Встаньте лицом к телефону и сделайте звёздочку:",
+    "руки над головой, ноги в стороны.",
+    "Зелье лечит и восстанавливает силы." ] },
+  { ex: "punch", need: 3, title: "БОКС — В БОЙ", pose: "attack", lines: [
+    "Кулаки у лица, затем 3 резких удара вперёд.",
+    "Лучше встать боком или вполоборота.",
+    "У костра бокс начинает бой — не нужно подходить к телефону." ] },
+  { ex: "done", title: "ГОТОВО!", pose: "idle", lines: [
+    "У костра просто начните упражнение — начнётся прокачка навыка.",
+    "Звук «бзз-бзз» — нельзя: не хватает пепла или сил.",
+    "Удачи, рыцарь!" ] },
+];
+
+class TutorialScene extends Scene {
+  constructor(game, back = null) {
+    super(game);
+    this.back = back; // куда вернуться (по умолчанию — главное меню)
+    this.step = 0;
+    this.done = 0;
+    this.standT = 0;
+    this.okT = 0; // «ОТЛИЧНО!» перед следующим шагом
+  }
+  get needsCamera() {
+    return true;
+  }
+  get cur() {
+    return TUTORIAL[this.step];
+  }
+  buttons() {
+    const g = this.game;
+    const last = this.cur.ex === "done";
+    if (g.portrait) {
+      const [a, , c] = g.manual.map(([, r]) => r);
+      return [[a, last ? "В ИГРУ" : "ПРОПУСТИТЬ"], [c, "ЗАКРЫТЬ"]];
+    }
+    return [[[20, GAME_H - 34, 180, 24], last ? "В ИГРУ" : "ПРОПУСТИТЬ"], [[210, GAME_H - 34, 120, 24], "ЗАКРЫТЬ"]];
+  }
+  finish() {
+    saveJSON(TUTORIAL_KEY, true);
+    const g = this.game;
+    g.change(this.back || new TitleScene(g));
+  }
+  next() {
+    this.step = Math.min(TUTORIAL.length - 1, this.step + 1);
+    this.done = 0;
+    this.standT = 0;
+  }
+  passed() {
+    sfx.level();
+    vibrate([60, 40, 120]);
+    this.okT = 1.2;
+  }
+  handle(moves) {
+    const g = this.game;
+    for (const [r, label] of this.buttons()) {
+      if (!g.tapped(r)) continue;
+      sfx.click();
+      if (label === "ЗАКРЫТЬ" || label === "В ИГРУ") return this.finish();
+      return this.next();
+    }
+    if (g.key("Escape")) return this.finish();
+    if (g.key("Enter", " ")) return this.cur.ex === "done" ? this.finish() : this.next();
+    if (this.okT > 0) return;
+    const st = this.cur;
+    for (const m of moves) {
+      if (m !== st.ex) continue;
+      this.done += 1;
+      m === "punch" ? sfx.hit() : sfx.rep();
+      if (this.done >= st.need) return this.passed();
+    }
+  }
+  update(dt) {
+    const g = this.game, st = this.cur;
+    if (this.okT > 0) {
+      this.okT -= dt;
+      if (this.okT <= 0) this.next();
+      return;
+    }
+    if (st.ex === "stand") { // в кадре полторы секунды подряд
+      const inFrame = g.motion.ok && g.motion.detector.posture !== "нет человека";
+      this.standT = inFrame ? this.standT + dt : 0;
+      if (this.standT >= 1.5) this.passed();
+    }
+  }
+  draw(c) {
+    c.drawImage(IMG.title_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.6)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  drawUi() {
+    const g = this.game, P = g.portrait, st = this.cur, t = g.time;
+    const fs = P ? 14 : 8, chars = P ? 40 : 48; // в портрете — крупно: читать приходится издалека
+    g.text(tf("ОБУЧЕНИЕ · шаг {n} из {all}", { n: this.step + 1, all: TUTORIAL.length }), 20, P ? 14 : 12, P ? 12 : 8, COL.dim);
+    g.text(st.title, 20, P ? 34 : 28, P ? 24 : 16, COL.gold);
+    let y = P ? 74 : 54;
+    for (const t0 of st.lines) for (const line of g.wrap(tr(t0), chars)) { g.text(line, 20, y, fs, COL.text); y += fs + (P ? 8 : 4); }
+    // герой показывает движение
+    const p = g.player, hs = heroSprite(p.sword, p.owned, g.skin, g.outfit);
+    const pose = st.pose === "idle" || Math.floor(t * 2) % 2 ? `${hs}_idle_0` : `${hs}_${st.pose}_0`;
+    const spr = IMG[pose] || IMG[`${hs}_idle_0`], k = 3;
+    const hx = P ? W - 30 - spr.width * k : 440, hy = (P ? 330 : 250) - spr.height * k;
+    g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
+    // прогресс шага
+    let status = "";
+    if (this.okT > 0) status = "ОТЛИЧНО!";
+    else if (st.ex === "stand") status = !g.motion.ok ? g.motion.status : this.standT > 0 ? "Вижу вас! Стойте так..." : "Жду, пока вы встанете в кадр";
+    else if (st.need) status = tf("Сделано: {done} из {need}", { done: this.done, need: st.need });
+    const sy = P ? 260 : 210;
+    if (status) g.text(status, 20, sy, P ? 16 : 12, this.okT > 0 ? "rgb(150,250,150)" : COL.gold);
+    if (st.need) g.bar(20, sy + (P ? 26 : 18), P ? 300 : 260, 8, this.done / st.need, "rgb(230,140,50)");
+    if (!P) g.cameraWidget();
+    for (const [r, label] of this.buttons()) g.button(r, label, { size: P ? 16 : 8, color: label === "В ИГРУ" ? COL.gold : undefined });
   }
 }
 
@@ -3228,6 +3405,9 @@ export async function boot() {
     try {
       if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
     } catch (e) { /* iOS Safari не умеет — не страшно */ }
+    // без камеры — горизонтально: Android в полноэкранном режиме разворачивает экран сам,
+    // иначе (iOS, поворот заблокирован) игра поворачивает картинку
+    if (!useCamera && screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
     initAudio();
     // Экран не гаснет на тренировке; после сворачивания блокировку нужно взять заново
     const lockScreen = () => keepAwake();
@@ -3235,7 +3415,8 @@ export async function boot() {
     document.addEventListener("visibilitychange", lockScreen);
     const game = new Game(canvas, useCamera);
     window.game = game; // для отладки и автотестов
-    game.change(new TitleScene(game));
+    // первый вход с камерой — обучение движениям
+    game.change(useCamera && !loadJSON(TUTORIAL_KEY, false) ? new TutorialScene(game) : new TitleScene(game));
     if (useCamera) game.motion.start();
     else game.motion.status = "камера выключена: используйте кнопки";
     let last = performance.now();
@@ -3251,4 +3432,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BattleScene, BonfireScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene };
+export { BattleScene, BonfireScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
