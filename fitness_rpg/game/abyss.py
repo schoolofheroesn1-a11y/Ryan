@@ -194,32 +194,96 @@ def imp(pose="up"):
     return outlined(s)
 
 
-def hound(pose="idle"):
-    """Адская гончая: чёрный зверь с белыми рёбрами наружу и огнём в пасти."""
-    s = pygame.Surface((36, 22), pygame.SRCALPHA)
-    dx = -3 if pose == "attack" else 0
-    _line(s, BODY, (30, 9), (35, 4), 2)  # хвост
-    pygame.draw.ellipse(s, BODY, (10 + dx, 6, 22, 10))
-    for x0, x1 in ((13, 11), (17, 16), (25, 26), (29, 31)):  # лапы
-        stretch = 2 if pose == "attack" else 0
-        _line(s, BODY, (x0 + dx, 13), (x1 + dx - stretch * (x0 < 20), 21), 2)
-    for x in (16, 19, 22, 25):  # рёбра
-        _line(s, BONE, (x + dx, 8), (x + dx - 1, 12))
-    for x in (14, 18, 22, 26):  # шипы на хребте
-        _poly(s, BONE2, [(x + dx, 6), (x + dx + 2, 3), (x + dx + 3, 6)])
-    hx = 2 + dx
-    _poly(s, BODY, [(hx, 9), (hx + 4, 6), (hx + 11, 6), (hx + 11, 13), (hx + 5, 12)])
-    _line(s, BODY, (hx + 7, 6), (hx + 8, 1), 2)  # уши
-    _line(s, BODY, (hx + 10, 6), (hx + 12, 2), 2)
-    s.set_at((hx + 5, 8), EYE)
-    s.set_at((hx + 6, 8), EYE)
-    if pose == "attack":  # пасть раскрыта, внутри огонь
-        _poly(s, BODY, [(hx, 12), (hx + 6, 12), (hx + 6, 16), (hx + 1, 15)])
-        _line(s, MARK, (hx + 1, 12), (hx + 5, 13))
-        _line(s, BONE, (hx, 11), (hx + 4, 11))
+FIRE = ((150, 30, 20), (236, 104, 40), (255, 210, 120))  # тёмное, яркое и белое пламя
+
+
+def _flame(s, x, y, h, flick):
+    """Язык пламени высотой h от точки (x, y) вверх, кончик клонится назад (вправо)."""
+    lean = 1 + flick
+    _poly(s, FIRE[0], [(x - 1, y), (x + lean, y - h), (x + 2, y)])
+    if h > 2:
+        _line(s, FIRE[1], (x, y - 1), (x + lean, y - h + 1))
+    if h > 3:
+        s.set_at((x + lean // 2, y - 1), FIRE[2])
+
+
+def hound(pose="idle", flick=0):
+    """Адская гончая: поджарый чёрный зверь с белым волчьим черепом, рогами вдоль шеи, белыми рёбрами
+    и хребтом, огненной гривой и хвостом-хлыстом с костяным жалом. Смотрит влево."""
+    s = pygame.Surface((50, 28), pygame.SRCALPHA)
+    atk, low = pose == "attack", pose == "windup"
+    ox = 6 - (3 if atk else 0)  # слева запас под струю огня
+    hy = 2 if low else 0  # перед броском голова пригнута
+
+    def T(x, y):
+        return (x + ox, y)
+
+    def H(x, y):  # точки головы
+        return (x + ox, y + hy)
+
+    def legs(segs):
+        for leg in segs:
+            for i, (p0, p1) in enumerate(zip(leg, leg[1:])):
+                _line(s, BODY, T(*p0), T(*p1), 2 if i < len(leg) - 2 else 1)
+            e = T(*leg[-1])
+            s.set_at((e[0] - 1, e[1]), BONE)
+            s.set_at((e[0] - 2, e[1]), BONE2)
+
+    # хвост-хлыст с костяным жалом
+    tail = [(36, 11), (39, 8 - flick), (41, 4 - flick), (40, 1)]
+    for i, (p0, p1) in enumerate(zip(tail, tail[1:])):
+        _line(s, BODY, T(*p0), T(*p1), 2 if i == 0 else 1)
+    _poly(s, BONE, [T(39, 2), T(42, -1), T(41, 3)])
+    # задние лапы — с изломом; в прыжке выпрямлены назад
+    legs([((30, 14), (34, 19), (32, 22), (33, 27)), ((33, 14), (37, 19), (36, 22), (37, 27))] if not atk else
+         [((30, 14), (35, 18), (39, 21), (42, 23)), ((33, 14), (38, 17), (42, 19), (44, 21))])
+    # туловище: высокая грудь, втянутый живот, мощный круп
+    _poly(s, BODY, [T(*p) for p in [(10, 10), (16, 8), (24, 10), (30, 8), (36, 10), (35, 15), (29, 16), (25, 14), (18, 16), (11, 17)]])
+    _line(s, RIM, T(11, 17), T(18, 16))
+    _line(s, RIM, T(29, 16), T(35, 15))
+    # передние лапы; в прыжке выброшены вперёд
+    legs([((12, 16), (11, 21), (10, 27)), ((16, 16), (17, 21), (15, 27))] if not atk else
+         [((12, 15), (7, 18), (3, 20)), ((15, 16), (11, 20), (7, 22))])
+    # кости: хребет, рёбра, таз
+    _line(s, BONE, T(16, 9), T(28, 9))
+    for x in (15, 18, 21):
+        _line(s, BONE, T(x, 11), T(x + 1, 15))
+    _line(s, BONE2, T(24, 11), T(24, 13))
+    pygame.draw.ellipse(s, BONE, (*T(29, 10), 4, 3))
+    s.set_at(T(30, 11), BODY)
+    # огненная грива: неровные языки, клонятся назад
+    for i, (x, h) in enumerate(((11, 5), (13, 7), (16, 5), (18, 6), (21, 4), (24, 3), (27, 2))):
+        _flame(s, *T(x, 9), h + (flick if i % 2 else -flick), 1 + flick)
+    # шея и волчий череп
+    _poly(s, BODY, [H(8, 8), H(13, 6), T(16, 10), T(11, 15)])
+    if atk:  # пасть распахнута: морда вверх, челюсть вниз, из глотки — струя огня
+        _poly(s, BONE, [H(0, 8), H(4, 6), H(9, 5), H(13, 7), H(12, 10), H(6, 10), H(1, 10)])
+        _poly(s, BODY, [H(2, 13), H(11, 11), H(10, 15), H(4, 16)])
+        _line(s, BONE, H(3, 14), H(10, 12))  # нижняя челюсть
+        for x in (2, 5, 8):
+            s.set_at(H(x, 10), BONE)
+            s.set_at(H(x + 1, 12), BONE)
+        _poly(s, FIRE[0], [H(9, 11), H(-6, 8), H(-6, 15)])
+        _poly(s, FIRE[1], [H(8, 11), H(-4, 10), H(-4, 13)])
+        _line(s, FIRE[2], H(6, 11), H(-1, 11))
+        eye = H(9, 7)
     else:
-        _line(s, BONE, (hx + 1, 11), (hx + 4, 11))  # клыки
-    return outlined(s)
+        _poly(s, BONE, [H(0, 11), H(3, 9), H(8, 7), H(12, 8), H(13, 10), H(10, 12), H(4, 13), H(0, 12)])
+        _line(s, BONE2, H(3, 13), H(10, 12))
+        _poly(s, BODY, [H(2, 13), H(10, 12), H(9, 14), H(3, 14)])  # челюсть
+        for x in (3, 6):
+            s.set_at(H(x, 13), BONE)  # клыки
+        eye = H(9, 9)
+    s.set_at(H(0, 11 if not atk else 8), BODY)  # ноздря
+    pygame.draw.rect(s, BODY, (eye[0] - 1, eye[1], 3, 2))  # косая глазница с огнём
+    s.set_at((eye[0], eye[1] + 1), EYE)
+    s.set_at((eye[0] - 1, eye[1] + 1), (255, 180, 80))
+    # рога загнуты назад вдоль шеи
+    r0 = H(11, 7) if not atk else H(11, 5)
+    _line(s, BONE, r0, (r0[0] + 4, r0[1] - 2))
+    _line(s, BONE, (r0[0] + 4, r0[1] - 2), (r0[0] + 8, r0[1] - 1))
+    _line(s, BONE2, (r0[0] + 8, r0[1] - 1), (r0[0] + 9, r0[1] + 1))
+    return outlined(s, (6, 2, 4))
 
 
 def husk(pose="idle"):
@@ -259,11 +323,12 @@ def make_imp_frames():
 
 
 def make_hound_frames():
-    idle = hound("idle")
+    idle, idle2 = hound("idle", 0), hound("idle", 1)  # грива и хвост колышутся
+    low = hound("windup", 1)
     return {
-        "idle": [idle, shifted_breath(idle, 10)],
-        "windup": [tinted(idle, (255, 90, 50), 0.35), idle],
-        "attack": [hound("attack")],
+        "idle": [idle, idle2],
+        "windup": [tinted(low, (255, 90, 50), 0.3), low],
+        "attack": [hound("attack", 1)],
         "hurt": [tinted(idle, (255, 255, 255), 0.8)],
         "dead": [crouched(tinted(idle, (60, 40, 40), 0.5))],
     }
