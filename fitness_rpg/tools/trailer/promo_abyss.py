@@ -1,6 +1,6 @@
 """Ролик «Алая Бездна» (вертикальный 1080×1920, 30 к/с, ~16 с): новая локация, демоны, босс Алый Серафим
 с аурой и второй стадией, трофеи с босса. Кадры — настоящий движок игры (abyss_capture.mjs),
-иллюстрации — спрайты из web/assets/atlas.png. Музыка — music.py в стиле "epic".
+иллюстрации — спрайты из web/assets/atlas.png. Музыка — music.py в стиле "abyss" (тёмное фэнтези).
 
 Запуск:
   python promo_abyss.py --engine ENGINE_DIR --fonts FONTS_DIR --out abyss.mp4 [--lang ru|en]
@@ -245,7 +245,7 @@ def main():
     duration = total / FPS
     tmp = tempfile.mkdtemp()
     ev_path, wav = os.path.join(tmp, "events.json"), os.path.join(tmp, "music.wav")
-    json.dump({"duration": duration, "events": events, "style": "epic", "drop": 1.6}, open(ev_path, "w"))
+    json.dump({"duration": duration, "events": events, "style": "abyss", "drop": 1.6}, open(ev_path, "w"))
     subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "music.py"), wav, ev_path], check=True)
     enc = subprocess.Popen([
         "ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",

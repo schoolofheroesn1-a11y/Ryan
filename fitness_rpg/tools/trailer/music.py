@@ -293,6 +293,90 @@ def build_duel(dur, drop=1.7, bpm=132):
     return m
 
 
+def _vib(freq, dur, rate=5.0, depth=0.006, shape="square", duty=0.25):
+    """Нота с вибрато (фаза копится, чтобы высота плыла без щелчков)."""
+    t = t_(dur)
+    f = freq * (1 + depth * np.sin(2 * np.pi * rate * t) * np.clip(t / 0.25, 0, 1))
+    ph = np.cumsum(f) / SR
+    if shape == "tri":
+        return 2 * np.abs(2 * (ph % 1) - 1) - 1
+    return np.where(ph % 1 < duty, 1.0, -1.0)
+
+
+def bell(freq, dur=2.5):
+    """Погребальный колокол: неровные обертоны, долгое затухание."""
+    t = t_(dur)
+    tone = sum(a * np.sin(2 * np.pi * freq * m * t) * np.exp(-t / (dur * d))
+               for m, a, d in ((0.5, 0.5, 0.6), (1.0, 1.0, 0.45), (2.0, 0.5, 0.3), (2.76, 0.35, 0.2), (5.4, 0.2, 0.1)))
+    return tone * np.clip(t / 0.003, 0, 1)
+
+
+def build_abyss(dur, drop=1.6, bpm=84):
+    """Тёмное фэнтези: ре гармонический минор (Dm–B♭–Gm–A), гул органа, колокол, «хор»,
+    тяжёлые литавры и тоскливая мелодия квадратом с вибрато."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + 2 * SR)
+    prog = [("D", [("D", 3), ("F", 3), ("A", 3)]), ("A#", [("A#", 2), ("D", 3), ("F", 3)]),
+            ("G", [("G", 2), ("A#", 2), ("D", 3)]), ("A", [("A", 2), ("C#", 3), ("E", 3)])]
+    tune = [("A", 4, 1.5), ("A#", 4, 0.5), ("A", 4, 1), ("F", 4, 1),        # мотив на 4 такта (доли)
+            ("D", 5, 2), ("C#", 5, 1), ("A#", 4, 1),
+            ("G", 4, 1.5), ("A", 4, 0.5), ("A#", 4, 1), ("D", 5, 1),
+            ("C#", 5, 2), ("E", 5, 1), ("A", 4, 1)]
+    big, low = taiko(48, 0.9), taiko(70, 0.6)
+    # вступление: гул, ветер и два удара колокола
+    drone = lp(square(hz("D", 1), drop + beat, 0.5), 0.05) * np.linspace(0, 1, int(SR * (drop + beat))) ** 1.5
+    mix_at(m, drone, 0, 0.35)
+    mix_at(m, lp(noise(drop + 1), 0.04) * np.linspace(0.2, 1, int(SR * (drop + 1))), 0, 0.25)
+    mix_at(m, bell(hz("D", 4), 3.0), 0.0, 0.35)
+    mix_at(m, bell(hz("A", 3), 3.0), drop * 0.55, 0.25)
+    end = dur - 2.2
+    bars = int((end - drop) / (4 * beat)) + 1
+    for bar in range(bars):
+        t0 = drop + bar * 4 * beat
+        if t0 >= end:
+            break
+        root, chord = prog[bar % 4]
+        bl = min(4 * beat, end - t0)
+        # орган: аккорд квадратом с медленной атакой, слегка расстроен
+        n = int(SR * bl)
+        pad_env = np.clip(np.arange(n) / (SR * 0.35), 0, 1) * np.clip((n - np.arange(n)) / (SR * 0.2), 0, 1)
+        organ = sum(square(hz(nm, o) * (1 + det), bl, 0.5) for nm, o in chord for det in (0, 0.004))
+        mix_at(m, lp(organ, 0.07) * pad_env / 6, t0, 0.5)
+        # «хор»: треугольники с вибрато октавой выше
+        choir = sum(_vib(hz(nm, o + 1), bl, 4.2 + i * 0.7, 0.008, "tri") for i, (nm, o) in enumerate(chord))
+        mix_at(m, lp(choir, 0.12) * pad_env / 3, t0, 0.22)
+        # бас: пила, половинные ноты
+        for k in range(2):
+            note = np.tanh(2 * lp(saw(hz(root, 1), 2 * beat * 0.95), 0.08)) * env(int(SR * 2 * beat * 0.95), 0.01, 1.2)
+            mix_at(m, note, t0 + k * 2 * beat, 0.3)
+        # литавры: тяжёлый удар на 1, глухой на 3, дробь в конце фразы
+        mix_at(m, big, t0, 1.0)
+        mix_at(m, low, t0 + 2 * beat, 0.7)
+        mix_at(m, SNARE * 0.6, t0 + 3 * beat, 0.35)
+        if bar % 4 == 3:
+            for k in range(6):
+                mix_at(m, low, t0 + 3 * beat + k * beat / 6, 0.35 + 0.08 * k)
+        if bar % 2 == 0:
+            mix_at(m, bell(hz(root, 4), 2.5), t0, 0.18)
+    # мелодия поверх, начинается со второго такта
+    t, i = drop + 4 * beat, 0
+    while t < end - 0.2:
+        nm, o, ln = tune[i % len(tune)]
+        d = min(ln * beat, end - t)
+        note = _vib(hz(nm, o), d * 0.95, 5.5, 0.01, "square", 0.125) * env(int(SR * d * 0.95), 0.01, d * 0.8)
+        mix_at(m, lp(note, 0.35), t, 0.09)
+        t += ln * beat
+        i += 1
+    mix_at(m, CRASH, drop, 0.35)
+    # финал: удар, колокол и долгий гул ре минора
+    tail = dur - end + 1
+    pad = sum(square(hz(nm, o) * (1 + det), tail, 0.5) for nm, o in (("D", 2), ("A", 2), ("D", 3), ("F", 3)) for det in (0, 0.005))
+    mix_at(m, lp(pad / 8, 0.05) * np.linspace(1, 0, int(SR * tail)) ** 1.4, end, 0.6)
+    mix_at(m, big, end, 1.1)
+    mix_at(m, bell(hz("D", 3), 3.0), end, 0.4)
+    return m
+
+
 def build_tutorial(dur, bpm=112):
     """Третий трек — спокойный и весёлый «городской» чиптюн: до мажор (C–Am–F–G), подпрыгивающий бас-треугольник,
     мелодия узким квадратом, мягкие арпеджио и хэты. Для видео-инструкций, где текст надо читать."""
@@ -403,6 +487,8 @@ def main(out, events_path):
     style = spec.get("style")
     if style == "epic":
         mus = build_epic(dur, spec.get("drop", 1.2))
+    elif style == "abyss":
+        mus = build_abyss(dur, spec.get("drop", 1.6))
     elif style == "duel":
         mus = build_duel(dur, spec.get("drop", 1.7))
     elif style == "promo":
