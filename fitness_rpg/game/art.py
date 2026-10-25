@@ -823,7 +823,7 @@ def _body_rows(rows, width, look):
         for x in (12, 14):  # призрачный огонь в прорези забрала
             _put(rows, x, 6, "e")
     if look in ("wing", "wing_amulet"):
-        for x in (12, 14):  # угли в прорези забрала
+        for x in range(11, 16):  # сплошная алая полоса в прорези забрала
             _put(rows, x, 6, "e")
         for x, y in ((10, 10), (11, 11), (12, 12), (13, 13)):  # белый мазок наискосок через грудь
             _put(rows, x, y, "w")
