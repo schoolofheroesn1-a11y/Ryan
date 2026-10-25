@@ -1,5 +1,5 @@
 // Офлайн-кэш: после первого запуска с сетью игра открывается и без интернета.
-const CACHE = "ash-and-iron-v35";
+const CACHE = "ash-and-iron-v36";
 const CORE = [
   "./", "index.html", "style.css", "manifest.webmanifest",
   "js/game.js", "js/online.js", "js/motion.js", "js/exercises.js", "js/player.js", "js/sfx.js", "js/gear.js",

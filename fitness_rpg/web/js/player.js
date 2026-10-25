@@ -29,6 +29,9 @@ export class Player {
     this.blueGems = 0; // синие камни — за боссов, на уникальное снаряжение
     this.owned = ["rusty"];
     this.sword = "rusty";
+    this.savedAt = 0; // когда сохранено (мс) — в аккаунте побеждает более свежее сохранение
+    this.reset = false; // начата «Новая игра»: пустой прогресс сохранён сознательно
+    this.owner = null; // аккаунт, к которому привязан этот прогресс
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
@@ -94,8 +97,21 @@ export class Player {
     if (ex in this.totalReps) this.totalReps[ex] += 1;
   }
 
+  /** Ничего ещё не сделано (новый телефон, очищенный браузер) — такой прогресс не затирает облачный. */
+  get pristine() {
+    return !this.reset && this.wave <= 1 && this.level <= 1 && !this.bossesDefeated;
+  }
+
   save() {
+    this.savedAt = Date.now();
     saveJSON(SAVE_KEY, this); // в приватном режиме браузера — играем без сохранения
+    if (Player.onSave) Player.onSave(this); // и в аккаунт (облачное сохранение), если вошли
+  }
+
+  /** Заменить сохранение на этом устройстве (из аккаунта). */
+  static replace(data) {
+    saveJSON(SAVE_KEY, data);
+    return Player.load();
   }
 
   static load() {

@@ -60,6 +60,13 @@ try {
             try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
         }
     }
+    try { // облачное сохранение основного сюжета
+        $db->query('SELECT save_data FROM mp_accounts LIMIT 0');
+    } catch (Exception $e) {
+        foreach (['save_data TEXT NULL', 'save_at BIGINT NOT NULL DEFAULT 0'] as $col) {
+            try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
+        }
+    }
     try { // медали дуэлей и итог комнаты: тоже добавляются к уже созданным таблицам
         $db->query('SELECT medals FROM mp_accounts LIMIT 0');
     } catch (Exception $e) {
@@ -329,6 +336,37 @@ if ($action === 'sync') {
         $db->prepare('UPDATE mp_accounts SET name = ? WHERE id = ?')->execute([$name, $a['id']]);
     }
     reply(['account' => public_account(reload($a['id']))]);
+}
+
+// ---------------------------------------------------------------- облачное сохранение основного сюжета
+/** Пустой прогресс (новый телефон, очищенный браузер): такой не должен затирать сохранение в аккаунте. */
+function save_pristine($s) {
+    if (!is_array($s) || !empty($s['reset'])) return false; // «Новая игра» — сознательный сброс
+    $lvl = (isset($s['strength']) ? (int)$s['strength'] : 1) + (isset($s['vigor']) ? (int)$s['vigor'] : 1) + (isset($s['endurance']) ? (int)$s['endurance'] : 1);
+    return (isset($s['wave']) ? (int)$s['wave'] : 1) <= 1 && $lvl <= 3 && empty($s['bossesDefeated']);
+}
+
+if ($action === 'save_get') {
+    $a = need_account($in);
+    $save = $a['save_data'] ? json_decode($a['save_data'], true) : null;
+    reply(['save' => $save, 'at' => (int)$a['save_at']]);
+}
+
+if ($action === 'save_put') {
+    $a = need_account($in);
+    limit('save', 120, 600);
+    $save = isset($in['save']) && is_array($in['save']) ? $in['save'] : null;
+    $raw = $save ? json_encode($save) : '';
+    if (!$save || strlen($raw) > 20000) fail('save');
+    $at = int_in(isset($in['at']) ? $in['at'] : 0, 0, PHP_INT_MAX, 0);
+    $old = $a['save_data'] ? json_decode($a['save_data'], true) : null;
+    $stored = false;
+    // хранится более свежее сохранение; пустое не затирает настоящий прогресс
+    if ($at >= (int)$a['save_at'] && !(save_pristine($save) && $old && !save_pristine($old))) {
+        $db->prepare('UPDATE mp_accounts SET save_data = ?, save_at = ? WHERE id = ?')->execute([$raw, $at, $a['id']]);
+        $stored = true;
+    }
+    reply(['ok' => true, 'stored' => $stored, 'at' => $stored ? $at : (int)$a['save_at']]);
 }
 
 // ---------------------------------------------------------------- рейтинг по боссам

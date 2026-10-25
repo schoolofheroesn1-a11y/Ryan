@@ -306,6 +306,7 @@ const EN = {
   "Нет сил!": "No stamina!",
   "Встаньте и присядьте снова": "Stand up and squat again",
   "Бой начинается": "The fight begins",
+  "Прогресс загружен из аккаунта: раунд {wave}, уровень {lv}": "Progress loaded from your account: round {wave}, level {lv}",
   "Алая Бездна": "Crimson Abyss",
   "Бес": "Imp",
   "Адская гончая": "Hellhound",

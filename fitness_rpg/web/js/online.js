@@ -158,6 +158,8 @@ export class Online {
   challengeStart(opponent) { return this.call("challenge_start", { opponent }); }
   challengeEnd(fight, won) { return this.call("challenge_end", { fight, won }); }
   redeem(code) { return this.call("redeem", { code }); }
+  saveGet() { return this.call("save_get"); }
+  savePut(save, at) { return this.call("save_put", { save, at }); }
   duelCreate(best, hero) { return this.call("duel_create", { best, hero }); }
   duelJoin(code, best, hero) { return this.call("duel_join", { code, best, hero }); }
   duelSync(code, ack, events) { return this.call("duel_sync", { code, ack, events }); }

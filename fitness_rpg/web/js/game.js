@@ -138,6 +138,9 @@ class Game {
     this.world.height = CH;
     this.wctx = this.world.getContext("2d");
     this.player = Player.load();
+    this.cloudReady = false; // облачное сохранение сверено — можно отправлять прогресс в аккаунт
+    this.cloudT = null;
+    Player.onSave = () => this.cloudQueue();
     this.profile = Profile.load(); // имя в рейтинге, рекорд и облик — переживают «Новую игру»
     this.store = new Store(confirmDialog, { offer: (it, kind) => this.offerCode(it, kind) });
     this.store.init().then(() => this.syncPaid()); // RevenueCat в iOS-приложении; иначе — тестовый режим
@@ -149,6 +152,7 @@ class Game {
     this.online = new Online(); // мультиплеер: аккаунт, рейтинг, вызовы, дуэли, коды
     if (this.online.loggedIn) {
       this.online.me().then((r) => this.onAccount(r.account)).catch(() => {});
+      this.cloudSync();
       this.accountSync();
     }
     this.motion = new Motion();
@@ -380,6 +384,52 @@ class Game {
     if (this.online.loggedIn) { // ответ сервера несёт и награды (например, облик за друга)
       this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit)).then((r) => this.onAccount(r.account)).catch(() => {});
     }
+  }
+
+  /**
+   * Облачное сохранение основного сюжета: при входе сверяем телефон и аккаунт — остаётся более свежее.
+   * Пустой прогресс (новый телефон, очищенный браузер) никогда не затирает сохранение в аккаунте.
+   */
+  async cloudSync() {
+    const o = this.online;
+    if (!o.loggedIn) return;
+    this.cloudReady = false;
+    try {
+      const r = await o.saveGet();
+      const local = this.player, server = r.save ? new Player(r.save) : null, me = o.account && o.account.id;
+      const foreign = !!(local.owner && me && local.owner !== me); // на телефоне — прогресс другого аккаунта
+      const serverNewer = server && (foreign || (local.pristine && !server.pristine) ||
+        (r.at > (local.savedAt || 0) && !(server.pristine && !local.pristine)));
+      if (serverNewer) {
+        this.player = Player.replace({ ...r.save, savedAt: r.at, owner: me });
+        this.syncPaid();
+        this.run = null;
+        this.say(tf("Прогресс загружен из аккаунта: раунд {wave}, уровень {lv}", { wave: this.player.wave, lv: this.player.level }), 5);
+        if (this.scene instanceof TitleScene || this.scene instanceof BonfireScene || this.scene instanceof ShopScene) this.change(new TitleScene(this));
+      }
+      this.cloudReady = true;
+      if (!serverNewer) {
+        if (this.player.owner !== me) {
+          this.player.owner = me;
+          this.player.save(); // прогресс с этого телефона теперь принадлежит аккаунту и уходит в него
+        } else if (!local.pristine && (local.savedAt || 0) > r.at) this.cloudPush();
+      }
+    } catch (e) {
+      this.cloudReady = false; // без сети — сверим при следующем входе
+    }
+  }
+
+  /** Прогресс изменился: отправить в аккаунт (не чаще раза в пару секунд). */
+  cloudQueue() {
+    if (!this.cloudReady || !this.online.loggedIn) return;
+    clearTimeout(this.cloudT);
+    this.cloudT = setTimeout(() => this.cloudPush(), 2000);
+  }
+
+  cloudPush() {
+    if (!this.cloudReady || !this.online.loggedIn) return;
+    const p = this.player;
+    this.online.savePut(JSON.parse(JSON.stringify(p)), p.savedAt || Date.now()).catch(() => {});
   }
 
   /** Вход в аккаунт: имя из аккаунта, покупки и активированные коды — на этом устройстве. */
@@ -634,7 +684,7 @@ class TitleScene extends Scene {
       return;
     }
     const g = this.game;
-    g.player = new Player();
+    g.player = new Player({ reset: true }); // сознательный сброс — уйдёт и в аккаунт
     g.syncPaid();
     g.player.save();
     g.run = null;
@@ -2225,6 +2275,7 @@ class MultiplayerScene extends Scene {
     if (o.loggedIn) {
       const ok = await confirmDialog({ title: "АККАУНТ", text: tf("Выйти из аккаунта {login}?", { login: o.account.login }), ok: "ВЫЙТИ" });
       if (!ok) return;
+      g.cloudReady = false; // прогресс больше не уходит в аккаунт, из которого вышли
       await o.logout();
       this.data = {};
     }
@@ -2236,6 +2287,7 @@ class MultiplayerScene extends Scene {
         try {
           const acc = a.mode === "register" ? await o.register(a.login, a.password, a.name, best, hero, a.ref) : await o.login(a.login, a.password);
           g.onAccount(acc);
+          g.cloudSync(); // прогресс сюжета: из аккаунта или в аккаунт
           g.accountSync();
           g.say(tf("Вы вошли как {name}", { name: acc.name }));
           return null;
