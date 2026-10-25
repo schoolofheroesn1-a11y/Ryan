@@ -12,6 +12,8 @@ export const SWORDS = {
   // burn — урон врагу каждую секунду боя
   radiator: { name: "Радиатор", desc: "+6 урона, жар: 6 урона в секунду", dmg: 6, cost: 20, crit: 1.5, lifesteal: 0, burn: 6, price: [0, 4], unique: true },
   // paid — покупается за деньги (поддержка проекта); productId — товар магазина
+  // с босса Алой Бездны: aura — каждую секунду враг теряет эту долю своего здоровья
+  seraph: { name: "Крыло Серафима", desc: "+24 урона, крит x2, аура: враг -1%/с", dmg: 24, cost: 26, crit: 2.0, lifesteal: 0, aura: 0.01, price: [0, 9], unique: true },
   barbell: { name: "Гриф от штанги", desc: "+18 урона, крит x2, удар 24 сил", dmg: 18, cost: 24, crit: 2.0, lifesteal: 0, price: [0, 0], paid: "10 $", productId: "weapon_barbell" },
 };
 
@@ -20,9 +22,10 @@ export const RELICS = {
   armor: { name: "Доспех Костяного Рыцаря", desc: "получаемый урон -25%", price: [0, 1], unique: true },
   amulet: { name: "Амулет Углей", desc: "+1 зелье лечения", price: [0, 2], unique: true },
   kingarmor: { name: "Доспех Короля-Призрака", desc: "получаемый урон -35%", price: [0, 7], unique: true },
+  wingarmor: { name: "Доспех Серафима", desc: "урон -45%, аура Бездны вдвое слабее", price: [0, 10], unique: true },
 };
 
-export const SHOP_ORDER = ["rusty", "steel", "great", "giant", "ash", "radiator", "barbell", "armor", "kingarmor", "amulet"];
+export const SHOP_ORDER = ["rusty", "steel", "great", "giant", "ash", "radiator", "seraph", "barbell", "armor", "kingarmor", "wingarmor", "amulet"];
 
 export const item = (key) => SWORDS[key] || RELICS[key];
 

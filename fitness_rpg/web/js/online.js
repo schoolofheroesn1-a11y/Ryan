@@ -56,7 +56,7 @@ export function apiUrl(api) {
 export function heroSnapshot(player, skin = null, outfit = null) {
   return {
     sword: player.sword,
-    looks: player.owned.filter((k) => ["armor", "kingarmor", "amulet"].includes(k)),
+    looks: player.owned.filter((k) => ["armor", "kingarmor", "wingarmor", "amulet"].includes(k)),
     skin,
     outfit,
     level: player.level,

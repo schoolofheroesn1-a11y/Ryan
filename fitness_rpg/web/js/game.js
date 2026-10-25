@@ -36,6 +36,7 @@ const COL = {
 // (корона, бирюзовые латы — надевается поверх костяного) и/или Амулет Углей
 function heroLook(owned) {
   const armor = owned.includes("armor"), amulet = owned.includes("amulet");
+  if (owned.includes("wingarmor")) return amulet ? "wing_amulet" : "wing"; // доспех Серафима — поверх остальных
   if (owned.includes("kingarmor")) return amulet ? "king_amulet" : "king";
   return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
 }
@@ -46,7 +47,7 @@ const heroSprite = (sword, owned, skin = null, outfit = null) => `hero_${skin ||
 const SLASH_TIME = 0.18;
 const SLASH_COLORS = {
   rusty: [190, 140, 100], steel: [235, 240, 250], great: [200, 210, 230], ash: [255, 150, 60],
-  giant: [210, 220, 240], barbell: [170, 180, 200], radiator: [255, 170, 60],
+  giant: [210, 220, 240], barbell: [170, 180, 200], radiator: [255, 170, 60], seraph: [230, 60, 50],
 };
 
 /** Дуга следа удара: k от 0 (начало) до 1 (исчезла). Двуручник — шире, пепельный — огненный. */
@@ -65,8 +66,8 @@ function drawSlash(c, x, y, sword, k, skin = null) {
       c.fillRect(Math.floor(x + Math.cos(rad) * (radius - shrink) * 0.55), Math.floor(y + Math.sin(rad) * (radius - shrink)), width, width);
     }
   }
-  if (sword === "ash" || sword === "radiator") {
-    c.fillStyle = "rgb(255,200,90)";
+  if (sword === "ash" || sword === "radiator" || sword === "seraph") {
+    c.fillStyle = sword === "seraph" ? "rgb(255,90,60)" : "rgb(255,200,90)";
     for (let i = 0; i < 4; i++) c.fillRect(x + Math.floor(rand(-4, 10)), y + Math.floor(rand(-radius, radius)), 1, 1);
   }
 }
@@ -1431,14 +1432,15 @@ class BattleScene extends Scene {
   /** Враг: жар Радиатора и ИИ (в дуэли врагом управляет соперник по сети). */
   updateEnemy(dt) {
     const p = this.game.player, en = this.enemy;
-    // Радиатор: жар обжигает врага каждую секунду (не во время возрождения)
-    const burn = p.weapon.burn || 0;
+    // Радиатор: жар обжигает врага каждую секунду; Крыло Серафима — аура, доля здоровья врага (не во время возрождения)
+    const pct = p.weapon.aura || 0;
+    const burn = (p.weapon.burn || 0) + (pct ? Math.max(1, Math.ceil(en.maxHp * pct)) : 0);
     if (burn && en.state !== "revive" && en.state !== "transform" && en.state !== "dead") {
       this.burnT += dt;
       if (this.burnT >= BURN_EVERY) {
         this.burnT -= BURN_EVERY;
         en.hp -= burn;
-        this.float(`-${burn}`, en.x + 20, 100, "rgb(255,150,60)", 8);
+        this.float(`-${burn}`, en.x + 20, 100, pct ? "rgb(255,80,60)" : "rgb(255,150,60)", 8);
         if (en.hp <= 0) return this.defeat();
       }
     }
@@ -1448,7 +1450,8 @@ class BattleScene extends Scene {
       this.auraT += dt;
       if (this.auraT >= 1) {
         this.auraT -= 1;
-        const dmg = Math.max(1, Math.ceil(p.maxHp * en.aura));
+        const ward = p.owned.includes("wingarmor") ? 0.5 : 1; // доспех Серафима вдвое ослабляет ауру
+        const dmg = Math.max(1, Math.ceil(p.maxHp * en.aura * ward));
         this.hp -= dmg;
         this.auraHitT = 0.25;
         this.float(`-${dmg}`, this.HERO_X + 4, 100, "rgb(255,70,50)", 8);
@@ -1626,7 +1629,7 @@ class BattleScene extends Scene {
     this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
     this.hitFx.draw(c);
-    if ((p.sword === "ash" || p.sword === "radiator") && !skin) { // раскалённый клинок искрит
+    if ((p.sword === "ash" || p.sword === "radiator" || p.sword === "seraph") && !skin) { // раскалённый клинок искрит
       [this.bladeEmbers.x, this.bladeEmbers.y] = this.action === "attack" ? [hx + 30, GROUND_ARENA - 20] : [hx + 20, GROUND_ARENA - 10];
       this.bladeEmbers.draw(c);
     }
@@ -2569,7 +2572,7 @@ class MultiplayerScene extends Scene {
 
 // ------------------------------------------------------------------ Кузница
 const SHOP_ROWS = [...SHOP_ORDER, "back"];
-const shopRect = (i) => [18, 44 + i * 29, 384, i === SHOP_ORDER.length ? 22 : 27];
+const shopRect = (i) => [18, 38 + i * 24, 384, i === SHOP_ORDER.length ? 20 : 23];
 /** Телефон вертикально: список во весь экран под «чёлкой» с героем. */
 function shopRectTall(g, i) {
   const top = GAME_H + 12, gap = 10, backH = 60, msgH = 40, n = SHOP_ORDER.length;
@@ -2718,9 +2721,9 @@ class ShopScene extends Scene {
       if (key === "back") return g.button(r, "НАЗАД К КОСТРУ", { selected: sel });
       const it = item(key), [status, scol] = this.status(key);
       g.button(r, "", { selected: sel });
-      g.text(it.name, r[0] + 8, r[1] + 4, 8, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
-      g.text(it.desc, r[0] + 8, r[1] + 16, 8, COL.dim);
-      g.text(status, r[0] + r[2] - 8, r[1] + 10, 8, scol, "right");
+      g.text(it.name, r[0] + 8, r[1] + 3, 8, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
+      g.text(it.desc, r[0] + 8, r[1] + 13, 8, COL.dim);
+      g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, scol, "right");
     });
     // крупное превью героя; на непокупленной вещи — примерка
     if (this.drawHero(470, 2 * GROUND_ARENA, 4) === "ash") this.previewEmbers.draw(g.ctx);

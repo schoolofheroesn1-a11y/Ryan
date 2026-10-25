@@ -45,7 +45,10 @@ export class Player {
   get attackCost() { return this.weapon.cost; }
   get critMult() { return this.weapon.crit; }
   get lifesteal() { return this.weapon.lifesteal; }
-  get damageTakenMult() { return this.owned.includes("kingarmor") ? 0.65 : this.owned.includes("armor") ? 0.75 : 1; }
+  get damageTakenMult() {
+    const o = this.owned;
+    return o.includes("wingarmor") ? 0.55 : o.includes("kingarmor") ? 0.65 : o.includes("armor") ? 0.75 : 1;
+  }
   get estusMax() { return ESTUS_MAX + (this.owned.includes("amulet") ? 1 : 0); }
 
   // --- Кузница ---

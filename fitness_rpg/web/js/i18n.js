@@ -439,6 +439,10 @@ const EN = {
   "Амулет Углей": "Ember amulet",
   "+{#} зелье лечения": "+{#} healing potion",
   "Доспех Короля-Призрака": "Wraith King armor",
+  "Крыло Серафима": "Seraph's Wing",
+  "+24 урона, крит x2, аура: враг -1%/с": "+24 damage, crit x2, aura: foe -1%/sec",
+  "Доспех Серафима": "Seraph armor",
+  "урон -45%, аура Бездны вдвое слабее": "damage -45%, Abyss aura halved",
 
   // --- лавка образов
   "ЛАВКА ОБРАЗОВ": "COSMETICS SHOP",

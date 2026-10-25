@@ -707,6 +707,29 @@ SWORD_MAPS = {
         "...k...",
     ],
 }
+SWORD_MAPS["seraph"] = [
+    # Крыло Серафима (с босса Алой Бездны): узкий клинок из белой кости с чёрной жилой,
+    # гарда — костяные крылья, навершие — тлеющий глаз, с краёв стекают алые капли
+    "...k...",
+    "..k%k..",
+    "...#...",
+    "...#...",
+    "!@k#k@!",
+    ".!@#@!.",
+    "..k#k..",
+    ".k!#@k.",
+    ".k!#@k.",
+    "$k!#@k.",
+    ".k!#@k.",
+    ".k!#@k$",
+    ".k!#@k.",
+    "$k!#@k.",
+    ".k!#@k.",
+    "..k!k..",
+    "..k!k.$",
+    "..k!k..",
+    "...k...",
+]
 COSMETIC_SWORDS = ("void", "sun", "frost", "phoenix", "kin")
 SWORD_GRIP = 2
 SWORD_PALETTE = dict(
@@ -716,7 +739,8 @@ SWORD_PALETTE = dict(
     t=(130, 206, 255), T=(214, 242, 255), I=(56, 110, 196),    # Иней
     **{"1": (255, 250, 222), "2": (255, 198, 64), "3": (240, 96, 30), "4": (206, 42, 30),   # Феникс: пламя
        "5": (230, 30, 64), "6": (255, 218, 100), "7": (196, 132, 36),                      # рубин и золотые крылья
-       "8": (64, 222, 196), "9": (220, 255, 246)},                                           # Побратим: бирюза
+       "8": (64, 222, 196), "9": (220, 255, 246),                                            # Побратим: бирюза
+       "!": (240, 234, 224), "@": (166, 154, 150), "#": (26, 14, 18), "$": (176, 32, 28), "%": (255, 110, 60)},  # Серафим
 )
 
 # Где рука держит рукоять: (x центра рукояти, y её верха)
@@ -738,10 +762,19 @@ SLASH_COLORS = {
     "steel": (235, 240, 250),
     "great": (200, 210, 230),
     "ash": (255, 150, 60),
+    "seraph": (230, 60, 50),
 }
 
 # Облик героя: доспех Костяного Рыцаря и/или Амулет Углей
-LOOKS = ("base", "armor", "amulet", "both", "king", "king_amulet", "samurai")
+LOOKS = ("base", "armor", "amulet", "both", "king", "king_amulet", "wing", "wing_amulet", "samurai")
+# Доспех Серафима: чёрные латы с белыми костяными мазками, алый плащ, глаза-угли и костяные крылья за спиной
+WING_PALETTE = dict(
+    PALETTE,
+    d=(16, 10, 14), s=(34, 24, 30), l=(60, 46, 52), w=(236, 230, 220),
+    r=(44, 8, 12), R=(104, 18, 22), e=(255, 90, 50),
+    Y=(246, 120, 40), y=(255, 230, 160),
+)
+WING_LIFT = 7  # над плечами — кончики костяных крыльев
 # Доспех самурая (облик из лавки, только внешний вид): алый лак, чёрный плащ, золотые рога кабуто
 SAMURAI_PALETTE = dict(
     PALETTE,
@@ -789,6 +822,15 @@ def _body_rows(rows, width, look):
             _put(rows, x, 1, "g")
         for x in (12, 14):  # призрачный огонь в прорези забрала
             _put(rows, x, 6, "e")
+    if look in ("wing", "wing_amulet"):
+        for x in (12, 14):  # угли в прорези забрала
+            _put(rows, x, 6, "e")
+        for x, y in ((10, 10), (11, 11), (12, 12), (13, 13)):  # белый мазок наискосок через грудь
+            _put(rows, x, y, "w")
+        for x, y in ((8, 1), (9, 0)):  # белая прядь-гребень на шлеме
+            _put(rows, x, y, "W")
+        for y in range(19, 23):  # полоса по ноге
+            _put(rows, 11, y, "w")
     if look == "samurai":
         for y in range(0, 5):  # кабуто — чёрный лак
             rows[y] = rows[y].replace("s", "a").replace("l", "A").replace("w", "h")
@@ -832,14 +874,14 @@ def compose_hero(sword, look, pose):
     attack = pose == "attack"
     width = ATTACK_W if attack else 24
     palette = ARMOR_PALETTE if look in ("armor", "both") else KING_PALETTE if look.startswith("king") \
-        else SAMURAI_PALETTE if look == "samurai" else BODY_PALETTE
+        else WING_PALETTE if look.startswith("wing") else SAMURAI_PALETTE if look == "samurai" else BODY_PALETTE
     blade_map = SWORD_MAPS[sword]
     if attack:
         width = max(width, ATTACK_GRIP[0] - SWORD_GRIP + len(blade_map))  # длинный клинок не обрезается
     body = sprite_from_map(_body_rows(HERO_ATTACK if attack else HERO_IDLE, width, look), palette)
     if sword == "giant" and not attack:
         surf = _giant_on_shoulder(body, blade_map)
-        return _samurai_dress(surf) if look == "samurai" else surf
+        return _samurai_dress(surf) if look == "samurai" else _wing_dress(surf) if look.startswith("wing") else surf
     if attack:
         blade = sprite_from_map(_rotate_ccw(blade_map), SWORD_PALETTE)
         gx, gy = ATTACK_GRIP
@@ -851,7 +893,39 @@ def compose_hero(sword, look, pose):
     surf = pygame.Surface((width, 32), pygame.SRCALPHA)
     surf.blit(blade, pos)
     surf.blit(body, (0, 0))
-    return _samurai_dress(surf) if look == "samurai" else surf
+    return _samurai_dress(surf) if look == "samurai" else _wing_dress(surf) if look.startswith("wing") else surf
+
+
+def _wing_dress(surf):
+    """Доспех Серафима: два костяных крыла за спиной — кончики поднимаются над плечами (рисуются только в пустоте)."""
+    w, h = surf.get_size()
+    out = pygame.Surface((w, h + WING_LIFT), pygame.SRCALPHA)
+    out.blit(surf, (0, WING_LIFT))
+    top = h + WING_LIFT - 32
+    bone, bone2, memb, memb2 = (240, 234, 224), (166, 154, 150), (40, 8, 12), (96, 18, 22)
+
+    def px(x, y, col):
+        yy = top + y
+        if 0 <= x < w and 0 <= yy < h + WING_LIFT and out.get_at((x, yy)).a == 0:
+            out.set_at((x, yy), col)
+
+    # дальнее крыло — за левым плечом (герой смотрит вправо): дуга вверх-назад и пальцы вниз
+    arc = [(7, 9), (6, 7), (5, 5), (4, 3), (3, 1), (2, -1), (1, -3), (0, -5)]
+    for i, (x, y) in enumerate(arc):
+        for yy in range(y + 1, min(y + 6 + i, 22)):  # перепонка под костью
+            px(x, yy, memb2 if yy <= y + 1 else memb)
+    for x, y in arc:
+        px(x, y, bone)
+        px(x + 1, y, bone2)
+    for x, y0, y1 in ((1, -2, 10), (3, 2, 14), (5, 6, 17)):  # пальцы
+        for yy in range(y0, y1):
+            px(x, yy, bone2 if yy > (y0 + y1) // 2 else bone)
+    # ближнее крыло — кончик над правым плечом
+    for x, y in ((17, 9), (18, 7), (19, 5), (20, 3), (21, 1), (22, -1), (23, -4)):
+        for yy in range(y + 1, y + 4):
+            px(x, yy, memb)
+        px(x, y, bone)
+    return out
 
 
 SAMURAI_LIFT = 11  # над шлемом: рога кувагата и знамя сасимоно
@@ -1302,6 +1376,8 @@ def make_hero_frames(sword, look="base"):
 def hero_look(owned):
     """Облик героя по купленным реликвиям."""
     armor, amulet = "armor" in owned, "amulet" in owned
+    if "wingarmor" in owned:  # доспех Серафима — поверх всех остальных
+        return "wing_amulet" if amulet else "wing"
     if "kingarmor" in owned:  # доспех Короля-Призрака надевается поверх костяного
         return "king_amulet" if amulet else "king"
     return "both" if armor and amulet else "armor" if armor else "amulet" if amulet else "base"

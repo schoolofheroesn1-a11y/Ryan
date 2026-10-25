@@ -110,8 +110,8 @@ function int_in($v, $min, $max, $def) {
     return max($min, min($max, (int)$v));
 }
 
-const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'barbell'];
-const RELICS = ['armor', 'kingarmor', 'amulet'];
+const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'seraph', 'barbell'];
+const RELICS = ['armor', 'kingarmor', 'wingarmor', 'amulet'];
 const SKINS = ['void', 'sun', 'frost', 'phoenix', 'kin'];
 const OUTFITS = ['samurai'];
 
