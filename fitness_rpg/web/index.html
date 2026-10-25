@@ -40,6 +40,23 @@
   <p class="links"><a href="offer.html">Пользовательское соглашение</a> · <a href="prices.html">Цены и товары</a> ·
   <a href="contacts.html">Контакты и реквизиты</a> · <a href="privacy.html">Конфиденциальность</a></p>
 </div>
+<script>
+  // Если скрипт игры не загрузился (файлы на сайте разных версий, нет сети) — показываем причину
+  // вместо вечной «Загрузки…».
+  (function () {
+    var shown = false;
+    function show(msg) {
+      var el = document.getElementById("gate-status");
+      if (!el || shown || document.getElementById("gate").classList.contains("ready")) return;
+      shown = true;
+      el.style.color = "#ff8a6a";
+      el.textContent = "Не удалось запустить игру: " + msg + ". Обновите страницу; если не помогло — на сайте файлы разных версий, загрузите все файлы обновления.";
+    }
+    window.addEventListener("error", function (e) { show((e && e.message) || "ошибка скрипта"); }, true);
+    window.addEventListener("unhandledrejection", function (e) { show(String((e && e.reason && e.reason.message) || e.reason || "ошибка")); });
+    setTimeout(function () { show("загрузка идёт слишком долго"); }, 20000);
+  })();
+</script>
 <script type="module">
   import { boot } from "./js/game.js";
   boot();
