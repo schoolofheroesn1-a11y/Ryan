@@ -18,6 +18,7 @@ cp web/vendor/tasks-vision/wasm/vision_wasm_internal.* web/vendor/tasks-vision/w
 python3 tools/flatten_release.py "$OUT" dist/ash-and-iron-web
 rm -rf "$OUT"
 OUT=dist/ash-and-iron-web
+python3 tools/cache_bust.py "$OUT"  # game.js?v=N: кэш не смешает старые и новые файлы
 touch "$OUT/.nojekyll"  # GitHub Pages отдаёт файлы как есть, без Jekyll
 cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html deploy/offer.html deploy/prices.html deploy/contacts.html "$OUT/"
 python3 tools/fill_seller.py "$OUT" deploy/seller.json
