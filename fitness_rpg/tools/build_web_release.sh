@@ -18,7 +18,7 @@ cp web/vendor/tasks-vision/wasm/vision_wasm_internal.* web/vendor/tasks-vision/w
 python3 tools/flatten_release.py "$OUT" dist/ash-and-iron-web
 rm -rf "$OUT"
 OUT=dist/ash-and-iron-web
-python3 tools/cache_bust.py "$OUT"  # game.js?v=N: кэш не смешает старые и новые файлы
+python3 tools/cache_bust.py "$OUT"  # gear.js?v=<отпечаток>: кэш не смешает старые и новые файлы
 touch "$OUT/.nojekyll"  # GitHub Pages отдаёт файлы как есть, без Jekyll
 cp deploy/README_DEPLOY.md deploy/supabase.sql deploy/privacy.html deploy/offer.html deploy/prices.html deploy/contacts.html "$OUT/"
 python3 tools/fill_seller.py "$OUT" deploy/seller.json
@@ -27,6 +27,9 @@ H=dist/ash-a-iron-hosting
 rm -rf "$H" dist/ash-a-iron-hosting.zip && cp -r "$OUT" "$H"
 rm -f "$H/README_DEPLOY.md" "$H/supabase.sql" "$H/.nojekyll"
 cp deploy/hosting/.htaccess server/api.php server/codes.php server/lb_config.example.php "$H/"
+# какие файлы изменились с прошлой сборки — только их и нужно загрузить на хостинг
+[ -d dist/hosting-prev ] && python3 tools/cache_bust.py "$H" dist/hosting-prev | tail -1 || true
+rm -rf dist/hosting-prev && cp -r "$H" dist/hosting-prev
 (cd "$H" && zip -qr ../ash-a-iron-hosting.zip .)
 (cd dist && zip -qr ash-and-iron-web.zip ash-and-iron-web)
 echo "Готово: $(pwd)/dist/ash-and-iron-web.zip ($(du -h dist/ash-and-iron-web.zip | cut -f1))"
