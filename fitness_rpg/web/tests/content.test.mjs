@@ -57,8 +57,19 @@ test("Wraith King armor: -35% damage taken and replaces the Bone Knight armor", 
   const p = new Player({ blueGems: 8 });
   assert.equal(p.damageTakenMult, 1);
   p.owned.push("armor");
+  p.equip("armor");
   assert.equal(p.damageTakenMult, 0.75);
   assert.equal(p.buy("kingarmor"), true);
   assert.equal(p.damageTakenMult, 0.65);
   assert.equal(p.blueGems, 1);
+});
+
+test("only one armor is worn at a time and can be switched", () => {
+  const p = new Player({ owned: ["rusty", "armor", "kingarmor", "wingarmor", "amulet"] });
+  assert.equal(p.armor, "wingarmor", "старое сохранение: надет самый крепкий");
+  assert.deepEqual(p.worn, ["rusty", "wingarmor", "amulet"]);
+  assert.equal(p.damageTakenMult, 0.55);
+  p.equip("armor");
+  assert.deepEqual(p.worn, ["rusty", "armor", "amulet"]);
+  assert.equal(p.damageTakenMult, 0.75);
 });

@@ -7,7 +7,7 @@ import {
   ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
-import { Player, STATS } from "./player.js";
+import { ARMORS, Player, STATS } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
@@ -24,6 +24,7 @@ const W = 640, GAME_H = 360;
 // Бой на телефоне вертикально: мир крупнее (×3), по бокам срезается пустое место
 const ZOOM = { sx: 44, sw: 640 / 3, k: 3, h: 540 };
 const SIDE_MIN = 56; // ширина боковой панели с кнопками (широкий экран без камеры), меньше — кнопки внутри картинки
+const SIDE_MAX = 96; // шире не нужно: остальное поле — просто тёмная рамка
 const GROUND_TITLE = 150, GROUND_ARENA = 140;
 const FONT = '"PressStart2P", monospace';
 
@@ -158,6 +159,7 @@ class Game {
     this.motion = new Motion();
     this.useCamera = useCamera;
     this.wideMode = !useCamera; // без камеры — всегда горизонтально, по бокам картинки крупные кнопки
+    this.touch = !!(globalThis.matchMedia && matchMedia("(pointer: coarse)").matches); // телефон или планшет
     this.side = 0;
     this.time = 0;
     this.shake = 0;
@@ -213,7 +215,11 @@ class Game {
   }
 
   resize() {
-    let vw = innerWidth, vh = innerHeight;
+    // доступная область — без «чёлки» iPhone, полосы жестов и вырезов (поля body = safe-area-inset)
+    const cs = getComputedStyle(document.body);
+    const pad = (k) => parseFloat(cs[k]) || 0;
+    let vw = Math.max(200, innerWidth - pad("paddingLeft") - pad("paddingRight"));
+    let vh = Math.max(200, innerHeight - pad("paddingTop") - pad("paddingBottom"));
     // без камеры игра горизонтальная: если телефон держат вертикально (поворот экрана заблокирован),
     // картинка поворачивается сама — достаточно повернуть телефон
     this.rotated = this.wideMode && vh > vw;
@@ -226,7 +232,7 @@ class Game {
     this.panelOn = this.portrait && this.usesPanel;
     this.H = this.panelOn ? Math.min(1400, Math.max(GAME_H + 200, Math.round((W * vh) / vw))) : GAME_H;
     // широкий экран телефона: поля по бокам картинки 16:9 — панели с кнопками, как у приставки
-    const side = this.wideMode && !this.portrait ? Math.min(180, Math.floor((Math.round((GAME_H * vw) / vh) - W) / 2)) : 0;
+    const side = this.wideMode && !this.portrait ? Math.min(SIDE_MAX, Math.floor((Math.round((GAME_H * vw) / vh) - W) / 2)) : 0;
     this.side = side >= SIDE_MIN ? side : 0;
     const cw = W + 2 * this.side;
     this.canvas.width = cw;
@@ -246,10 +252,13 @@ class Game {
       this.cam = [(W - camW) / 2, top, camW, camH];
       const y = this.H - btnH - 8, bw = (W - 32) / 3;
       this.manual = ["pushup", "squat", "jack"].map((ex, i) => [ex, [8 + i * (bw + 8), y, bw, btnH]]);
-    } else if (this.side) { // слева — удар во всю высоту, справа — уворот и зелье
-      const sw = this.side - 12, h = this.H - 24, top = Math.round(h * 0.6);
+    } else if (this.side) { // поля по бокам: слева удар, справа уворот и зелье — под большими пальцами, не во всю высоту
+      const sw = this.side - 12;
       this.cam = [W - 136, 12, 120, 90];
-      this.manual = [["pushup", [-this.side + 6, 12, sw, h]], ["squat", [W + 6, 12, sw, top]], ["jack", [W + 6, 20 + top, sw, h - top - 8]]];
+      this.manual = [["pushup", [-this.side + 6, 150, sw, 120]], ["squat", [W + 6, 120, sw, 100]], ["jack", [W + 6, 230, sw, 74]]];
+    } else if (this.wideMode && this.touch) { // узкий экран без полей: кнопки поверх картинки по углам
+      this.cam = [W - 136, 12, 120, 90];
+      this.manual = [["pushup", [10, 196, 100, 64]], ["squat", [W - 110, 168, 100, 64]], ["jack", [W - 110, 240, 100, 46]]];
     } else {
       this.cam = [W - 136, 12, 120, 90];
       this.manual = ["pushup", "squat", "jack"].map((ex, i) => [ex, [W - 136, 110 + i * 30, 120, 26]]);
@@ -523,7 +532,7 @@ class Game {
   }
 
   cameraWidget() {
-    if (this.side) return; // игра без камеры на широком экране: окошко камеры не нужно
+    if (this.wideMode) return; // игра без камеры: окошко камеры не нужно
     const [x, y, w, h] = this.cam;
     this.rect([x - 2, y - 2, w + 4, h + 4], COL.shadow);
     this.ctx.strokeStyle = "rgb(60,46,50)";
@@ -551,7 +560,7 @@ class Game {
   /** Кнопки «ручного» упражнения: без камеры — основной ввод, с камерой — запасной. */
   manualButtons() {
     if (!this.portrait && this.motion.ok) return;
-    if (this.side) return this.sideButtons();
+    if (this.side || (this.wideMode && this.touch && !this.portrait)) return this.sideButtons();
     const labels = this.portrait
       ? { pushup: "ОТЖИМ", squat: "ПРИСЕД", jack: "ЗВЕЗДА" }
       : { pushup: "ОТЖИМ [J]", squat: "ПРИСЕД [K]", jack: "ЗВЕЗДА [L]" };
@@ -562,8 +571,9 @@ class Game {
   sideButtons() {
     const labels = { pushup: ["ОТЖИМ", "удар"], squat: ["ПРИСЕД", "уворот"], jack: ["ЗВЕЗДА", "зелье"] };
     const cols = { pushup: "rgb(255,170,110)", squat: "rgb(140,200,255)", jack: "rgb(150,230,140)" };
+    const over = !this.side; // поверх картинки — полупрозрачные, чтобы не закрывать бой
     for (const [ex, r] of this.manual) {
-      this.button(r, "");
+      this.button(r, "", over ? { fill: "rgba(12,8,16,0.45)" } : {});
       const [a, b] = labels[ex].map(tr);
       const size = [16, 12, 8].find((sz) => a.length * sz <= r[2] - 8) || 8;
       const cy = r[1] + r[3] / 2;
@@ -733,7 +743,7 @@ class TitleScene extends Scene {
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
-    const heroIdle = anim(`${heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
+    const heroIdle = anim(`${heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
     this.aura.drawBehind(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t); // огненные крылья Феникса
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
     this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
@@ -918,7 +928,7 @@ class BonfireScene extends Scene {
     c.fill();
     if (this.game.portrait) return; // на телефоне вертикально костёр и рыцарь рисуются крупно рядом с панелями
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
-    const p = this.game.player, hs = heroSprite(p.sword, p.owned, this.game.skin, this.game.outfit);
+    const p = this.game.player, hs = heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, 168, GROUND_TITLE - hero.height);
     this.embers.draw(c);
@@ -992,7 +1002,7 @@ class BonfireScene extends Scene {
     c.ellipse(x + 130, ground - 4, r, 18, 0, 0, Math.PI * 2);
     c.fill();
     c.imageSmoothingEnabled = false;
-    const hs = heroSprite(p.sword, p.owned, g.skin, g.outfit);
+    const hs = heroSprite(p.sword, p.worn, g.skin, g.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
     c.drawImage(hero, x + 12, ground - hero.height * 3, hero.width * 3, hero.height * 3);
     const fire = anim("bonfire", t, 8, 4);
@@ -1500,7 +1510,7 @@ class BattleScene extends Scene {
       this.auraT += dt;
       if (this.auraT >= 1) {
         this.auraT -= 1;
-        const ward = p.owned.includes("wingarmor") ? 0.5 : 1; // доспех Серафима вдвое ослабляет ауру
+        const ward = p.armor === "wingarmor" ? 0.5 : 1; // доспех Серафима вдвое ослабляет ауру
         const dmg = Math.max(1, Math.ceil(p.maxHp * en.aura * ward));
         this.hp -= dmg;
         this.auraHitT = 0.25;
@@ -1661,7 +1671,7 @@ class BattleScene extends Scene {
 
     const p = this.game.player;
     const skin = this.game.skin;
-    const hero = heroSprite(p.sword, p.owned, skin, this.game.outfit); // меч (или его облик) и облик по реликвиям
+    const hero = heroSprite(p.sword, p.worn, skin, this.game.outfit); // меч (или его облик) и облик по реликвиям
     if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
     else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
@@ -1749,7 +1759,7 @@ class BattleScene extends Scene {
     }
     g.button(this.backRect(), this.backLabel || "< КОСТЁР", { size: g.portrait ? 16 : 8 });
 
-    if (!g.portrait && !g.side) { // подсказки клавиш — только на компьютере
+    if (!g.portrait && !g.side && !g.touch) { // подсказки клавиш — только на компьютере
       [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "зелье"]]
         .forEach(([k, a, b], i) => g.text(`[${k}] ${tr(a)}: ${tr(b)}`, 16, 62 + i * 12, 8, COL.dim));
     }
@@ -2586,7 +2596,7 @@ class MultiplayerScene extends Scene {
       .forEach((line, i) => g.text(line, W / 2, y + i * (P ? 26 : 12), P ? 16 : 8, COL.gold, "center"));
     y += P ? 64 : 28;
     // герой с наградой
-    const p = g.player, hs = heroSprite(p.sword, p.owned, "kin", g.outfit), spr = anim(`${hs}_idle`, g.time, 1.5, 2);
+    const p = g.player, hs = heroSprite(p.sword, p.worn, "kin", g.outfit), spr = anim(`${hs}_idle`, g.time, 1.5, 2);
     const k = P ? 5 : 2, hx = P ? 60 : 40, hy = y + (P ? 230 : 100) - spr.height * k;
     g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
     for (let i = 0; i < 2; i++) { // духи-побратимы кружат вокруг
@@ -2665,23 +2675,30 @@ class ShopScene extends Scene {
     sfx.buy();
     this.say(tf("Куплено: {name}! Оружие надето.", { name: it.name }));
   }
-  choose(key) {
+  async choose(key) {
     const g = this.game, p = g.player, it = item(key);
     if (key === "back") return g.change(new BonfireScene(g));
+    if (this.busy) return;
     if (it.paid && !p.owned.includes(key)) return this.buyPaid(key);
     if (p.owned.includes(key)) {
-      if (SWORDS[key]) {
-        p.equip(key);
+      if (SWORDS[key] || ARMORS.includes(key)) {
+        p.equip(key); // доспех, как и меч, надевается один: прежний снимается
         this.say(tf("Надет: {name}", { name: it.name }));
       } else {
         this.say(tf("{name} уже действует", { name: it.name }));
       }
-    } else if (p.buy(key)) {
-      sfx.level();
-      this.say(tf(SWORDS[key] ? "Куплено: {name}! Меч надет." : "Куплено: {name}!", { name: it.name }));
     } else {
-      const [red, blue] = it.price;
-      return this.say(`Не хватает камней: нужно ${blue ? `${blue} синих` : `${red} алых`}`);
+      if (!p.canAfford(key)) {
+        sfx.deny();
+        const [red, blue] = it.price;
+        return this.say(`Не хватает камней: нужно ${blue ? `${blue} синих` : `${red} алых`}`);
+      }
+      this.busy = true; // покупку нужно подтвердить: камни тратятся безвозвратно
+      const ok = await confirmDialog({ title: "КУПИТЬ?", text: tf("{name} за {price} — {desc}", { name: it.name, price: priceText(key), desc: it.desc }), ok: "КУПИТЬ" });
+      this.busy = false;
+      if (!ok || !p.buy(key)) return;
+      sfx.level();
+      this.say(tf(SWORDS[key] ? "Куплено: {name}! Меч надет." : ARMORS.includes(key) ? "Куплено: {name}! Доспех надет." : "Куплено: {name}!", { name: it.name }));
     }
     p.save();
   }
@@ -2714,8 +2731,8 @@ class ShopScene extends Scene {
   status(key) {
     const p = this.game.player, it = item(key);
     if (p.owned.includes(key)) {
-      if (p.sword === key) return ["НАДЕТ", COL.gold];
-      return SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ["ЕСТЬ", COL.gold];
+      if (p.sword === key || p.armor === key) return ["НАДЕТ", COL.gold];
+      return SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ARMORS.includes(key) ? ["НАДЕТЬ", COL.text] : ["ЕСТЬ", COL.gold];
     }
     if (it.paid) return [this.game.store.price(it.productId), "rgb(120,220,255)"];
     let scol = it.price[1] ? "rgb(130,170,255)" : "rgb(240,110,110)";
@@ -2726,7 +2743,8 @@ class ShopScene extends Scene {
   drawHero(x, ground, scale) {
     const g = this.game, p = g.player, key = SHOP_ROWS[this.index];
     const sword = SWORDS[key] ? key : p.sword;
-    const owned = RELICS[key] ? [...p.owned, key] : p.owned;
+    // примерка доспеха — только он (доспехи не надеваются вместе), амулет — поверх надетого
+    const owned = ARMORS.includes(key) ? [...p.worn.filter((k) => !ARMORS.includes(k)), key] : RELICS[key] ? [...p.worn, key] : p.worn;
     const hero = anim(`${heroSprite(sword, owned, null, g.outfit)}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, x, ground - hero.height * scale, hero.width * scale, hero.height * scale);
     if (key !== "back" && !p.owned.includes(key)) {
@@ -2741,7 +2759,7 @@ class ShopScene extends Scene {
     g.gems(W - 18, 18, p, "right");
     g.text(w.name, 18, 52, 16, COL.text);
     g.text(`урон ${p.damage}  крит x${w.crit}  удар ${w.cost} сил`, 18, 76, 12, COL.dim);
-    const relics = Object.keys(RELICS).filter((k) => p.owned.includes(k)).map((k) => RELICS[k].name);
+    const relics = Object.keys(RELICS).filter((k) => p.worn.includes(k)).map((k) => RELICS[k].name);
     relics.forEach((name, i) => g.text(name, 18, 96 + i * 16, 12, "rgb(150,190,255)"));
     Object.assign(this.previewEmbers, { x: W / 2 + 157, y: 2 * GROUND_ARENA - 42, spread: 9 });
     if (this.drawHero(W / 2 + 40, 2 * GROUND_ARENA + 24, 6) === "ash") this.previewEmbers.draw(g.ctx);
@@ -2783,7 +2801,7 @@ class ShopScene extends Scene {
     g.text(w.name, W - 12, 20, 8, COL.text, "right");
     g.text(`урон ${p.damage} крит x${w.crit}`, W - 12, 34, 8, COL.dim, "right");
     g.text(`удар ${w.cost} сил`, W - 12, 46, 8, COL.dim, "right");
-    const relics = Object.keys(RELICS).filter((k) => p.owned.includes(k)).map((k) => RELICS[k].name);
+    const relics = Object.keys(RELICS).filter((k) => p.worn.includes(k)).map((k) => RELICS[k].name);
     relics.forEach((name, i) => g.text(name, W - 12, 62 + i * 12, 8, "rgb(150,190,255)", "right"));
     if (this.msgT > 0) g.wrap(this.message, 26).forEach((l, i) => g.text(l, W - 12, GAME_H - 52 + i * 12, 8, COL.gold, "right"));
   }
@@ -2963,7 +2981,7 @@ class CosmeticsScene extends Scene {
     c.imageSmoothingEnabled = false;
     c.drawImage(IMG.arena_bg, 60, 60, 144, 100, 0, 0, 144, 100);
     const skin = this.previewSkin, outfit = this.previewOutfit; // примерка доспеха
-    const hs = heroSprite(p.sword, p.owned, skin, outfit);
+    const hs = heroSprite(p.sword, p.worn, skin, outfit);
     const pose = this.attacking ? "attack" : "idle", hx = this.attacking ? 34 : 28;
     const dummy = this.dummyFlash > 0 ? IMG.skeleton_hurt_0 : IMG.skeleton_idle_0;
     c.drawImage(dummy, 96, 80 - dummy.height);
@@ -3118,7 +3136,7 @@ class LeaderboardScene extends Scene {
     const g = this.game, b = g.profile.best, r = this.res;
     g.text("РЕЙТИНГ", W / 2, 24, 40, COL.gold, "center");
     g.text("по побеждённым боссам, затем по уровню", W / 2, 76, 12, COL.dim, "center");
-    const hs = heroSprite(g.player.sword, g.player.owned, g.skin, g.outfit), hero = anim(`${hs}_idle`, g.time, 1.5, 2);
+    const hs = heroSprite(g.player.sword, g.player.worn, g.skin, g.outfit), hero = anim(`${hs}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, 28, 324 - hero.height * 4, hero.width * 4, hero.height * 4); // рыцарь у карточки игрока
     const cx = 136, cw = W - 16 - cx, mid = cx + cw / 2;
     g.rect([cx, 120, cw, 200], "rgba(10,6,14,0.8)");
@@ -3355,7 +3373,7 @@ class TutorialScene extends Scene {
     let y = P ? 74 : 54;
     for (const t0 of st.lines) for (const line of g.wrap(tr(t0), chars)) { g.text(line, 20, y, fs, COL.text); y += fs + (P ? 8 : 4); }
     // герой показывает движение
-    const p = g.player, hs = heroSprite(p.sword, p.owned, g.skin, g.outfit);
+    const p = g.player, hs = heroSprite(p.sword, p.worn, g.skin, g.outfit);
     const pose = st.pose === "idle" || Math.floor(t * 2) % 2 ? `${hs}_idle_0` : `${hs}_${st.pose}_0`;
     const spr = IMG[pose] || IMG[`${hs}_idle_0`], k = 3;
     const hx = P ? W - 30 - spr.width * k : 440, hy = (P ? 330 : 250) - spr.height * k;

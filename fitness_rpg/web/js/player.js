@@ -13,6 +13,9 @@ export const STATS = {
 };
 
 export const ESTUS_MAX = 3; // без Амулета Углей
+// доспехи: надет только один (выбирается в кузнице, как меч); слабее -> сильнее
+export const ARMORS = ["armor", "kingarmor", "wingarmor"];
+const ARMOR_TAKEN = { armor: 0.75, kingarmor: 0.65, wingarmor: 0.55 };
 
 export class Player {
   constructor(data = {}) {
@@ -32,11 +35,15 @@ export class Player {
     this.savedAt = 0; // когда сохранено (мс) — в аккаунте побеждает более свежее сохранение
     this.reset = false; // начата «Новая игра»: пустой прогресс сохранён сознательно
     this.owner = null; // аккаунт, к которому привязан этот прогресс
+    this.armor = null; // надетый доспех (из купленных)
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
     if (!this.owned.includes("rusty")) this.owned.unshift("rusty");
     if (!SWORDS[this.sword] || !this.owned.includes(this.sword)) this.sword = "rusty";
+    if (!ARMORS.includes(this.armor) || !this.owned.includes(this.armor)) { // старые сохранения: самый крепкий из купленных
+      this.armor = [...ARMORS].reverse().find((k) => this.owned.includes(k)) || null;
+    }
   }
 
   get level() { return this.strength + this.vigor + this.endurance - 2; }
@@ -48,10 +55,9 @@ export class Player {
   get attackCost() { return this.weapon.cost; }
   get critMult() { return this.weapon.crit; }
   get lifesteal() { return this.weapon.lifesteal; }
-  get damageTakenMult() {
-    const o = this.owned;
-    return o.includes("wingarmor") ? 0.55 : o.includes("kingarmor") ? 0.65 : o.includes("armor") ? 0.75 : 1;
-  }
+  get damageTakenMult() { return ARMOR_TAKEN[this.armor] || 1; }
+  /** Что на герое: купленное, кроме доспехов, которые сейчас не надеты (облик и защита — по надетому). */
+  get worn() { return this.owned.filter((k) => !ARMORS.includes(k) || k === this.armor); }
   get estusMax() { return ESTUS_MAX + (this.owned.includes("amulet") ? 1 : 0); }
 
   // --- Кузница ---
@@ -69,6 +75,7 @@ export class Player {
     this.blueGems -= blue;
     this.owned.push(key);
     if (SWORDS[key]) this.sword = key;
+    if (ARMORS.includes(key)) this.armor = key; // новый доспех сразу надевается
     return true;
   }
 
@@ -82,6 +89,7 @@ export class Player {
 
   equip(key) {
     if (SWORDS[key] && this.owned.includes(key)) this.sword = key;
+    if (ARMORS.includes(key) && this.owned.includes(key)) this.armor = key;
   }
 
   levelCost() { return 60 + 30 * (this.level - 1); }
