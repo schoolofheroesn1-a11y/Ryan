@@ -160,19 +160,15 @@ class Game {
     this.resize();
     addEventListener("resize", () => this.resize());
     this.codes = []; // физические клавиши (e.code) — J/K/L работают на любой раскладке
-    this.held = new Set(); // зажатые клавиши: удержание уворота
     this.toast = "";
     this.toastT = 0;
     addEventListener("keydown", (e) => {
       if (modalOpen()) return; // открыто окно (имя, покупка) — игра клавиши не слушает
       if (["F2", "F3", "F4", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
-      this.held.add(e.code);
       if (e.repeat) return; // автоповтор не считается новым повторением упражнения
       this.keys.push({ KeyW: "ArrowUp", KeyS: "ArrowDown" }[e.code] || e.key);
       this.codes.push(e.code);
     });
-    addEventListener("keyup", (e) => this.held.delete(e.code));
-    addEventListener("blur", () => this.held.clear());
     canvas.addEventListener("pointerdown", (e) => {
       const r = canvas.getBoundingClientRect();
       this.taps.push({ x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * this.H });
@@ -184,6 +180,11 @@ class Game {
   get usesPanel() {
     const s = this.scene;
     return !!s && (s.needsCamera || s.ownsPanel);
+  }
+
+  /** Бой с камерой на телефоне вертикально: кнопок упражнений нет, всё — движениями. */
+  get noBtns() {
+    return this.zoomed && !this.scene.manual;
   }
 
   /** Сейчас бой на телефоне вертикально: картинка мира увеличена. */
@@ -215,7 +216,9 @@ class Game {
     this.ctx.imageSmoothingEnabled = false;
     // Раскладка панели камеры и кнопок ручного ввода
     if (this.portrait) {
-      const top = this.gameH + 8, btnH = this.zoomedNow ? 112 : 56; // в бою — крупные кнопки под палец
+      // в бою — крупные кнопки под палец; с камерой кнопок в бою нет — окно камеры больше
+      this.noBtnsNow = this.noBtns;
+      const top = this.gameH + 8, btnH = this.zoomedNow ? (this.noBtnsNow ? 0 : 112) : 56;
       const camH = this.H - top - btnH - 24;
       const camW = Math.min(W - 16, Math.round((camH * 4) / 3));
       this.cam = [(W - camW) / 2, top, camW, camH];
@@ -285,11 +288,6 @@ class Game {
 
   key(...names) {
     return this.keys.some((k) => names.includes(k));
-  }
-
-  /** Зажата клавиша уворота (K или 2) — герой остаётся внизу, как в удержанном приседе. */
-  get manualLow() {
-    return ["KeyK", "Digit2", "Numpad2"].some((c) => this.held.has(c));
   }
 
   /** Клавиши тестировщика: F2 — камни и пепел, F3 — следующий бой с боссом, F4 — следующая локация. */
@@ -491,7 +489,7 @@ class Game {
   }
 
   frame(dt) {
-    if (this.portrait && (this.usesPanel !== this.panelOn || this.zoomed !== this.zoomedNow)) this.resize();
+    if (this.portrait && (this.usesPanel !== this.panelOn || this.zoomed !== this.zoomedNow || this.noBtns !== this.noBtnsNow)) this.resize();
     let moves = this.motion.poll();
     // клавиатура (браузер на ПК) и экранные кнопки
     const pushup = ["pushup"], squat = ["squat_down", "squat"], jack = ["jack"];
@@ -676,6 +674,8 @@ class TitleScene extends Scene {
 const BONFIRE_BUTTONS = [[[20, 216, 92, 26], "В БОЙ"], [[118, 216, 96, 26], "КУЗНИЦА"], [[220, 216, 90, 26], "МЕНЮ"]];
 const GO_STYLE = { fill: "rgba(24,70,30,0.92)", border: "rgb(110,220,110)", color: "rgb(150,250,150)" }; // «В БОЙ»
 const RITUAL_TAB_H = 92; // «чёлка» с повторениями поверх окна камеры
+const PUNCHES_TO_FIGHT = 3; // столько ударов (бокс) подряд у костра — и в бой
+const PUNCH_WINDOW = 3; // ...за столько секунд
 
 class BonfireScene extends Scene {
   constructor(game) {
@@ -683,6 +683,8 @@ class BonfireScene extends Scene {
     this.manual = true;
     this.embers = new Particles(216, 116, 26);
     this.ritual = null; // {stat, ex, need, done}
+    this.punches = []; // время последних ударов (бокс): серия — «В БОЙ»
+    this.denyAt = -9;
     this.say("Костёр зажжён. Здоровье и зелья восстановлены.");
     this.index = 0;
     game.run = null; // отдых у костра
@@ -716,10 +718,37 @@ class BonfireScene extends Scene {
     const [x, y, w, h] = g.cam;
     return [x + w / 2 - 120, y + h - 62, 240, 50];
   }
-  startRitual(stat) {
+  startRitual(stat, auto = false) {
     const p = this.game.player;
-    if (!p.canLevel()) return this.say(`Нужно ${p.levelCost()} пепла, у вас ${p.souls}. Победите скелетов!`);
+    if (!p.canLevel()) {
+      if (auto && this.game.time - this.denyAt < 2.5) return; // упражнение без пепла: сигнал не на каждый повтор
+      this.denyAt = this.game.time;
+      sfx.deny();
+      return this.say(`Нужно ${p.levelCost()} пепла, у вас ${p.souls}. Победите скелетов!`);
+    }
     this.ritual = { stat, ex: STATS[stat][1], need: p.repsNeeded(stat), done: 0 };
+    return true;
+  }
+  /** Подсказка для игры с камерой: упражнение — прокачка, бокс — в бой (и сколько ударов уже было). */
+  camHint(x, y, size, center = true) {
+    const g = this.game;
+    if (!g.motion.ok || this.ritual) return;
+    const t = g.time, hits = this.punches.filter((p) => t - p < PUNCH_WINDOW).length;
+    const marks = Array.from({ length: PUNCHES_TO_FIGHT }, (_, i) => (i < hits ? "#" : "-")).join(" ");
+    const align = center ? "center" : "left";
+    g.text("Упражнение — прокачка навыка", x, y, size, COL.text, align);
+    g.text(tf("Бокс: {n} удара — в бой!  {m}", { n: PUNCHES_TO_FIGHT, m: marks }), x, y + size + 6, size, hits ? "rgb(150,250,150)" : COL.gold, align);
+  }
+  /** Бокс у костра: PUNCHES_TO_FIGHT ударов за PUNCH_WINDOW секунд — в бой. */
+  punch() {
+    const g = this.game, t = g.time;
+    this.punches = this.punches.filter((x) => t - x < PUNCH_WINDOW).concat(t);
+    sfx.hit();
+    if (this.punches.length < PUNCHES_TO_FIGHT) return false;
+    this.punches = [];
+    sfx.alert();
+    g.change(new BattleScene(g));
+    return true;
   }
   handle(moves) {
     const g = this.game, p = g.player;
@@ -746,6 +775,18 @@ class BonfireScene extends Scene {
         vibrate([60, 40, 120]);
       }
       return;
+    }
+    // с камерой: начал упражнение — сразу начинается прокачка навыка (как нажатие на навык),
+    // бокс — серия ударов — ведёт в бой
+    for (const m of moves) {
+      if (m === "punch" && this.punch()) return;
+      const stat = Object.keys(STATS).find((st) => STATS[st][1] === m);
+      if (stat && this.startRitual(stat, true)) {
+        this.ritual.done = 1; // это повторение уже засчитано
+        this.index = Object.keys(STATS).indexOf(stat);
+        sfx.rep();
+        return;
+      }
     }
     const rows = this.statRows();
     const n = rows.length + 3;
@@ -821,8 +862,9 @@ class BonfireScene extends Scene {
       g.text(`${NAMES[ex]}: ${done} / ${need}`, W / 2, GAME_H - 64, 16, COL.gold, "center");
       g.bar(W / 2 - 150, GAME_H - 40, 300, 8, done / need, "rgb(230,140,50)");
       g.button([W / 2 - 70, GAME_H - 26, 140, 22], "ПРЕРВАТЬ");
-    } else if (this.msgT > 0) {
-      g.wrap(this.message, 76).forEach((l, i) => g.text(l, W / 2, GAME_H - 36 + i * 12, 8, COL.gold, "center"));
+    } else {
+      this.camHint(W / 2, 284, 8);
+      if (this.msgT > 0) g.wrap(this.message, 76).forEach((l, i) => g.text(l, W / 2, GAME_H - 36 + i * 12, 8, COL.gold, "center"));
     }
   }
 
@@ -882,6 +924,11 @@ class BonfireScene extends Scene {
       g.bar(tx + 24, y + 64, tw - 48, 12, done / need, "rgb(230,140,50)");
       g.button(this.cancelRect(), "ПРЕРВАТЬ", { size: 16 });
     } else {
+      if (g.motion.ok) {
+        const [, , , h] = g.cam;
+        g.rect([x + 20, y + h - 64, w - 40, 56], "rgba(10,6,14,0.8)");
+        this.camHint(x + w / 2, y + h - 56, 14);
+      }
       this.navButtons().forEach(([r, label], j) =>
         g.button(r, label, { size: 16, selected: this.index === 3 + j, ...(j === 0 ? GO_STYLE : {}) }));
     }
@@ -984,13 +1031,15 @@ const HIT_X = { knight: 30, chief: 28, wraith: 31 }; // центр врага д
 const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56 };
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
+const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
+const DODGE_GUARD = 1.0; // присед защищает столько секунд, потом нужно встать и присесть снова
 const RECOVER_TIME = 1.6; // окно для удара после атаки скелета
 const ABSENT_PAUSE = 1.0; // пауза, если игрока нет в кадре дольше этого
 
 class BattleScene extends Scene {
   constructor(game) {
     super(game);
-    this.manual = true;
+    this.manual = !game.motion.ok;
     const p = game.player;
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
@@ -1006,7 +1055,8 @@ class BattleScene extends Scene {
     this.action = "idle";
     this.actionT = 0;
     this.invuln = 0;
-    this.holdLow = true; // удержанный присед защищает (в дуэли — нет: только короткий уворот)
+    this.guardHint = false; // защита приседа кончилась, а игрок ещё внизу — подсказать встать
+    this.guardCap = Infinity; // присед во время замаха защищает до самого удара (в дуэли — не дольше секунды)
     this.regenPause = 0;
     this.hurtT = 0;
     this.texts = [];
@@ -1054,6 +1104,7 @@ class BattleScene extends Scene {
     if (now - (this.exhaustedAt ?? -9) < 1) return;
     this.exhaustedAt = now;
     sfx.exhausted();
+    sfx.deny(); // громкий сигнал: усталое дыхание не слышно, если стоишь в 2–3 м от телефона
   }
 
   saveRun() {
@@ -1131,12 +1182,22 @@ class BattleScene extends Scene {
       }
       if (en.hp <= 0) this.defeat();
     } else if (move === "squat_down" || move === "pushup_down") {
-      // Уворот бесплатный: приседать/опускаться можно сколько угодно.
+      // Уворот: присед стоит немного сил и защищает DODGE_GUARD секунд — сидеть внизу бесполезно,
+      // нужно встать и присесть снова. Низ отжимания — часть удара, за него силы не берутся.
       // Если уже идёт замах — игрок пригнулся заранее и защищён до самого удара.
+      if (move === "squat_down") {
+        if (this.stamina < DODGE_COST) {
+          this.exhaustedSound();
+          return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+        }
+        this.stamina -= DODGE_COST;
+        this.regenPause = Math.max(this.regenPause, 0.3);
+      }
+      const untilStrike = en.state === "windup" ? Math.min(en.timer + 0.25, this.guardCap) : 0;
+      this.invuln = Math.max(this.invuln, DODGE_GUARD, untilStrike);
       this.action = "dodge";
-      this.actionT = 0.9;
-      const untilStrike = en.state === "windup" ? en.timer + 0.25 : 0;
-      this.invuln = Math.max(this.invuln, 0.9, untilStrike);
+      this.actionT = this.invuln;
+      this.guardHint = true;
       sfx.dodge();
     } else if (move === "jack") {
       if (this.estus <= 0) return this.float("Зелья кончились", this.HERO_X + 10, 90, COL.dim, 8);
@@ -1233,6 +1294,7 @@ class BattleScene extends Scene {
   }
 
   update(dt) {
+    this.manual = !this.game.motion.ok; // с камерой бой — только движениями: кнопок ОТЖИМ/ПРИСЕД/ЗВЕЗДА нет
     const g = this.game, p = g.player, en = this.enemy;
     this.torchL.update(dt);
     this.torchR.update(dt);
@@ -1271,10 +1333,9 @@ class BattleScene extends Scene {
     this.actionT -= dt;
     if (this.actionT <= 0) this.action = "idle";
     this.invuln = Math.max(0, this.invuln - dt);
-    if (this.holdLow && ((d && d.low) || g.manualLow)) { // пока игрок внизу — удар проходит над ним, герой в присяде
-      this.invuln = Math.max(this.invuln, 0.15);
-      this.action = "dodge";
-      this.actionT = Math.max(this.actionT, 0.1);
+    if (this.guardHint && this.invuln <= 0) {
+      this.guardHint = false;
+      if (d && d.low) this.float("Встаньте и присядьте снова", this.HERO_X + 10, 80, COL.dim, 8);
     }
     this.regenPause -= dt;
     if (this.regenPause <= 0) this.stamina = Math.min(p.maxStamina, this.stamina + p.staminaRegen * dt);
@@ -1485,7 +1546,6 @@ class BattleScene extends Scene {
     if (!g.portrait) { // подсказки клавиш — только на компьютере
       [["J", "ОТЖИМАНИЕ", "удар"], ["K", "ПРИСЕД/ВНИЗ", "уворот"], ["L", "ЗВЕЗДОЧКА", "зелье"]]
         .forEach(([k, a, b], i) => g.text(`[${k}] ${tr(a)}: ${tr(b)}`, 16, 62 + i * 12, 8, COL.dim));
-      g.text("K держать: остаться внизу", 16, 98, 8, "rgb(110,100,100)");
     }
 
     const plank = g.motion.ok && g.motion.detector.posture === "планка";
@@ -1653,8 +1713,6 @@ class ChallengeScene extends BattleScene {
 const DUEL_WINDUP = 0.8; // столько видно выпад соперника: успей присесть
 const DUEL_DAMAGE = 1.5; // в дуэли удары сильнее — бой не затягивается
 const DUEL_ESTUS = 1; // в дуэли у каждого одна фляга зелья
-const DUEL_DODGE_COST = 10; // присед в дуэли тратит немного сил: нельзя увёртываться без конца
-const DUEL_GUARD = 1.0; // присед защищает столько секунд, потом нужно встать и присесть снова
 const DUEL_POLL = 0.3; // обмен с сервером ~3 раза в секунду
 const DUEL_LOST = 20; // нет связи дольше — дуэль прерывается
 
@@ -1675,8 +1733,7 @@ class DuelScene extends BattleScene {
     this.hp = p.maxHp;
     this.estus = DUEL_ESTUS;
     this.estusCap = DUEL_ESTUS;
-    this.holdLow = false; // сидеть внизу бесполезно: защищает только сам момент приседа
-    this.guardHint = false;
+    this.guardCap = DODGE_GUARD + 0.25; // замах соперника короткий: ранний присед не спасает от следующего
     this.backLabel = "< СДАТЬСЯ";
     this.outbox = [];
     this.sent = 0; // номер последнего своего события (повтор после сбоя связи не применится дважды)
@@ -1733,23 +1790,6 @@ class DuelScene extends BattleScene {
         this.send({ t: "heal" });
         this.send({ t: "hp", hp: this.hp, max: p.maxHp });
       }
-    } else if (move === "squat_down" || move === "pushup_down") {
-      // Уворот: присед стоит немного сил и защищает DUEL_GUARD секунд (низ отжимания — часть выпада, он бесплатный)
-      if (move === "squat_down") {
-        if (this.stamina < DUEL_DODGE_COST) {
-          this.exhaustedSound();
-          return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
-        }
-        this.stamina -= DUEL_DODGE_COST;
-        this.regenPause = Math.max(this.regenPause, 0.3);
-      }
-      const en = this.enemy;
-      const untilStrike = en.state === "windup" ? Math.min(en.timer + 0.25, DUEL_GUARD + 0.25) : 0;
-      this.invuln = Math.max(this.invuln, DUEL_GUARD, untilStrike);
-      this.action = "dodge";
-      this.actionT = this.invuln;
-      this.guardHint = true;
-      sfx.dodge();
     } else {
       super.act(move);
     }
@@ -1816,11 +1856,6 @@ class DuelScene extends BattleScene {
     if (!this.result && this.game.time - this.lastOk > DUEL_LOST) this.end("lost", "Нет связи с сервером");
     if (!this.started) this.ready = READY_TIME; // отсчёт пойдёт у обоих, когда оба готовы
     super.update(dt);
-    const d = this.game.motion.ok ? this.game.motion.detector : null;
-    if (this.guardHint && this.invuln <= 0 && !this.result) {
-      this.guardHint = false; // защита кончилась, а игрок всё ещё внизу — подсказка встать
-      if ((d && d.low) || this.game.manualLow) this.float("Встаньте и присядьте снова", this.HERO_X + 10, 80, COL.dim, 8);
-    }
   }
   updateEnemy(dt) {
     const en = this.enemy;

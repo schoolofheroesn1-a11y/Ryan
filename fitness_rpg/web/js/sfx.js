@@ -93,6 +93,15 @@ export const sfx = {
     });
     if (levels.vibrate) vibrate([120, 40, 120]); // Android — браузер, iOS — нативно
   },
+  // запрет («нельзя»: не хватает пепла, кончились силы) — громкий низкий «бзз-бзз», слышно с 2–3 м.
+  // Идёт через ту же громкость, что и «приседай», но звучит иначе: гудок вниз, а не звон вверх
+  deny: () => {
+    [[0, 0.16], [0.22, 0.26]].forEach(([d, len]) => {
+      tone(233, len, { type: "square", slide: -40, delay: d, vol: 0.26, out: alertGain });
+      tone(116, len, { type: "sawtooth", slide: -20, delay: d, vol: 0.18, out: alertGain });
+    });
+    if (levels.vibrate) vibrate([200, 60, 200]);
+  },
   rep: () => tone(660, 0.06, { type: "triangle", vol: 0.08 }),
   level: () => [0, 0.1, 0.2, 0.3].forEach((d, i) => tone([392, 494, 587, 784][i], 0.22, { type: "triangle", delay: d })),
   win: () => [0, 0.15, 0.3].forEach((d, i) => tone([330, 415, 494][i], 0.35, { type: "triangle", delay: d })),

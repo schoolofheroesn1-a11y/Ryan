@@ -139,3 +139,35 @@ test("castle location after the 3rd knight: bandits, skeletons and the bandit ch
   assert.deepEqual([...kinds].sort(), ["bandit", "chief", "skeleton"]);
   assert.equal(enemyKind(20), "chief");
 });
+
+// бокс: рука из стойки у лица резко выпрямляется на уровне плеч
+function boxer(rightElbow) {
+  const lm = standing();
+  const put = (i, x, y) => { lm[i] = [x, y, 0.99]; };
+  put(ex.L_ELBOW, 0.38, 0.32); put(ex.L_WRIST, 0.44, 0.2); // левая — в стойке
+  const a = (rightElbow * Math.PI) / 180; // плечо (0.58,0.25) → локоть вправо, предплечье под углом
+  put(ex.R_ELBOW, 0.7, 0.25);
+  put(ex.R_WRIST, 0.7 - Math.cos(a) * 0.12, 0.25 - Math.sin(a) * 0.12);
+  return lm;
+}
+
+test("бокс: стойка, затем прямой удар — punch", () => {
+  const d = new ex.ExerciseDetector();
+  assert.deepEqual(d.update(boxer(70), 0), []);
+  assert.deepEqual(d.update(boxer(175), 0.2), ["punch"]);
+  assert.deepEqual(d.update(boxer(175), 0.4), [], "рука осталась прямой — второй удар не считается");
+  d.update(boxer(70), 0.6);
+  assert.deepEqual(d.update(boxer(175), 0.8), ["punch"]);
+  assert.equal(d.counts.punch, 2);
+});
+
+test("звёздочка и приседания — не бокс", () => {
+  const d = new ex.ExerciseDetector();
+  let t = 0;
+  for (let i = 0; i < 3; i++) {
+    for (const lm of [standing(180, false, false), standing(180, true, true), standing(80), standing(180)]) {
+      assert.ok(!d.update(lm, (t += 0.5)).includes("punch"));
+    }
+  }
+  assert.equal(d.counts.punch, 0);
+});
