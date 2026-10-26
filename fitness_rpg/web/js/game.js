@@ -41,6 +41,8 @@ function heroLook(owned) {
   if (owned.includes("kingarmor")) return amulet ? "king_amulet" : "king";
   return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
 }
+/** Герой в планке (копит ауру): поза одна на облик, меч лежит под ним. */
+const plankSprite = (owned, outfit, t) => anim(`hero_plank_${outfit || heroLook(owned)}`, t, 2.5, 2);
 /** Значок талисмана, если надет Талисман Ветра или Клык Вампира (Амулет Углей нарисован в самом облике). */
 const talismanTag = (owned) => (owned.includes("windcharm") ? "+wind" : owned.includes("fang") ? "+fang" : "");
 /** Префикс спрайтов героя: меч (или купленный облик меча skin), облик по реликвиям (или облик доспеха outfit) и талисман. */
@@ -142,14 +144,19 @@ const rand = (a, b) => a + Math.random() * (b - a);
  * Аура героя (планка): мягкое светлое свечение за спиной и редкие искры, растущие с силой ауры.
  * Заметна, но неброско: сильнее всего — к +12% и дальше не ярче. cx — центр героя, foot — земля, k — масштаб.
  */
-function drawPlankAura(c, cx, foot, bonus, t, k = 1) {
+function drawPlankAura(c, cx, foot, bonus, t, k = 1, flat = false) {
   if (!(bonus > 0)) return;
   const s = Math.min(1, bonus / 0.12), pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
   // мягкое свечение: ярче у тела, к краям плавно гаснет (вытянуто по росту героя)
   const r = (13 + 6 * s) * k, a = (0.1 + 0.16 * s) * (0.8 + 0.2 * pulse);
   c.save();
-  c.translate(cx, foot - 15 * k);
-  c.scale(1, 1.5);
+  if (flat) { // герой в планке — свечение вытянуто вдоль тела
+    c.translate(cx + 5 * k, foot - 8 * k);
+    c.scale(1.5, 0.65);
+  } else {
+    c.translate(cx, foot - 15 * k);
+    c.scale(1, 1.5);
+  }
   const grad = c.createRadialGradient(0, 0, 0, 0, 0, r);
   grad.addColorStop(0, `rgba(255,236,180,${a})`);
   grad.addColorStop(0.6, `rgba(255,226,160,${a * 0.45})`);
@@ -842,11 +849,12 @@ class TitleScene extends Scene {
     c.fill();
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
-    const heroIdle = anim(`${heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
-    drawPlankAura(c, 184, GROUND_TITLE, p.aura, t);
-    this.aura.drawBehind(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t); // огненные крылья Феникса
+    const heroIdle = this.game.inPlank ? plankSprite(p.worn, this.game.outfit, t)
+      : anim(`${heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
+    drawPlankAura(c, 184, GROUND_TITLE, p.aura, t, 1, this.game.inPlank);
+    if (!this.game.inPlank) this.aura.drawBehind(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t); // огненные крылья Феникса
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
-    this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
+    if (!this.game.inPlank) this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
     this.outfitFx.draw(c);
     const sx = 270, sy = GROUND_TITLE - 32;
     c.drawImage(IMG.skeleton_dark_0, sx, sy);
@@ -1169,8 +1177,9 @@ class BonfireScene extends Scene {
     if (this.game.portrait) return; // на телефоне вертикально костёр и рыцарь рисуются крупно рядом с панелями
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
     const p = this.game.player, hs = heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit);
-    const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
-    drawPlankAura(c, 180, GROUND_TITLE, p.aura, t);
+    const hero = this.game.inPlank && !(this.ritual && this.ritual.done % 2) ? plankSprite(p.worn, this.game.outfit, t)
+      : this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
+    drawPlankAura(c, 180, GROUND_TITLE, p.aura, t, 1, this.game.inPlank);
     c.drawImage(hero, 168, GROUND_TITLE - hero.height);
     this.embers.draw(c);
   }
@@ -1244,8 +1253,9 @@ class BonfireScene extends Scene {
     c.fill();
     c.imageSmoothingEnabled = false;
     const hs = heroSprite(p.sword, p.worn, g.skin, g.outfit);
-    const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
-    drawPlankAura(c, x + 48, ground, p.aura, t, 3);
+    const hero = this.game.inPlank && !(this.ritual && this.ritual.done % 2) ? plankSprite(p.worn, this.game.outfit, t)
+      : this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
+    drawPlankAura(c, x + 48, ground, p.aura, t, 3, g.inPlank);
     c.drawImage(hero, x + 12, ground - hero.height * 3, hero.width * 3, hero.height * 3);
     const fire = anim("bonfire", t, 8, 4);
     c.drawImage(fire, x + 112, ground - fire.height * 3, fire.width * 3, fire.height * 3);
@@ -1947,11 +1957,13 @@ class BattleScene extends Scene {
     const hero = heroSprite(p.sword, p.worn, skin, this.game.outfit); // меч (или его облик) и облик по реликвиям
     if (this.result === "dead") spr = IMG[`${hero}_dead_0`];
     else if (this.hurtT > 0) spr = IMG[`${hero}_hurt_0`];
+    else if (this.action === "idle" && this.game.inPlank) spr = plankSprite(p.worn, this.game.outfit, t); // стоит в планке
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
     else spr = IMG[`${hero}_${this.action}_0`];
+    const planking = this.action === "idle" && this.game.inPlank && !this.result && !(this.hurtT > 0);
     const hx = this.HERO_X + (this.action === "attack" ? 10 : this.action === "dodge" ? -6 : 0);
-    drawPlankAura(c, hx + 12, GROUND_ARENA, p.aura, t); // аура за время в планке
-    this.aura.drawBehind(c, skin, this.action === "attack" ? "attack" : this.action === "idle" ? "idle" : "", hx, GROUND_ARENA - 32, t);
+    drawPlankAura(c, hx + 12, GROUND_ARENA, p.aura, t, 1, planking); // аура за время в планке
+    if (!planking) this.aura.drawBehind(c, skin, this.action === "attack" ? "attack" : this.action === "idle" ? "idle" : "", hx, GROUND_ARENA - 32, t);
     if (this.action === "dodge") {
       c.globalAlpha = 0.3;
       c.drawImage(spr, hx + 8, GROUND_ARENA - spr.height);
@@ -1959,7 +1971,7 @@ class BattleScene extends Scene {
     }
     c.drawImage(spr, hx, GROUND_ARENA - spr.height);
     const [, hy, pose] = this.heroPose();
-    this.aura.draw(c, skin, pose, hx, hy, t);
+    if (!planking) this.aura.draw(c, skin, pose, hx, hy, t); // в планке крылья и свечение клинка не к месту
     this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
     this.hitFx.draw(c);
