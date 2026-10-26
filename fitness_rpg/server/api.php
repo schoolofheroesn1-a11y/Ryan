@@ -126,7 +126,7 @@ function int_in($v, $min, $max, $def) {
 }
 
 const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'seraph', 'barbell'];
-const RELICS = ['armor', 'kingarmor', 'wingarmor', 'amulet'];
+const RELICS = ['armor', 'kingarmor', 'wingarmor', 'amulet', 'windcharm', 'fang'];
 const SKINS = ['void', 'sun', 'frost', 'phoenix', 'kin'];
 const OUTFITS = ['samurai'];
 

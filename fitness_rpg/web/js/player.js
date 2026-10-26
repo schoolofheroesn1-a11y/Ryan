@@ -27,6 +27,10 @@ export const ESTUS_MAX = 3; // без Амулета Углей
 // доспехи: надет только один (выбирается в кузнице, как меч); слабее -> сильнее
 export const ARMORS = ["armor", "kingarmor", "wingarmor"];
 const ARMOR_TAKEN = { armor: 0.75, kingarmor: 0.65, wingarmor: 0.55 };
+// талисманы: надет один
+export const TALISMANS = ["amulet", "windcharm", "fang"];
+export const VAMPIRE = 0.1; // Клык Вампира: доля урона удара, которая лечит
+export const WIND_REGEN = 1.5; // Талисман Ветра: восполнение сил быстрее
 
 export class Player {
   constructor(data = {}) {
@@ -47,6 +51,7 @@ export class Player {
     this.reset = false; // начата «Новая игра»: пустой прогресс сохранён сознательно
     this.owner = null; // аккаунт, к которому привязан этот прогресс
     this.armor = null; // надетый доспех (из купленных)
+    this.talisman = null; // надетый талисман (из купленных)
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
@@ -55,12 +60,15 @@ export class Player {
     if (!ARMORS.includes(this.armor) || !this.owned.includes(this.armor)) { // старые сохранения: самый крепкий из купленных
       this.armor = [...ARMORS].reverse().find((k) => this.owned.includes(k)) || null;
     }
+    if (!TALISMANS.includes(this.talisman) || !this.owned.includes(this.talisman)) { // старые сохранения: Амулет Углей
+      this.talisman = TALISMANS.find((k) => this.owned.includes(k)) || null;
+    }
   }
 
   get level() { return this.strength + this.vigor + this.endurance - 2; }
   get maxHp() { return 80 + 12 * this.vigor; }
   get maxStamina() { return 60 + 8 * this.endurance; }
-  get staminaRegen() { return 10 + 2 * this.endurance; }
+  get staminaRegen() { return (10 + 2 * this.endurance) * (this.talisman === "windcharm" ? WIND_REGEN : 1); }
   get weapon() { return SWORDS[this.sword]; }
   get damage() { return 10 + 3 * this.strength + this.weapon.dmg; }
   get attackCost() { return this.weapon.cost; }
@@ -68,8 +76,12 @@ export class Player {
   get lifesteal() { return this.weapon.lifesteal; }
   get damageTakenMult() { return ARMOR_TAKEN[this.armor] || 1; }
   /** Что на герое: купленное, кроме доспехов, которые сейчас не надеты (облик и защита — по надетому). */
-  get worn() { return this.owned.filter((k) => !ARMORS.includes(k) || k === this.armor); }
-  get estusMax() { return ESTUS_MAX + (this.owned.includes("amulet") ? 1 : 0); }
+  get worn() {
+    return this.owned.filter((k) => (!ARMORS.includes(k) || k === this.armor) && (!TALISMANS.includes(k) || k === this.talisman));
+  }
+  get estusMax() { return ESTUS_MAX + (this.talisman === "amulet" ? 1 : 0); }
+  /** Доля урона удара, которая лечит героя (Клык Вампира). */
+  get vampire() { return this.talisman === "fang" ? VAMPIRE : 0; }
 
   // --- Кузница ---
   canAfford(key) {
@@ -87,6 +99,7 @@ export class Player {
     this.owned.push(key);
     if (SWORDS[key]) this.sword = key;
     if (ARMORS.includes(key)) this.armor = key; // новый доспех сразу надевается
+    if (TALISMANS.includes(key)) this.talisman = key; // и талисман
     return true;
   }
 
@@ -101,6 +114,7 @@ export class Player {
   equip(key) {
     if (SWORDS[key] && this.owned.includes(key)) this.sword = key;
     if (ARMORS.includes(key) && this.owned.includes(key)) this.armor = key;
+    if (TALISMANS.includes(key) && this.owned.includes(key)) this.talisman = key;
   }
 
   levelCost() { return 60 + 30 * (this.level - 1); }

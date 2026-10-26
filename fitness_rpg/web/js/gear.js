@@ -21,11 +21,20 @@ export const SWORDS = {
 export const RELICS = {
   armor: { name: "Доспех Костяного Рыцаря", desc: "получаемый урон -25%", price: [0, 1], unique: true },
   amulet: { name: "Амулет Углей", desc: "+1 зелье лечения", price: [0, 2], unique: true },
+  // талисманы: надет один (как и доспех)
+  windcharm: { name: "Талисман Ветра", desc: "силы восполняются на 50% быстрее", price: [0, 5], unique: true },
+  fang: { name: "Клык Вампира", desc: "вампиризм: 10% урона удара лечит", price: [0, 6], unique: true },
   kingarmor: { name: "Доспех Короля-Призрака", desc: "получаемый урон -35%", price: [0, 7], unique: true },
   wingarmor: { name: "Доспех Серафима", desc: "урон -45%, аура Бездны вдвое слабее", price: [0, 10], unique: true },
 };
 
-export const SHOP_ORDER = ["rusty", "steel", "great", "giant", "ash", "radiator", "seraph", "barbell", "armor", "kingarmor", "wingarmor", "amulet"];
+// вкладки кузницы
+export const SHOP_TABS = [
+  ["weapons", "ОРУЖИЕ", ["rusty", "steel", "great", "giant", "ash", "radiator", "seraph", "barbell"]],
+  ["armor", "БРОНЯ", ["armor", "kingarmor", "wingarmor"]],
+  ["talismans", "ТАЛИСМАНЫ", ["amulet", "windcharm", "fang"]],
+];
+export const SHOP_ORDER = SHOP_TABS.flatMap(([, , keys]) => keys);
 
 export const item = (key) => SWORDS[key] || RELICS[key];
 

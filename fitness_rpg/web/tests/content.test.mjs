@@ -73,3 +73,20 @@ test("only one armor is worn at a time and can be switched", () => {
   assert.deepEqual(p.worn, ["rusty", "armor", "amulet"]);
   assert.equal(p.damageTakenMult, 0.75);
 });
+
+test("talismans: one worn at a time; wind regen, vampire fang, ember amulet", () => {
+  const p = new Player({ blueGems: 20, owned: ["rusty", "amulet"] });
+  assert.equal(p.talisman, "amulet", "старое сохранение: надет Амулет Углей");
+  const base = p.staminaRegen, estus = p.estusMax;
+  assert.equal(p.buy("windcharm"), true);
+  assert.equal(p.talisman, "windcharm");
+  assert.equal(p.staminaRegen, base * 1.5);
+  assert.equal(p.estusMax, estus - 1, "амулет снят — фляг меньше");
+  assert.equal(p.vampire, 0);
+  assert.equal(p.buy("fang"), true);
+  assert.equal(p.vampire, 0.1);
+  assert.equal(p.staminaRegen, base);
+  assert.deepEqual(p.worn, ["rusty", "fang"]);
+  p.equip("amulet");
+  assert.equal(p.estusMax, estus);
+});

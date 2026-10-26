@@ -4,10 +4,10 @@
 import { NAMES } from "./exercises.js";
 import { Motion } from "./motion.js";
 import {
-  ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item,
+  ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
-import { ARMORS, Player, STATS, setSaveSlot } from "./player.js";
+import { ARMORS, Player, STATS, TALISMANS, setSaveSlot } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
@@ -1466,6 +1466,11 @@ class BattleScene extends Scene {
         hit === "hit_storm" ? sfx.thunder() : sfx.souls();
       }
       if (p.lifesteal && this.hp < p.maxHp) this.hp = Math.min(p.maxHp, this.hp + p.lifesteal);
+      if (p.vampire && this.hp < p.maxHp) { // Клык Вампира: часть урона возвращается здоровьем
+        const heal = Math.max(1, Math.round(dmg * p.vampire));
+        this.hp = Math.min(p.maxHp, this.hp + heal);
+        this.float(`+${heal}`, this.HERO_X + 4, 96, "rgb(220,60,90)", 8);
+      }
       if (en.state === "windup") {
         en.poise -= 1;
         if (en.poise <= 0) {
@@ -2820,12 +2825,17 @@ class MultiplayerScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Кузница
-const SHOP_ROWS = [...SHOP_ORDER, "back"];
-const shopRect = (i) => [18, 38 + i * 24, 384, i === SHOP_ORDER.length ? 20 : 23];
-/** Телефон вертикально: список во весь экран под «чёлкой» с героем. */
-function shopRectTall(g, i) {
-  const top = GAME_H + 12, gap = 10, backH = 60, msgH = 40, n = SHOP_ORDER.length;
-  const h = Math.max(44, Math.min(120, Math.floor((g.H - top - 16 - backH - msgH - gap * n) / n)));
+// Вкладки кузницы: оружие, броня, талисманы. n — число вещей во вкладке (последняя строка — «назад»).
+const shopTabRect = (j) => [18 + j * 130, 40, 124, 24];
+const shopRect = (i, n) => [18, 70 + i * 29, 384, i === n ? 22 : 27];
+/** Телефон вертикально: вкладки и список во весь экран под «чёлкой» с героем. */
+function shopTabRectTall(g, j) {
+  const w = (W - 32 - 16) / 3;
+  return [16 + j * (w + 8), GAME_H + 12, w, 64];
+}
+function shopRectTall(g, i, n) {
+  const top = GAME_H + 92, gap = 10, backH = 60, msgH = 40;
+  const h = Math.max(44, Math.min(110, Math.floor((g.H - top - 16 - backH - msgH - gap * n) / n)));
   if (i === n) return [W / 2 - 160, top + n * (h + gap) + msgH, 320, backH];
   return [16, top + i * (h + gap), W - 32, h];
 }
@@ -2835,6 +2845,7 @@ class ShopScene extends Scene {
   constructor(game) {
     super(game);
     this.index = 0;
+    this.tab = 0; // вкладка: оружие, броня, талисманы
     this.embers = new Particles(300, 120, 10);
     this.previewEmbers = new Particles(548, 236, 16, 6); // искры пепельного клинка в превью
     this.say("Алые камни дают за каждого врага, синие за боссов.", 4);
@@ -2842,8 +2853,26 @@ class ShopScene extends Scene {
   get ownsPanel() {
     return this.game.portrait;
   }
+  /** Строки текущей вкладки: вещи и «назад». */
+  get rows() {
+    return [...SHOP_TABS[this.tab][2], "back"];
+  }
   rect(i) {
-    return this.game.portrait ? shopRectTall(this.game, i) : shopRect(i);
+    const n = this.rows.length - 1;
+    return this.game.portrait ? shopRectTall(this.game, i, n) : shopRect(i, n);
+  }
+  tabRect(j) {
+    return this.game.portrait ? shopTabRectTall(this.game, j) : shopTabRect(j);
+  }
+  setTab(j) {
+    if (j === this.tab) return;
+    this.tab = j;
+    this.index = 0;
+    sfx.click();
+  }
+  drawTabs() {
+    const g = this.game;
+    SHOP_TABS.forEach(([, label], j) => g.button(this.tabRect(j), label, { selected: j === this.tab, size: g.portrait ? 16 : 8 }));
   }
   say(msg, t = 3) {
     this.message = msg;
@@ -2868,8 +2897,8 @@ class ShopScene extends Scene {
     if (this.busy) return;
     if (it.paid && !p.owned.includes(key)) return this.buyPaid(key);
     if (p.owned.includes(key)) {
-      if (SWORDS[key] || ARMORS.includes(key)) {
-        p.equip(key); // доспех, как и меч, надевается один: прежний снимается
+      if (SWORDS[key] || ARMORS.includes(key) || TALISMANS.includes(key)) {
+        p.equip(key); // доспех и талисман, как и меч, надеваются по одному: прежний снимается
         this.say(tf("Надет: {name}", { name: it.name }));
       } else {
         this.say(tf("{name} уже действует", { name: it.name }));
@@ -2885,22 +2914,26 @@ class ShopScene extends Scene {
       this.busy = false;
       if (!ok || !p.buy(key)) return;
       sfx.level();
-      this.say(tf(SWORDS[key] ? "Куплено: {name}! Меч надет." : ARMORS.includes(key) ? "Куплено: {name}! Доспех надет." : "Куплено: {name}!", { name: it.name }));
+      this.say(tf(SWORDS[key] ? "Куплено: {name}! Меч надет." : ARMORS.includes(key) ? "Куплено: {name}! Доспех надет."
+        : TALISMANS.includes(key) ? "Куплено: {name}! Талисман надет." : "Куплено: {name}!", { name: it.name }));
     }
     p.save();
   }
   handle() {
-    const g = this.game, n = SHOP_ROWS.length;
+    const g = this.game, rows = this.rows, n = rows.length;
     if (g.key("Escape")) return g.change(new BonfireScene(g));
+    if (g.key("ArrowLeft")) this.setTab((this.tab + SHOP_TABS.length - 1) % SHOP_TABS.length);
+    if (g.key("ArrowRight")) this.setTab((this.tab + 1) % SHOP_TABS.length);
+    SHOP_TABS.forEach((_, j) => { if (g.tapped(this.tabRect(j))) this.setTab(j); });
     if (g.key("ArrowUp")) this.index = (this.index + n - 1) % n;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % n;
     const activate = (i) => {
       sfx.click();
       this.index = i;
-      this.choose(SHOP_ROWS[i]);
+      this.choose(rows[i]);
     };
     if (g.key("Enter", " ")) return activate(this.index);
-    SHOP_ROWS.forEach((_, i) => { if (g.tapped(this.rect(i))) activate(i); });
+    rows.forEach((_, i) => { if (g.tapped(this.rect(i))) activate(i); });
   }
   update(dt) {
     this.embers.update(dt);
@@ -2918,8 +2951,8 @@ class ShopScene extends Scene {
   status(key) {
     const p = this.game.player, it = item(key);
     if (p.owned.includes(key)) {
-      if (p.sword === key || p.armor === key) return ["НАДЕТ", COL.gold];
-      return SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ARMORS.includes(key) ? ["НАДЕТЬ", COL.text] : ["ЕСТЬ", COL.gold];
+      if (p.sword === key || p.armor === key || p.talisman === key) return ["НАДЕТ", COL.gold];
+      return SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ["НАДЕТЬ", COL.text];
     }
     if (it.paid) return [this.game.store.price(it.productId), "rgb(120,220,255)"];
     let scol = it.price[1] ? "rgb(130,170,255)" : "rgb(240,110,110)";
@@ -2928,10 +2961,11 @@ class ShopScene extends Scene {
   }
   /** Герой в выбранном снаряжении; на непокупленной вещи — примерка. */
   drawHero(x, ground, scale) {
-    const g = this.game, p = g.player, key = SHOP_ROWS[this.index];
+    const g = this.game, p = g.player, key = this.rows[this.index];
     const sword = SWORDS[key] ? key : p.sword;
-    // примерка доспеха — только он (доспехи не надеваются вместе), амулет — поверх надетого
-    const owned = ARMORS.includes(key) ? [...p.worn.filter((k) => !ARMORS.includes(k)), key] : RELICS[key] ? [...p.worn, key] : p.worn;
+    // примерка доспеха или талисмана — только он (вместе такие не надеваются)
+    const slot = ARMORS.includes(key) ? ARMORS : TALISMANS.includes(key) ? TALISMANS : null;
+    const owned = slot ? [...p.worn.filter((k) => !slot.includes(k)), key] : p.worn;
     const hero = anim(`${heroSprite(sword, owned, null, g.outfit)}_idle`, g.time, 1.5, 2);
     g.ctx.drawImage(hero, x, ground - hero.height * scale, hero.width * scale, hero.height * scale);
     if (key !== "back" && !p.owned.includes(key)) {
@@ -2950,7 +2984,8 @@ class ShopScene extends Scene {
     relics.forEach((name, i) => g.text(name, 18, 96 + i * 16, 12, "rgb(150,190,255)"));
     Object.assign(this.previewEmbers, { x: W / 2 + 157, y: 2 * GROUND_ARENA - 42, spread: 9 });
     if (this.drawHero(W / 2 + 40, 2 * GROUND_ARENA + 24, 6) === "ash") this.previewEmbers.draw(g.ctx);
-    SHOP_ROWS.forEach((key, i) => {
+    this.drawTabs();
+    this.rows.forEach((key, i) => {
       const r = this.rect(i), sel = this.index === i;
       if (key === "back") return g.button(r, "НАЗАД К КОСТРУ", { selected: sel, size: 16 });
       const it = item(key), [status, scol] = this.status(key);
@@ -2961,7 +2996,7 @@ class ShopScene extends Scene {
       g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 + 2, 16, scol, "right");
     });
     if (this.msgT > 0) {
-      const b = this.rect(SHOP_ROWS.length - 1);
+      const b = this.rect(this.rows.length - 1);
       g.text(this.message, W / 2, b[1] - 30, this.message.length * 12 <= W - 32 ? 12 : 8, COL.gold, "center");
     }
   }
@@ -2973,8 +3008,9 @@ class ShopScene extends Scene {
     g.ctx.strokeRect(10.5, 6.5, 399, 351);
     g.text("КУЗНИЦА", 22, 20, 16, COL.gold);
     g.gems(400, 24, p, "right");
-    SHOP_ROWS.forEach((key, i) => {
-      const r = shopRect(i), sel = this.index === i;
+    this.drawTabs();
+    this.rows.forEach((key, i) => {
+      const r = this.rect(i), sel = this.index === i;
       if (key === "back") return g.button(r, "НАЗАД К КОСТРУ", { selected: sel });
       const it = item(key), [status, scol] = this.status(key);
       g.button(r, "", { selected: sel });
