@@ -784,18 +784,35 @@ class TitleScene extends Scene {
       c.fill();
     }
   }
-  /** Иконка профиля: герой в рамке. */
+  /** Иконка профиля: герой в рамке со скруглёнными углами, спокойного цвета. */
   drawProfileIcon() {
-    const g = this.game, p = g.player, [x, y, w, h] = this.profileRect(), hard = g.hard;
-    g.rect([x, y, w, h], "rgba(10,6,14,0.85)");
-    g.ctx.strokeStyle = hard ? "rgb(170,30,30)" : COL.gold;
-    g.ctx.lineWidth = 2;
-    g.ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-    g.ctx.lineWidth = 1;
+    const g = this.game, p = g.player, [x, y, w, h] = this.profileRect(), c = g.ctx;
+    const rad = g.portrait ? 14 : 8;
+    const path = () => { // скруглённый прямоугольник (своим путём — работает и в старых браузерах)
+      c.beginPath();
+      c.moveTo(x + rad, y);
+      c.arcTo(x + w, y, x + w, y + h, rad);
+      c.arcTo(x + w, y + h, x, y + h, rad);
+      c.arcTo(x, y + h, x, y, rad);
+      c.arcTo(x, y, x + w, y, rad);
+      c.closePath();
+    };
+    path();
+    c.fillStyle = "rgba(16,12,18,0.82)";
+    c.fill();
+    c.save();
+    path();
+    c.clip(); // герой не вылезает за скруглённые углы
     const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2);
     const k = g.portrait ? 2 : 1, sh = Math.min(spr.height, 28); // голова и плечи
-    g.ctx.drawImage(spr, 0, Math.max(0, spr.height - 32), spr.width, sh, x + (w - spr.width * k) / 2, y + 4, spr.width * k, sh * k);
-    g.text(`${p.level}`, x + w - 3, y + h - (g.portrait ? 18 : 10), g.portrait ? 14 : 8, hard ? "rgb(255,90,70)" : COL.gold, "right");
+    c.drawImage(spr, 0, Math.max(0, spr.height - 32), spr.width, sh, x + (w - spr.width * k) / 2, y + 4, spr.width * k, sh * k);
+    c.restore();
+    path();
+    c.strokeStyle = "rgb(140,128,118)";
+    c.lineWidth = g.portrait ? 3 : 2;
+    c.stroke();
+    c.lineWidth = 1;
+    g.text(`${p.level}`, x + w - (g.portrait ? 8 : 5), y + h - (g.portrait ? 22 : 12), g.portrait ? 14 : 8, "rgb(220,210,196)", "right");
   }
   drawUi() {
     const g = this.game, p = g.player, hard = g.hard;
