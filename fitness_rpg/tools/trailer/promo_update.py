@@ -1,6 +1,6 @@
 """Ролик об обновлении (вертикальный 1080×1920, 30 к/с, 15 с): отдельный рейтинг с камерой и без,
 профили игроков, оптимизация движений, аура (медитация у костра), новые талисманы в кузнице.
-Кадры — настоящий движок игры (update_capture.mjs). Музыка — music.py в стиле "promo".
+Кадры — настоящий движок игры (update_capture.mjs). Музыка — music.py в стиле "boss" (мрачная битва с боссом).
 
 Запуск:
   python promo_update.py --engine ENGINE_DIR --fonts FONTS_DIR --out update.mp4 [--lang ru|en]
@@ -194,7 +194,7 @@ def main():
     duration = total / FPS
     tmp = tempfile.mkdtemp()
     ev_path, wav = os.path.join(tmp, "events.json"), os.path.join(tmp, "music.wav")
-    json.dump({"duration": duration, "events": events, "style": "promo", "drop": 1.4}, open(ev_path, "w"))
+    json.dump({"duration": duration, "events": events, "style": "boss", "drop": 1.4}, open(ev_path, "w"))
     subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "music.py"), wav, ev_path], check=True)
     enc = subprocess.Popen([
         "ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",

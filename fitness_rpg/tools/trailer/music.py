@@ -377,6 +377,80 @@ def build_abyss(dur, drop=1.6, bpm=84):
     return m
 
 
+def build_boss(dur, drop=1.4, bpm=140):
+    """Битва с боссом: ми гармонический минор (Em–C–Am–B), бочка на каждую долю, бас «галопом»,
+    орган и «хор» на фоне, тайко-сбивки и мрачная героическая мелодия квадратом с вибрато."""
+    beat = 60 / bpm
+    m = np.zeros(int(SR * dur) + 2 * SR)
+    prog = [("E", [("E", 3), ("G", 3), ("B", 3)]), ("C", [("C", 3), ("E", 3), ("G", 3)]),
+            ("A", [("A", 2), ("C", 3), ("E", 3)]), ("B", [("B", 2), ("D#", 3), ("F#", 3)])]
+    tune = [("E", 5, 1.5), ("F#", 5, 0.5), ("G", 5, 1), ("B", 5, 1),     # 4 такта по 4 доли
+            ("C", 6, 1.5), ("B", 5, 0.5), ("G", 5, 2),
+            ("A", 5, 1.5), ("G", 5, 0.5), ("F#", 5, 1), ("E", 5, 1),
+            ("D#", 5, 2), ("F#", 5, 1), ("B", 4, 1)]
+    big, low = taiko(50, 0.8), taiko(84, 0.4)
+    kick = sine_sweep(140, 42, 0.25) * env(int(SR * 0.25), 0.001, 0.14)
+    # вступление: гул, нарастающий шум и удары тайко всё чаще
+    drone = lp(square(hz("E", 1), drop + beat, 0.5), 0.05) * np.linspace(0, 1, int(SR * (drop + beat))) ** 1.5
+    mix_at(m, drone, 0, 0.4)
+    mix_at(m, hp(noise(drop)) * np.linspace(0, 1, int(SR * drop)) ** 3, 0, 0.2)
+    for k, t in enumerate((0, beat * 1.5, beat * 2.5, drop - beat / 2, drop - beat / 4)):
+        if t < drop:
+            mix_at(m, big if k == 0 else low, t, 1.0 if k == 0 else 0.5 + 0.1 * k)
+    mix_at(m, bell(hz("E", 4), 2.5), 0, 0.3)
+    end = dur - 1.6
+    bars = int((end - drop) / (4 * beat)) + 1
+    for bar in range(bars):
+        t0 = drop + bar * 4 * beat
+        if t0 >= end:
+            break
+        root, chord = prog[bar % 4]
+        bl = min(4 * beat, end - t0)
+        n = int(SR * bl)
+        pad_env = np.clip(np.arange(n) / (SR * 0.08), 0, 1) * np.clip((n - np.arange(n)) / (SR * 0.1), 0, 1)
+        organ = sum(square(hz(nm, o) * (1 + det), bl, 0.5) for nm, o in chord for det in (0, 0.004))
+        mix_at(m, lp(organ, 0.08) * pad_env / 6, t0, 0.38)
+        choir = sum(_vib(hz(nm, o + 1), bl, 4.5 + i * 0.6, 0.008, "tri") for i, (nm, o) in enumerate(chord))
+        mix_at(m, lp(choir, 0.12) * pad_env / 3, t0, 0.16)
+        for b in range(4):
+            t = t0 + b * beat
+            if t >= end:
+                break
+            mix_at(m, kick, t, 0.9)
+            if b % 2 == 1:
+                mix_at(m, SNARE, t, 0.5)
+            for k in range(2):
+                mix_at(m, HAT, t + k * beat / 2, 0.12)
+            # бас галопом: восьмая + две шестнадцатых, перегруженный квадрат
+            for off, ln in ((0, beat / 2), (beat / 2, beat / 4), (beat * 3 / 4, beat / 4)):
+                note = np.tanh(3 * lp(square(hz(root, 2), ln * 0.85, 0.5), 0.22)) * env(int(SR * ln * 0.85), 0.002, ln * 0.5)
+                mix_at(m, note, t + off, 0.26)
+        mix_at(m, big, t0, 0.8)
+        if bar % 2 == 1:  # тайко-сбивка в конце каждой второй фразы
+            for k in range(4):
+                mix_at(m, low, t0 + 3 * beat + k * beat / 4, 0.35 + 0.1 * k)
+    # мелодия со второго такта
+    t, i = drop + 4 * beat, 0
+    while t < end - 0.1:
+        nm, o, ln = tune[i % len(tune)]
+        d = min(ln * beat, end - t)
+        lead = _vib(hz(nm, o), d * 0.92, 5.5, 0.01, "square", 0.25)
+        note = (lead + 0.35 * _vib(hz(nm, o - 1), d * 0.92, 5.5, 0.01, "tri")[:len(lead)]) * env(len(lead), 0.004, d * 0.7)
+        mix_at(m, lp(note, 0.4), t, 0.085)
+        t += ln * beat
+        i += 1
+    mix_at(m, CRASH, drop, 0.55)
+    mix_at(m, big, drop, 1.0)
+    # финал: удар, колокол и аккорд ми минора
+    tail = dur - end + 1
+    pad = sum(square(hz(nm, o) * (1 + det), tail, 0.5) for nm, o in (("E", 2), ("B", 2), ("E", 3), ("G", 3)) for det in (0, 0.005))
+    mix_at(m, lp(pad / 8, 0.05) * np.linspace(1, 0, int(SR * tail)) ** 1.4, end, 0.6)
+    mix_at(m, big, end, 1.1)
+    mix_at(m, CRASH, end, 0.45)
+    mix_at(m, bell(hz("E", 3), 3.0), end, 0.35)
+    return m
+
+
 def build_tutorial(dur, bpm=112):
     """Третий трек — спокойный и весёлый «городской» чиптюн: до мажор (C–Am–F–G), подпрыгивающий бас-треугольник,
     мелодия узким квадратом, мягкие арпеджио и хэты. Для видео-инструкций, где текст надо читать."""
@@ -487,6 +561,8 @@ def main(out, events_path):
     style = spec.get("style")
     if style == "epic":
         mus = build_epic(dur, spec.get("drop", 1.2))
+    elif style == "boss":
+        mus = build_boss(dur, spec.get("drop", 1.4))
     elif style == "abyss":
         mus = build_abyss(dur, spec.get("drop", 1.6))
     elif style == "duel":
