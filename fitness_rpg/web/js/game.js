@@ -1010,7 +1010,8 @@ class ProfileScene extends Scene {
     const p = g.player, spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2), k = P ? 5 : 3;
     const hx = P ? W - 30 - spr.width * k : W - 40 - spr.width * k, hy = P ? 300 - spr.height * k : 300 - spr.height * k;
     g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
-    const rows = this.rows(), fs = P ? 20 : 8, step = P ? Math.min(66, Math.floor((g.H - 330 - 216) / rows.length)) : 18;
+    const rows = this.rows(), fs = P ? 20 : 8, step = P ? Math.min(66, Math.floor((g.H - 330 - 216) / rows.length))
+      : Math.min(18, Math.floor((GAME_H - 46 - 56) / rows.length)); // все строки — над кнопками
     const x = P ? 24 : 24, vx = P ? 24 : 210;
     let y = P ? 330 : 56; // в портрете строки — под героем
     for (const [label, value, col] of rows) {
