@@ -1452,6 +1452,7 @@ class Skeleton {
 }
 
 const DRINK_TIME = 2.5; // сколько глава разбойников пьёт зелье
+const AUTO_BONFIRE = 3; // через сколько секунд после победы бой сам уходит к костру
 const SERAPH_AURA = 0.03; // аура Алого Серафима: 3% здоровья героя в секунду
 const TRANSFORM_TIME = 2.2; // перерождение Серафима во вторую стадию (неуязвим)
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
@@ -1726,6 +1727,7 @@ class BattleScene extends Scene {
       if (this.resultT < 1) return;
       // Звёздочка — следующий бой без подхода к телефону; касание/Enter — к костру
       if (this.result === "won" && moves.includes("jack")) return g.change(new BattleScene(g));
+      if (this.result === "won" && this.resultT >= AUTO_BONFIRE) return g.change(new BonfireScene(g)); // сам уходит к костру — прокачка
       if (g.taps.length || g.key("Enter", " ", "Escape") || (this.result === "dead" && moves.includes("jack"))) {
         g.taps.length = 0;
         g.change(new BonfireScene(g));
@@ -2106,6 +2108,11 @@ class BattleScene extends Scene {
     if (this.result) this.drawResult();
   }
 
+  /** Подсказка после победы: звёздочка — следующий бой, иначе через пару секунд — к костру. */
+  autoHint() {
+    return tf("Звёздочка: следующий бой. К костру через {n}", { n: Math.max(1, Math.ceil(AUTO_BONFIRE - this.resultT)) });
+  }
+
   /** Экран победы или гибели. */
   drawResult() {
     const g = this.game, en = this.enemy;
@@ -2114,7 +2121,7 @@ class BattleScene extends Scene {
       this.victory.draw(g.ctx, (ctx, ...a) => g.text(a[0], a[1], a[2], a[3], a[4], a[5], a[6] ?? true, ctx), {
         title: en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН",
         loot: `+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`,
-        hint: "Звёздочка: следующий бой. Касание: к костру",
+        hint: this.autoHint(),
       });
     } else if (this.result) {
       g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
@@ -2126,7 +2133,7 @@ class BattleScene extends Scene {
         const [ash, red, blue] = this.reward;
         g.text(en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН", W / 2, g.gameH / 2 - 28, 32, COL.gold, "center");
         g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, g.gameH / 2 + 12, 8, COL.gold, "center");
-        g.text("Звёздочка: следующий бой. Касание: к костру", W / 2, g.gameH / 2 + 26, 8, COL.text, "center");
+        g.text(this.autoHint(), W / 2, g.gameH / 2 + 26, 8, COL.text, "center");
       }
     }
   }

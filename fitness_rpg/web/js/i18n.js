@@ -456,7 +456,7 @@ const EN = {
   "ВРАГ ПОВЕРЖЕН": "ENEMY DEFEATED",
   "+{#} пепла  +{#} алых": "+{#} ash  +{#} red",
   "+{#} пепла  +{#} алых  +{#} синий": "+{#} ash  +{#} red  +{#} blue",
-  "Звёздочка: следующий бой. Касание: к костру": "Jumping jack: next fight. Tap: bonfire",
+  "Звёздочка: следующий бой. К костру через {n}": "Jumping jack: next fight. Bonfire in {n}",
   "ВЫ ПОГИБЛИ": "YOU DIED",
   "Пепел остался на месте гибели: победите": "Your ash stayed where you fell: defeat",
   "этого скелета, чтобы вернуть его. Касание: к костру": "this enemy to get it back. Tap: bonfire",
