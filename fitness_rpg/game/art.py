@@ -1361,82 +1361,36 @@ def make_torch_frames(n=4):
     return frames
 
 
-def plank_map(look, sag=0):
-    """Герой в планке (вид сбоку, голова справа): прямое тело высоко над землёй на прямых руках,
-    носки упёрты в землю, меч лежит под ним. sag — корпус чуть проседает (дрожь в планке)."""
-    W, H = 34, 18
-    g = [["."] * W for _ in range(H)]
-
-    def px(x, y, ch):  # строка сверху — запас под рога и корону
-        if 0 <= x < W and 0 <= y + 1 < H:
-            g[y + 1][x] = ch
-
-    def line(x0, y0, x1, y1, ch):
-        n = max(abs(x1 - x0), abs(y1 - y0), 1)
-        for i in range(n + 1):
-            px(round(x0 + (x1 - x0) * i / n), round(y0 + (y1 - y0) * i / n), ch)
-
-    d = sag
-    ground = 15
-    for x in range(6, 22):  # меч лежит на земле
-        px(x, ground, "w" if x > 8 else "g")
-    px(5, ground, "b")
-    # ноги: прямая линия от носков к бёдрам
-    for t, ch in ((0, "d"), (1, "s"), (2, "l")):
-        line(3, 12 - t, 14, 7 - t + d, ch)
-    for x, y in ((1, 13), (2, 13), (3, 13), (1, 14), (2, 14), (3, 14), (2, 12), (3, 12)):  # сапоги, носки на земле
-        px(x, y, "b")
-    # туловище — продолжает линию ног
-    for x in range(14, 26):
-        top = 6 - (x - 14) * 3 // 11 + d
-        for y in range(top, top + 5):
-            px(x, y, "l" if y == top else "d" if y == top + 4 else "s")
-    for y in range(5 + d, 10 + d):  # пояс
-        px(15, y, "b")
-    # плащ лежит на спине
-    for x in range(13, 24):
-        top = 6 - (x - 14) * 3 // 11 + d - 1
-        px(x, top, "R")
-        px(x, top + 1, "r" if x < 16 else "R")
-    # голова: шлем, забрало смотрит вниз-вперёд
-    for y in range(0, 7):
-        for x in range(25, 32):
-            if (x, y) in ((25, 0), (31, 0)):
-                continue
-            px(x, y + d, "l" if y < 3 else "s")
-    for x in range(28, 32):
-        px(x, 4 + d, "k")
-    px(26, 1 + d, "w")
-    px(27, 1 + d, "w")
-    if look in ("armor", "both"):
-        px(26, d - 1, "O")
-        px(30, d - 1, "O")
-    if look.startswith("king"):
-        for x in (26, 28, 30):
-            px(x, d - 1, "g")
-    if look.startswith("wing"):
-        line(16, 5 + d, 24, 3 + d, "w")
-    if look in ("armor", "both", "king", "king_amulet", "wing", "wing_amulet", "samurai"):
-        px(30, 4 + d, "e")
-    # прямые руки от плеч в землю
-    for y in range(7 + d, ground - 1):
-        px(22, y, "d")
-        px(23, y, "s")
-    for x in range(21, 25):
-        px(x, ground - 1, "l")
-    out = [row[:] for row in g]
-    for y in range(H):
-        for x in range(W):
-            if g[y][x] == "." and any(0 <= x + dx < W and 0 <= y + dy < H and g[y + dy][x + dx] not in ".k"
-                                      for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
-                out[y][x] = "k"
-    return ["".join(r) for r in out]
+MEDITATE_LEGS = [  # ноги скрещены, ладони на коленях, сапоги подогнуты под себя
+    "....kkkkkddddddddkkkkk..",
+    "...kddsslllsssslllssddk.",
+    "..kdsssslllsssslllssssdk",
+    "..kddssskkkkkkkkkssdddk.",
+    "...kkbbbbkddssddkbbbbkk.",
+    "....kkkkkkkkkkkkkkkkkk..",
+]
 
 
-def make_plank_frames(look):
+def make_meditate_frames(look):
+    """Герой медитирует у костра (копит ауру): сидит, скрестив ноги, верх тела — как в стойке,
+    без меча. Холст 24x24 (+ запас под крылья/знамя сверху), низ спрайта — низ сапог."""
     palette = ARMOR_PALETTE if look in ("armor", "both") else KING_PALETTE if look.startswith("king") \
         else WING_PALETTE if look.startswith("wing") else SAMURAI_PALETTE if look == "samurai" else BODY_PALETTE
-    return [sprite_from_map(plank_map(look, 0), palette), sprite_from_map(plank_map(look, 1), palette)]
+    rows = _body_rows(HERO_IDLE, 24, look)[:18]
+    for y in range(14, 18):  # рука без меча: кисть опущена к колену
+        for x in range(19, 24):
+            _put(rows, x, y, ".")
+    for y in range(14, 18):  # предплечье вниз, перчатка лежит на колене
+        for x, ch in ((18, "k"), (19, "b" if y == 17 else "d"), (20, "b" if y == 17 else "s"), (21, "k")):
+            _put(rows, x, y, ch)
+    rows += [r.ljust(24, ".") for r in MEDITATE_LEGS]
+    rows += ["." * 24] * (32 - len(rows))
+    surf = sprite_from_map(rows, palette)
+    surf = _samurai_dress(surf) if look == "samurai" else _wing_dress(surf) if look.startswith("wing") else surf
+    w, h = surf.get_size()
+    out = pygame.Surface((w, h - 8), pygame.SRCALPHA)  # пустые 8 строк снизу не нужны
+    out.blit(surf, (0, 0))
+    return [out, shifted_breath(out)]
 
 
 def make_hero_frames(sword, look="base"):

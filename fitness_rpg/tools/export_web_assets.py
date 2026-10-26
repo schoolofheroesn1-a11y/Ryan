@@ -59,10 +59,10 @@ def main():
         for anim_name, surfs in frames.items():
             for i, surf in enumerate(surfs):
                 sprites[f"{who}_{anim_name}_{i}"] = surf
-    # поза планки (аура) не зависит от меча — одна на облик: hero_plank_<облик>_<кадр>
+    # медитация у костра (аура) не зависит от меча — одна на облик: hero_meditate_<облик>_<кадр>
     for look in art.LOOKS:
-        for i, surf in enumerate(art.make_plank_frames(look)):
-            sprites[f"hero_plank_{look}_{i}"] = surf
+        for i, surf in enumerate(art.make_meditate_frames(look)):
+            sprites[f"hero_meditate_{look}_{i}"] = surf
     for i, surf in enumerate(a.bonfire):
         sprites[f"bonfire_{i}"] = surf
     for i, surf in enumerate(a.torch):
