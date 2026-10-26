@@ -41,8 +41,10 @@ function heroLook(owned) {
   if (owned.includes("kingarmor")) return amulet ? "king_amulet" : "king";
   return armor && amulet ? "both" : armor ? "armor" : amulet ? "amulet" : "base";
 }
-/** Префикс спрайтов героя: меч (или купленный облик меча skin) и облик по реликвиям (или облик доспеха outfit). */
-const heroSprite = (sword, owned, skin = null, outfit = null) => `hero_${skin || sword}_${outfit || heroLook(owned)}`;
+/** Значок талисмана, если надет Талисман Ветра или Клык Вампира (Амулет Углей нарисован в самом облике). */
+const talismanTag = (owned) => (owned.includes("windcharm") ? "+wind" : owned.includes("fang") ? "+fang" : "");
+/** Префикс спрайтов героя: меч (или купленный облик меча skin), облик по реликвиям (или облик доспеха outfit) и талисман. */
+const heroSprite = (sword, owned, skin = null, outfit = null) => `hero_${skin || sword}_${outfit || heroLook(owned)}${talismanTag(owned)}`;
 
 // След удара для каждого меча
 const SLASH_TIME = 0.18;
@@ -73,7 +75,42 @@ function drawSlash(c, x, y, sword, k, skin = null) {
   }
 }
 
-const IMG = {};
+/**
+ * Спрайты по имени. Герой с талисманом («hero_steel_king+fang_idle_0») собирается по запросу:
+ * к готовому спрайту без талисмана дорисовывается значок на груди (атлас не растёт).
+ */
+const IMG = new Proxy({}, {
+  get(t, k) {
+    if (k in t || typeof k !== "string" || !k.includes("+")) return t[k];
+    const m = /^(.*)\+(\w+)(_[a-z]+_\d+)$/.exec(k);
+    const base = m && t[m[1] + m[3]];
+    if (!base) return undefined;
+    const cv = document.createElement("canvas");
+    cv.width = base.width;
+    cv.height = base.height;
+    const c = cv.getContext("2d");
+    c.drawImage(base, 0, 0);
+    if (!m[3].startsWith("_dead")) drawTalisman(c, m[2], base.height - 32);
+    return (t[k] = cv);
+  },
+});
+
+/** Значок талисмана на груди героя (те же клетки, что у Амулета Углей), oy — сдвиг тела вниз. */
+const TALISMAN_PIXELS = {
+  // Талисман Ветра: бирюзовый вихрь на золотой цепочке
+  wind: [[11, 9, "rgb(176,140,60)"], [15, 9, "rgb(176,140,60)"], [12, 10, "rgb(80,190,205)"], [13, 10, "rgb(225,252,255)"],
+    [14, 10, "rgb(80,190,205)"], [13, 11, "rgb(40,120,140)"], [14, 11, "rgb(150,235,240)"]],
+  // Клык Вампира: белый изогнутый клык с алой каплей на кожаном шнурке
+  fang: [[11, 9, "rgb(96,62,50)"], [15, 9, "rgb(96,62,50)"], [11, 10, "rgb(24,14,18)"], [14, 10, "rgb(24,14,18)"],
+    [12, 11, "rgb(24,14,18)"], [14, 11, "rgb(24,14,18)"], [12, 12, "rgb(24,14,18)"], [14, 12, "rgb(24,14,18)"],
+    [12, 10, "rgb(240,234,212)"], [13, 10, "rgb(240,234,212)"], [13, 11, "rgb(240,234,212)"], [13, 12, "rgb(214,28,44)"]],
+};
+function drawTalisman(c, tag, oy) {
+  for (const [x, y, col] of TALISMAN_PIXELS[tag] || []) {
+    c.fillStyle = col;
+    c.fillRect(x, y + oy, 1, 1);
+  }
+}
 
 /** Все спрайты лежат в одном атласе (assets/atlas.png + atlas.json, см. tools/export_web_assets.py). */
 async function loadImages() {
