@@ -32,6 +32,13 @@ export const TALISMANS = ["amulet", "windcharm", "fang"];
 export const VAMPIRE = 0.1; // Клык Вампира: доля урона удара, которая лечит
 export const WIND_REGEN = 1.5; // Талисман Ветра: восполнение сил быстрее
 
+/**
+ * Аура (режим с камерой): пассивный прирост к урону, здоровью и запасу сил за время в планке.
+ * Предела нет, но растёт медленно: каждое удвоение времени даёт ещё +2% (1 мин — +2%, 3 мин — +4%,
+ * 7 мин — +6%, 15 мин — +8%, полчаса — +10%, час — +12%).
+ */
+export const auraBonus = (seconds) => 0.02 * Math.log2(1 + Math.max(0, seconds) / 60);
+
 export class Player {
   constructor(data = {}) {
     this.strength = 1;
@@ -52,6 +59,7 @@ export class Player {
     this.owner = null; // аккаунт, к которому привязан этот прогресс
     this.armor = null; // надетый доспех (из купленных)
     this.talisman = null; // надетый талисман (из купленных)
+    this.plankSeconds = 0; // аура: сколько секунд простоял в планке (только с камерой, не сбрасывается)
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
@@ -66,11 +74,13 @@ export class Player {
   }
 
   get level() { return this.strength + this.vigor + this.endurance - 2; }
-  get maxHp() { return 80 + 12 * this.vigor; }
-  get maxStamina() { return 60 + 8 * this.endurance; }
+  /** Прирост ауры (доля): к урону, здоровью и запасу сил. */
+  get aura() { return auraBonus(this.plankSeconds); }
+  get maxHp() { return Math.round((80 + 12 * this.vigor) * (1 + this.aura)); }
+  get maxStamina() { return Math.round((60 + 8 * this.endurance) * (1 + this.aura)); }
   get staminaRegen() { return (10 + 2 * this.endurance) * (this.talisman === "windcharm" ? WIND_REGEN : 1); }
   get weapon() { return SWORDS[this.sword]; }
-  get damage() { return 10 + 3 * this.strength + this.weapon.dmg; }
+  get damage() { return Math.round((10 + 3 * this.strength + this.weapon.dmg) * (1 + this.aura)); }
   get attackCost() { return this.weapon.cost; }
   get critMult() { return this.weapon.crit; }
   get lifesteal() { return this.weapon.lifesteal; }

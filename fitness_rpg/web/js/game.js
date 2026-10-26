@@ -137,6 +137,33 @@ function anim(prefix, t, fps, n) {
 }
 
 const rand = (a, b) => a + Math.random() * (b - a);
+
+/**
+ * Аура героя (планка): мягкое светлое свечение за спиной и редкие искры, растущие с силой ауры.
+ * Заметна, но неброско: сильнее всего — к +12% и дальше не ярче. cx — центр героя, foot — земля, k — масштаб.
+ */
+function drawPlankAura(c, cx, foot, bonus, t, k = 1) {
+  if (!(bonus > 0)) return;
+  const s = Math.min(1, bonus / 0.12), pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
+  // мягкое свечение: ярче у тела, к краям плавно гаснет (вытянуто по росту героя)
+  const r = (13 + 6 * s) * k, a = (0.1 + 0.16 * s) * (0.8 + 0.2 * pulse);
+  c.save();
+  c.translate(cx, foot - 15 * k);
+  c.scale(1, 1.5);
+  const grad = c.createRadialGradient(0, 0, 0, 0, 0, r);
+  grad.addColorStop(0, `rgba(255,236,180,${a})`);
+  grad.addColorStop(0.6, `rgba(255,226,160,${a * 0.45})`);
+  grad.addColorStop(1, "rgba(255,220,150,0)");
+  c.fillStyle = grad;
+  c.fillRect(-r, -r, 2 * r, 2 * r);
+  c.restore();
+  const motes = 1 + Math.floor(4 * s);
+  for (let i = 0; i < motes; i++) { // искры поднимаются от земли и тают
+    const ph = (t * 0.35 + i / motes) % 1;
+    c.fillStyle = `rgba(255,240,190,${(1 - ph) * (0.35 + 0.35 * s)})`;
+    c.fillRect(Math.round(cx + Math.sin(i * 2.4 + t) * 9 * k), Math.round(foot - ph * 34 * k), k, k);
+  }
+}
 const inRect = (p, r) => p.x >= r[0] && p.x < r[0] + r[2] && p.y >= r[1] && p.y < r[1] + r[3];
 
 class Particles {
@@ -229,6 +256,21 @@ class Game {
       }
       e.preventDefault();
     });
+  }
+
+  /** Аура: с камерой каждая секунда в планке копится навсегда (сохраняется раз в несколько секунд и по выходу из планки). */
+  plankTick(dt) {
+    const d = this.motion.ok ? this.motion.detector : null;
+    const plank = this.mode === "cam" && d && d.posture === "планка" && document.visibilityState !== "hidden";
+    if (plank) {
+      this.player.plankSeconds += dt;
+      this.plankUnsaved = (this.plankUnsaved || 0) + dt;
+    }
+    if (this.plankUnsaved && (this.plankUnsaved >= 5 || !plank)) {
+      this.plankUnsaved = 0;
+      this.player.save();
+    }
+    this.inPlank = !!plank;
   }
 
   /** Хардкор: без камеры — всегда, с камерой — если выбран в настройках. */
@@ -588,6 +630,10 @@ class Game {
     if (this.motion.drawPreview(this.ctx, x, y, w, h)) {
       const d = this.motion.detector;
       this.text(d.posture, x + 4, y + h - (big ? 20 : 12), big ? 16 : 8, COL.gold);
+      if (this.inPlank) { // планка — копится аура
+        const sec = Math.floor(this.player.plankSeconds);
+        this.text(tf("АУРА {t}", { t: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` }), x + w - 4, y + h - (big ? 20 : 12), big ? 16 : 8, "rgb(255,236,170)", "right");
+      }
       if (big && !inset) {
         const c = d.counts;
         this.text(`Отжим ${c.pushup}  Присед ${c.squat}  Звезда ${c.jack}`, x + 4, y + 4, 8, COL.text);
@@ -654,6 +700,7 @@ class Game {
     }
     for (const m of moves) this.player.addRep(m);
     this.time += dt;
+    this.plankTick(dt);
     this.scene.handle(moves);
     this.scene.update(dt);
 
@@ -740,7 +787,8 @@ class TitleScene extends Scene {
       return;
     }
     const g = this.game;
-    g.player = new Player({ reset: true }); // сознательный сброс — уйдёт и в аккаунт
+    // сознательный сброс — уйдёт и в аккаунт; аура (время в планке) не сбрасывается
+    g.player = new Player({ reset: true, plankSeconds: g.player.plankSeconds });
     g.syncPaid();
     g.player.save();
     g.run = null;
@@ -795,6 +843,7 @@ class TitleScene extends Scene {
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
     const p = this.game.player;
     const heroIdle = anim(`${heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
+    drawPlankAura(c, 184, GROUND_TITLE, p.aura, t);
     this.aura.drawBehind(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t); // огненные крылья Феникса
     c.drawImage(heroIdle, 172, GROUND_TITLE - heroIdle.height);
     this.aura.draw(c, this.game.skin, "idle", 172, GROUND_TITLE - 32, t);
@@ -925,6 +974,10 @@ class ProfileScene extends Scene {
     }
     rows.push(["Пепел · камни", `${p.souls} · ${tr("алые")} ${p.redGems} · ${tr("синие")} ${p.blueGems}`, COL.text]);
     rows.push(["Снаряжение", `${tr(p.weapon.name)}${p.armor ? ` · ${tr(RELICS[p.armor].name)}` : ""}`, COL.text]);
+    if (g.mode === "cam") { // аура — за время в планке
+      const sec = Math.floor(p.plankSeconds), mm = Math.floor(sec / 60), ss = String(sec % 60).padStart(2, "0");
+      rows.push(["Аура (время в планке)", tf("{t} · +{pct}% к урону, здоровью и силам", { t: `${mm}:${ss}`, pct: (p.aura * 100).toFixed(1) }), "rgb(255,230,160)"]);
+    }
     if (g.mode === "cam") { // упражнения считаются только с камерой
       const r = p.totalReps, sum = r.pushup + r.squat + r.jack;
       rows.push(["Отжимания", `${r.pushup}`, Gr]);
@@ -1117,6 +1170,7 @@ class BonfireScene extends Scene {
     c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 44, 32, 44);
     const p = this.game.player, hs = heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
+    drawPlankAura(c, 180, GROUND_TITLE, p.aura, t);
     c.drawImage(hero, 168, GROUND_TITLE - hero.height);
     this.embers.draw(c);
   }
@@ -1191,6 +1245,7 @@ class BonfireScene extends Scene {
     c.imageSmoothingEnabled = false;
     const hs = heroSprite(p.sword, p.worn, g.skin, g.outfit);
     const hero = this.ritual && this.ritual.done % 2 ? IMG[`${hs}_attack_0`] : IMG[`${hs}_idle_0`];
+    drawPlankAura(c, x + 48, ground, p.aura, t, 3);
     c.drawImage(hero, x + 12, ground - hero.height * 3, hero.width * 3, hero.height * 3);
     const fire = anim("bonfire", t, 8, 4);
     c.drawImage(fire, x + 112, ground - fire.height * 3, fire.width * 3, fire.height * 3);
@@ -1895,6 +1950,7 @@ class BattleScene extends Scene {
     else if (this.action === "idle") spr = anim(`${hero}_idle`, t, 1.5, 2);
     else spr = IMG[`${hero}_${this.action}_0`];
     const hx = this.HERO_X + (this.action === "attack" ? 10 : this.action === "dodge" ? -6 : 0);
+    drawPlankAura(c, hx + 12, GROUND_ARENA, p.aura, t); // аура за время в планке
     this.aura.drawBehind(c, skin, this.action === "attack" ? "attack" : this.action === "idle" ? "idle" : "", hx, GROUND_ARENA - 32, t);
     if (this.action === "dodge") {
       c.globalAlpha = 0.3;

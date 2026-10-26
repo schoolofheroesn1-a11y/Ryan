@@ -90,3 +90,15 @@ test("talismans: one worn at a time; wind regen, vampire fang, ember amulet", ()
   p.equip("amulet");
   assert.equal(p.estusMax, estus);
 });
+
+test("plank aura: small uncapped bonus to damage, health and stamina", async () => {
+  const { auraBonus } = await import("../js/player.js");
+  assert.equal(auraBonus(0), 0);
+  assert.ok(Math.abs(auraBonus(60) - 0.02) < 1e-9, "минута — +2%");
+  assert.ok(Math.abs(auraBonus(180) - 0.04) < 1e-9, "3 минуты — +4%");
+  assert.ok(auraBonus(36000) > auraBonus(3600), "предела нет");
+  const p = new Player({ vigor: 5, strength: 5, endurance: 5 });
+  const base = [p.maxHp, p.damage, p.maxStamina];
+  p.plankSeconds = 3780; // час с минутой: +12%
+  assert.deepEqual([p.maxHp, p.damage, p.maxStamina], base.map((v) => Math.round(v * 1.12)));
+});
