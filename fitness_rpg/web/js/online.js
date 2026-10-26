@@ -77,6 +77,7 @@ export class Online {
     this.fetch = fetchImpl;
     this.offline = offline; // первая iOS-сборка — без онлайна
     this.token = loadJSON(TOKEN_KEY, null);
+    this.mode = "cam"; // режим игры: свой рекорд, рейтинг и сохранение у «cam» и «btn»
     this.account = loadJSON(ACCOUNT_KEY, null);
   }
 
@@ -97,7 +98,7 @@ export class Online {
       res = await this.fetch(this.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, token: this.token, ...data }),
+        body: JSON.stringify({ action, token: this.token, mode: this.mode, ...data }),
         signal: ctrl && ctrl.signal,
       });
     } catch (e) {
@@ -153,7 +154,7 @@ export class Online {
   }
 
   me() { return this.call("me"); }
-  top() { return this.call("top"); }
+  top(mode = this.mode) { return this.call("top", { mode }); }
   arena() { return this.call("arena"); }
   challengeStart(opponent) { return this.call("challenge_start", { opponent }); }
   challengeEnd(fight, won) { return this.call("challenge_end", { fight, won }); }

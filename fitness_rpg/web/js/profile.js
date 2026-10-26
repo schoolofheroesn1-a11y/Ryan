@@ -27,9 +27,22 @@ export class Profile {
   constructor(data = {}) {
     this.id = data.id || newId();
     this.name = cleanName(data.name) || `Рыцарь-${this.id.slice(0, 4).toUpperCase()}`;
-    this.best = { bosses: 0, level: 1, wave: 1, ...(data.best || {}) };
+    // рекорд — свой у каждого режима: с камерой (cam) и без камеры (btn, хардкор)
+    this.bests = {
+      cam: { bosses: 0, level: 1, wave: 1, ...(data.best || {}) },
+      btn: { bosses: 0, level: 1, wave: 1, ...(data.bestBtn || {}) },
+    };
+    this.mode = "cam";
     // выбранный облик: меч, доспех, эффект удара, оформление победы (null — стандартный)
     this.style = { sword: null, armor: null, hit: null, victory: null, ...(data.style || {}) };
+  }
+
+  /** Рекорд текущего режима. */
+  get best() {
+    return this.bests[this.mode];
+  }
+  set best(v) {
+    this.bests[this.mode] = v;
   }
 
   /** Обновляет рекорд из текущего персонажа. true — если рекорд вырос. */
@@ -52,7 +65,7 @@ export class Profile {
   }
 
   save() {
-    saveJSON(KEY, { id: this.id, name: this.name, best: this.best, style: this.style });
+    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style });
   }
 
   static load() {

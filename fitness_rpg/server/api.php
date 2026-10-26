@@ -60,6 +60,14 @@ try {
             try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
         }
     }
+    try { // режим без камеры (хардкор): свой рекорд, рейтинг и сохранение
+        $db->query('SELECT bosses_btn FROM mp_accounts LIMIT 0');
+    } catch (Exception $e) {
+        foreach (['bosses_btn INT NOT NULL DEFAULT 0', 'level_btn INT NOT NULL DEFAULT 1', 'wave_btn INT NOT NULL DEFAULT 1',
+                  'save_btn TEXT NULL', 'save_btn_at BIGINT NOT NULL DEFAULT 0'] as $col) {
+            try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
+        }
+    }
     try { // облачное сохранение основного сюжета
         $db->query('SELECT save_data FROM mp_accounts LIMIT 0');
     } catch (Exception $e) {
@@ -231,6 +239,7 @@ function public_account($a) {
         'invite' => invite_info($a),
         'id' => $a['id'], 'login' => $a['login'], 'name' => $a['name'],
         'best' => ['bosses' => (int)$a['bosses'], 'level' => (int)$a['level'], 'wave' => (int)$a['wave']],
+        'best_btn' => ['bosses' => (int)$a['bosses_btn'], 'level' => (int)$a['level_btn'], 'wave' => (int)$a['wave_btn']],
         'unlocks' => json_decode($a['unlocks'] ?: '[]', true) ?: [],
         'arena_pos' => (int)$a['arena_pos'],
         'medals' => isset($a['medals']) ? (int)$a['medals'] : 0,
@@ -249,16 +258,27 @@ function new_session($accountId) {
     return $token;
 }
 
+/** Режим игры: "cam" — с камерой, "btn" — без камеры (хардкор). У каждого свой рекорд, рейтинг и сохранение. */
+function game_mode($in) {
+    return isset($in['mode']) && $in['mode'] === 'btn' ? 'btn' : 'cam';
+}
+
+/** Столбцы рекорда режима: [боссы, уровень, раунд]. */
+function best_cols($mode) {
+    return $mode === 'btn' ? ['bosses_btn', 'level_btn', 'wave_btn'] : ['bosses', 'level', 'wave'];
+}
+
 /** Результат не уменьшается (сравнение: боссы, затем уровень, затем раунд); герой обновляется. */
 function apply_sync($a, $in) {
     global $db;
     $b = isset($in['best']) && is_array($in['best']) ? $in['best'] : [];
     $new = [int_in(isset($b['bosses']) ? $b['bosses'] : 0, 0, 1000, 0), int_in(isset($b['level']) ? $b['level'] : 1, 1, 2000, 1),
         int_in(isset($b['wave']) ? $b['wave'] : 1, 1, 5000, 1)];
-    $old = [(int)$a['bosses'], (int)$a['level'], (int)$a['wave']];
+    [$cb, $cl, $cw] = best_cols(game_mode($in));
+    $old = [(int)$a[$cb], (int)$a[$cl], (int)$a[$cw]];
     $best = $new > $old ? $new : $old;
     $hero = clean_hero(isset($in['hero']) ? $in['hero'] : null);
-    $db->prepare('UPDATE mp_accounts SET bosses = ?, level = ?, wave = ?, hero = COALESCE(?, hero) WHERE id = ?')
+    $db->prepare("UPDATE mp_accounts SET $cb = ?, $cl = ?, $cw = ?, hero = COALESCE(?, hero) WHERE id = ?")
         ->execute([$best[0], $best[1], $best[2], $hero ? json_encode($hero) : null, $a['id']]);
     // приглашённый победил первого босса: облик получают он и тот, кто его пригласил
     if (!empty($a['invited_by']) && (int)$a['ref_done'] === 0 && $best[0] >= REF_BOSSES) {
@@ -346,10 +366,16 @@ function save_pristine($s) {
     return (isset($s['wave']) ? (int)$s['wave'] : 1) <= 1 && $lvl <= 3 && empty($s['bossesDefeated']);
 }
 
+/** Столбцы облачного сохранения режима: [данные, время]. */
+function save_cols($mode) {
+    return $mode === 'btn' ? ['save_btn', 'save_btn_at'] : ['save_data', 'save_at'];
+}
+
 if ($action === 'save_get') {
     $a = need_account($in);
-    $save = $a['save_data'] ? json_decode($a['save_data'], true) : null;
-    reply(['save' => $save, 'at' => (int)$a['save_at']]);
+    [$cd, $ct] = save_cols(game_mode($in));
+    $save = $a[$cd] ? json_decode($a[$cd], true) : null;
+    reply(['save' => $save, 'at' => (int)$a[$ct]]);
 }
 
 if ($action === 'save_put') {
@@ -359,20 +385,25 @@ if ($action === 'save_put') {
     $raw = $save ? json_encode($save) : '';
     if (!$save || strlen($raw) > 20000) fail('save');
     $at = int_in(isset($in['at']) ? $in['at'] : 0, 0, PHP_INT_MAX, 0);
-    $old = $a['save_data'] ? json_decode($a['save_data'], true) : null;
+    [$cd, $ct] = save_cols(game_mode($in));
+    $old = $a[$cd] ? json_decode($a[$cd], true) : null;
     $stored = false;
     // хранится более свежее сохранение; пустое не затирает настоящий прогресс
-    if ($at >= (int)$a['save_at'] && !(save_pristine($save) && $old && !save_pristine($old))) {
-        $db->prepare('UPDATE mp_accounts SET save_data = ?, save_at = ? WHERE id = ?')->execute([$raw, $at, $a['id']]);
+    if ($at >= (int)$a[$ct] && !(save_pristine($save) && $old && !save_pristine($old))) {
+        $db->prepare("UPDATE mp_accounts SET $cd = ?, $ct = ? WHERE id = ?")->execute([$raw, $at, $a['id']]);
         $stored = true;
     }
-    reply(['ok' => true, 'stored' => $stored, 'at' => $stored ? $at : (int)$a['save_at']]);
+    reply(['ok' => true, 'stored' => $stored, 'at' => $stored ? $at : (int)$a[$ct]]);
 }
 
 // ---------------------------------------------------------------- рейтинг по боссам
 if ($action === 'top') {
-    $rows = $db->query('SELECT id, name, bosses, level, wave, hero FROM mp_accounts WHERE is_bot = 0
-        ORDER BY bosses DESC, level DESC, wave DESC, created ASC LIMIT ' . TOP)->fetchAll();
+    $mode = game_mode($in);
+    [$cb, $cl, $cw] = best_cols($mode);
+    // в рейтинге режима — только те, кто в нём играл
+    $rows = $db->query("SELECT id, name, $cb AS bosses, $cl AS level, $cw AS wave, hero FROM mp_accounts
+        WHERE is_bot = 0 AND ($cb > 0 OR $cl > 1 OR $cw > 1)
+        ORDER BY $cb DESC, $cl DESC, $cw DESC, created ASC LIMIT " . TOP)->fetchAll();
     foreach ($rows as &$r) {
         foreach (['bosses', 'level', 'wave'] as $k) $r[$k] = (int)$r[$k];
         $r['look'] = hero_look(json_decode($r['hero'] ?: 'null', true)); // иконка игрока в списке
@@ -382,12 +413,12 @@ if ($action === 'top') {
     $rank = null;
     $a = account_by_token(isset($in['token']) ? $in['token'] : '');
     if ($a) {
-        $q = $db->prepare('SELECT COUNT(*) FROM mp_accounts WHERE is_bot = 0 AND (bosses > ? OR (bosses = ? AND level > ?)
-            OR (bosses = ? AND level = ? AND wave > ?))');
-        $q->execute([$a['bosses'], $a['bosses'], $a['level'], $a['bosses'], $a['level'], $a['wave']]);
+        $q = $db->prepare("SELECT COUNT(*) FROM mp_accounts WHERE is_bot = 0 AND ($cb > ? OR ($cb = ? AND $cl > ?)
+            OR ($cb = ? AND $cl = ? AND $cw > ?))");
+        $q->execute([$a[$cb], $a[$cb], $a[$cl], $a[$cb], $a[$cl], $a[$cw]]);
         $rank = (int)$q->fetchColumn() + 1;
     }
-    reply(['rows' => $rows, 'rank' => $rank]);
+    reply(['rows' => $rows, 'rank' => $rank, 'mode' => $mode]);
 }
 
 // ---------------------------------------------------------------- бросить вызов

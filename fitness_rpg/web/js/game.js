@@ -7,7 +7,7 @@ import {
   ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_ORDER, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
-import { ARMORS, Player, STATS } from "./player.js";
+import { ARMORS, Player, STATS, setSaveSlot } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
@@ -138,11 +138,14 @@ class Game {
     this.world.width = CW;
     this.world.height = CH;
     this.wctx = this.world.getContext("2d");
+    this.mode = useCamera ? "cam" : "btn"; // у режимов отдельные прогресс, рекорд и рейтинг
+    setSaveSlot(this.mode);
     this.player = Player.load();
     this.cloudReady = false; // облачное сохранение сверено — можно отправлять прогресс в аккаунт
     this.cloudT = null;
     Player.onSave = () => this.cloudQueue();
     this.profile = Profile.load(); // имя в рейтинге, рекорд и облик — переживают «Новую игру»
+    this.profile.mode = this.mode;
     this.store = new Store(confirmDialog, { offer: (it, kind) => this.offerCode(it, kind) });
     this.store.init().then(() => this.syncPaid()); // RevenueCat в iOS-приложении; иначе — тестовый режим
     this.syncPaid();
@@ -151,6 +154,7 @@ class Game {
     setAudio(this.settings);
     this.leaderboard.flush(); // результат, накопленный без сети, уходит при запуске
     this.online = new Online(); // мультиплеер: аккаунт, рейтинг, вызовы, дуэли, коды
+    this.online.mode = this.mode;
     if (this.online.loggedIn) {
       this.online.me().then((r) => this.onAccount(r.account)).catch(() => {});
       this.cloudSync();
@@ -188,6 +192,11 @@ class Game {
       }
       e.preventDefault();
     });
+  }
+
+  /** Хардкор: без камеры — всегда, с камерой — если выбран в настройках. */
+  get hard() {
+    return this.mode === "btn" || !!this.settings.hard;
   }
 
   /** Нужна ли сцене нижняя часть экрана в портрете (камера или крупное меню). */
@@ -383,7 +392,7 @@ class Game {
   recordProgress() {
     if (this.profile.record(this.player)) {
       this.profile.save();
-      this.leaderboard.submit(this.profile);
+      if (this.mode === "cam") this.leaderboard.submit(this.profile); // старый общий рейтинг — только для игры с камерой
       this.accountSync();
     }
   }
@@ -715,6 +724,10 @@ class TitleScene extends Scene {
   textSize(r) {
     return this.game.portrait ? (r[3] >= 64 ? 24 : 16) : 12;
   }
+  /** Иконка профиля в левом верхнем углу. */
+  profileRect() {
+    return this.game.portrait ? [12, 12, 76, 76] : [8, 8, 42, 42];
+  }
   handle() {
     const g = this.game;
     if (g.key("ArrowUp")) this.index = (this.index + this.items.length - 1) % this.items.length;
@@ -725,6 +738,7 @@ class TitleScene extends Scene {
       this.items[i][1]();
     };
     if (g.key("Enter", " ")) return activate(this.index);
+    if (g.tapped(this.profileRect()) || g.key("p", "P", "з", "З")) { sfx.click(); return g.change(new ProfileScene(g)); }
     this.rects().forEach((r, i) => { if (g.tapped(r)) activate(i); });
   }
   update(dt) {
@@ -756,12 +770,40 @@ class TitleScene extends Scene {
       c.fillRect(sx + 14, sy + 6, 1, 1);
     }
     this.embers.draw(c);
+    if (this.game.hard) { // хардкор: меню мрачнее — кровавая тьма и виньетка
+      c.fillStyle = "rgba(14,0,4,0.5)";
+      c.fillRect(0, 0, CW, CH);
+      const v = c.createRadialGradient(CW / 2, CH / 2, 40, CW / 2, CH / 2, 210);
+      v.addColorStop(0, "rgba(0,0,0,0)");
+      v.addColorStop(1, `rgba(70,0,6,${0.55 + 0.08 * Math.sin(t * 1.5)})`);
+      c.fillStyle = v;
+      c.fillRect(0, 0, CW, CH);
+      c.fillStyle = "rgba(255,40,30,0.22)"; // костёр тлеет багровым
+      c.beginPath();
+      c.ellipse(208, GROUND_TITLE - 2, 26, 6, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  /** Иконка профиля: герой в рамке. */
+  drawProfileIcon() {
+    const g = this.game, p = g.player, [x, y, w, h] = this.profileRect(), hard = g.hard;
+    g.rect([x, y, w, h], "rgba(10,6,14,0.85)");
+    g.ctx.strokeStyle = hard ? "rgb(170,30,30)" : COL.gold;
+    g.ctx.lineWidth = 2;
+    g.ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    g.ctx.lineWidth = 1;
+    const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2);
+    const k = g.portrait ? 2 : 1, sh = Math.min(spr.height, 28); // голова и плечи
+    g.ctx.drawImage(spr, 0, Math.max(0, spr.height - 32), spr.width, sh, x + (w - spr.width * k) / 2, y + 4, spr.width * k, sh * k);
+    g.text(`${p.level}`, x + w - 3, y + h - (g.portrait ? 18 : 10), g.portrait ? 14 : 8, hard ? "rgb(255,90,70)" : COL.gold, "right");
   }
   drawUi() {
-    const g = this.game, p = g.player;
-    g.text("ASH & IRON", W / 2 + 3, 19, 40, "rgb(120,30,26)", "center", false);
-    g.text("ASH & IRON", W / 2, 16, 40, "rgb(232,206,160)", "center", false);
-    g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.dim, "center");
+    const g = this.game, p = g.player, hard = g.hard;
+    g.text("ASH & IRON", W / 2 + 3, 19, 40, hard ? "rgb(60,0,6)" : "rgb(120,30,26)", "center", false);
+    g.text("ASH & IRON", W / 2, 16, 40, hard ? "rgb(214,60,48)" : "rgb(232,206,160)", "center", false);
+    if (hard) g.text(g.mode === "btn" ? "ХАРДКОР · БЕЗ КАМЕРЫ" : "ХАРДКОР", W / 2, 66, 8, "rgb(255,80,60)", "center");
+    else g.text("фитнес-RPG: тренируй тело, чтобы выжить во тьме", W / 2, 66, 8, COL.dim, "center");
+    this.drawProfileIcon();
     this.rects().forEach((r, i) => {
       const confirm = i === this.items.length - 1 && this.confirmT > 0;
       g.button(r, confirm ? "Стереть? Ещё раз" : this.items[i][0],
@@ -772,6 +814,97 @@ class TitleScene extends Scene {
     if (g.portrait) g.text(status, W / 2, GAME_H + 14, status.length * 12 <= W - 24 ? 12 : 8, COL.text, "center");
     else g.text(status, 12, GAME_H - 16, 8, COL.dim);
     if (!g.portrait && !isNative()) g.text("ПК: J K L, тест F2-F4", W - 12, GAME_H - 16, 8, COL.dim, "right");
+  }
+}
+
+// ------------------------------------------------------------------ Профиль игрока
+class ProfileScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.rank = null; // место в рейтинге своего режима (с сервера)
+    this.ownsPanel = true;
+    const o = game.online;
+    if (o.loggedIn) {
+      o.me().then((r) => game.onAccount(r.account)).catch(() => {});
+      o.top(game.mode).then((r) => (this.rank = r.rank)).catch(() => {});
+    }
+  }
+  buttons() {
+    const g = this.game;
+    if (g.portrait) return { back: [24, g.H - 196, W - 48, 80], exit: [24, g.H - 100, W - 48, 80] };
+    return { back: [24, GAME_H - 40, 200, 30], exit: [W - 224, GAME_H - 40, 200, 30] };
+  }
+  /** Выйти из игры: в приложении — закрыть его, в браузере — вернуться на стартовый экран. */
+  async exitGame() {
+    const ok = await confirmDialog({ title: "ВЫЙТИ ИЗ ИГРЫ?", text: "Прогресс сохранён. Вернуться на стартовый экран?", ok: "ВЫЙТИ" });
+    if (!ok) return;
+    const app = globalThis.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+    if (app && app.exitApp) return app.exitApp();
+    location.reload();
+  }
+  handle() {
+    const g = this.game, b = this.buttons();
+    if (g.key("Escape") || g.tapped(b.back)) { sfx.click(); return g.change(new TitleScene(g)); }
+    if (g.tapped(b.exit)) { sfx.click(); this.exitGame(); }
+  }
+  draw(c) {
+    c.drawImage(IMG.title_bg, 0, 0);
+    c.fillStyle = this.game.hard ? "rgba(20,0,6,0.78)" : "rgba(0,0,0,0.72)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  /** Строки статистики: [подпись, значение, цвет]. */
+  rows() {
+    const g = this.game, p = g.player, o = g.online, acc = o.loggedIn ? o.account : null, best = g.profile.best;
+    const A = COL.gold, B = "rgb(150,190,255)", R = "rgb(255,110,90)", Gr = "rgb(150,230,140)";
+    const rows = [
+      ["Режим", `${tr(g.mode === "cam" ? "С камерой" : "Без камеры")} · ${tr(g.hard ? "хардкор" : "обычная")}`, g.hard ? R : COL.text],
+      ["Уровень", `${p.level}`, A],
+      ["Навыки", `${tr("Сила")} ${p.strength} · ${tr("Живучесть")} ${p.vigor} · ${tr("Выносливость")} ${p.endurance}`, A],
+      ["Локация", `${tr(LOCATIONS[locationFor(p.wave)].name)}, ${tr("раунд")} ${p.wave}`, COL.text],
+      ["Боссов побеждено", `${p.bossesDefeated}`, R],
+      ["Рекорд", `${tr("раунд")} ${best.wave} · ${tr("ур.")} ${best.level} · ${tr("боссы")} ${best.bosses}`, A],
+      ["Место в рейтинге", !acc ? tr("войдите в аккаунт") : this.rank ? `#${this.rank}` : "...", B],
+    ];
+    if (acc) {
+      rows.push(["Медали дуэлей", `${acc.medals || 0}`, A]);
+      rows.push(["Лестница вызовов", `#${acc.arena_pos}`, B]);
+    }
+    rows.push(["Пепел · камни", `${p.souls} · ${tr("алые")} ${p.redGems} · ${tr("синие")} ${p.blueGems}`, COL.text]);
+    rows.push(["Снаряжение", `${tr(p.weapon.name)}${p.armor ? ` · ${tr(RELICS[p.armor].name)}` : ""}`, COL.text]);
+    if (g.mode === "cam") { // упражнения считаются только с камерой
+      const r = p.totalReps, sum = r.pushup + r.squat + r.jack;
+      rows.push(["Отжимания", `${r.pushup}`, Gr]);
+      rows.push(["Приседания", `${r.squat}`, Gr]);
+      rows.push(["Звёздочки", `${r.jack}`, Gr]);
+      rows.push(["Всего упражнений", `${sum}`, Gr]);
+    }
+    return rows;
+  }
+  drawUi() {
+    const g = this.game, P = g.portrait, o = g.online, b = this.buttons();
+    if (P) g.rect([0, GAME_H, W, g.H - GAME_H], "rgba(10,6,14,1)");
+    g.text("ПРОФИЛЬ", W / 2, P ? 18 : 12, P ? 36 : 20, g.hard ? "rgb(214,60,48)" : COL.gold, "center");
+    const who = o.loggedIn ? tf("{name} · аккаунт {login}", { name: g.profile.name, login: o.account.login }) : g.profile.name;
+    g.text(who, W / 2, P ? 64 : 38, P ? 16 : 8, "rgb(150,220,150)", "center");
+    // герой крупно
+    const p = g.player, spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2), k = P ? 5 : 3;
+    const hx = P ? W - 30 - spr.width * k : W - 40 - spr.width * k, hy = P ? 300 - spr.height * k : 300 - spr.height * k;
+    g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
+    const rows = this.rows(), fs = P ? 20 : 8, step = P ? Math.min(66, Math.floor((g.H - 330 - 216) / rows.length)) : 18;
+    const x = P ? 24 : 24, vx = P ? 24 : 210;
+    let y = P ? 330 : 56; // в портрете строки — под героем
+    for (const [label, value, col] of rows) {
+      if (P) {
+        g.text(label, x, y, 14, COL.dim);
+        g.text(value, vx, y + 20, value.length * fs <= W - 48 ? fs : value.length * 16 <= W - 48 ? 16 : 12, col);
+      } else {
+        g.text(label, x, y, fs, COL.dim);
+        g.text(value, vx, y, fs, col);
+      }
+      y += step;
+    }
+    g.button(b.back, "НАЗАД", { size: P ? 24 : 12 });
+    g.button(b.exit, "ВЫЙТИ ИЗ ИГРЫ", { size: P ? 24 : 12, color: "rgb(255,120,100)", border: "rgb(150,40,40)" });
   }
 }
 
@@ -1068,6 +1201,10 @@ class Skeleton {
     this.steal = 0; // сколько пепла крадёт удар
     this.potion = false; // глава разбойников один раз пьёт зелье
     this.reincarnate = false; // Король-Призрак один раз встаёт после смерти
+    this.hard = false; // хардкор (makeHard)
+    this.jitter = 0; // разброс длины замаха
+    this.idleRange = [1.6, 3]; // пауза между атаками
+    this.windupNow = 0; // длина текущего замаха
     this.aura = 0; // доля здоровья героя, которую аура сжигает каждую секунду (Алый Серафим)
     this.stage2 = false; // Алый Серафим: вторая стадия с половины здоровья
     this.transforms = false;
@@ -1155,7 +1292,28 @@ class Skeleton {
     this.timer = timer;
   }
   recoverTime() {
-    return RECOVER_TIME * (this.enraged ? 0.8 : 1);
+    return RECOVER_TIME * (this.enraged ? 0.8 : 1) * (this.hard && this.boss ? 0.8 : 1);
+  }
+  /**
+   * Хардкор: боссы бьют сильнее и чаще, серии длиннее, замах каждый раз разной длины;
+   * обычные враги — немного злее.
+   */
+  makeHard() {
+    const boss = this.boss;
+    this.hard = true;
+    this.damage = Math.floor(this.damage * (boss ? 1.35 : 1.15));
+    this.windupTime *= boss ? 0.85 : 0.95;
+    this.comboChance = Math.min(0.85, this.comboChance + (boss ? 0.3 : 0.15));
+    this.maxCombo += boss ? 1 : 0;
+    this.jitter = boss ? 0.3 : 0.2;
+    this.idleRange = boss ? [0.7, 1.6] : [1.1, 2.4];
+    return this;
+  }
+  /** Длина очередного замаха: в хардкоре — то короче, то длиннее (не подстроиться под ритм). */
+  nextWindup(base = this.windupTime) {
+    const t = base * (1 + (this.jitter ? rand(-this.jitter, this.jitter) : 0));
+    this.windupNow = Math.max(0.6, t);
+    return this.windupNow;
   }
 }
 
@@ -1184,6 +1342,7 @@ class BattleScene extends Scene {
     const p = game.player;
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
+    if (game.hard) this.enemy.makeHard(); // хардкор (без камеры — всегда)
     this.location = locationFor(p.wave);
     this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave); // первый бой на новой земле
     this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
@@ -1537,7 +1696,7 @@ class BattleScene extends Scene {
       en.poise = en.maxPoise;
       en.comboLeft = 0;
       for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
-      en.set("windup", en.windupTime);
+      en.set("windup", en.nextWindup());
       sfx.alert();
     } else if (en.state === "windup" && en.timer <= 0) {
       en.set("attack", 0.35);
@@ -1545,14 +1704,14 @@ class BattleScene extends Scene {
     } else if (en.state === "attack" && en.timer <= 0) {
       if (en.comboLeft > 0) {
         en.comboLeft -= 1; // следующий, более быстрый замах сразу после удара
-        en.set("windup", en.windupTime * 0.85);
+        en.set("windup", en.nextWindup(en.windupTime * 0.85));
         this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
         sfx.alert();
       } else {
         en.set("recover", en.recoverTime());
       }
     } else if (en.state === "recover" && en.timer <= 0) {
-      en.set("idle", rand(1.6, 3));
+      en.set("idle", rand(...en.idleRange));
     } else if (en.state === "revive") {
       en.hp = Math.min(en.maxHp * 0.5, en.hp + (en.maxHp * 0.5 * dt) / REVIVE_TIME); // полоска заполняется
       if (en.timer <= 0) {
@@ -1695,7 +1854,7 @@ class BattleScene extends Scene {
     }
 
     if (en.state === "windup") {
-      const k = Math.max(0, Math.min(1, 1 - en.timer / en.windupTime));
+      const k = Math.max(0, Math.min(1, 1 - en.timer / (en.windupNow || en.windupTime)));
       c.strokeStyle = `rgba(200,20,20,${(40 + 80 * k) / 255})`;
       c.lineWidth = 6;
       c.strokeRect(3, 3, CW - 6, CH - 6);
@@ -1790,7 +1949,7 @@ class BattleScene extends Scene {
       g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
       g.text(g.useCamera ? "Отойдите, чтобы тело было в кадре" : "Бой начинается", W / 2, 124, 8, COL.dim, "center");
     } else if (en.state === "windup" && !this.result) {
-      const k = Math.max(0, Math.min(1, en.timer / en.windupTime));
+      const k = Math.max(0, Math.min(1, en.timer / (en.windupNow || en.windupTime)));
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
       g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
@@ -2018,6 +2177,7 @@ class DuelScene extends BattleScene {
     const en = this.enemy;
     en.damage = dmg;
     en.windupTime = DUEL_WINDUP;
+    en.windupNow = DUEL_WINDUP;
     en.set("windup", DUEL_WINDUP);
     sfx.alert();
   }
@@ -2249,6 +2409,7 @@ class MultiplayerScene extends Scene {
     this.busy = false;
     this.error = "";
     this.room = null; // своя комната дуэли, пока ждём соперника
+    this.ratingMode = game.mode; // какой рейтинг смотрим: с камерой или без (по умолчанию — своего режима)
     this.waitT = 0;
     game.accountSync();
     if (this.online.configured && !this.online.loggedIn) this.account(); // без входа — сразу окно авторизации
@@ -2275,7 +2436,7 @@ class MultiplayerScene extends Scene {
   load() {
     const o = this.online;
     if (!o.configured) return;
-    if (this.tab === "rating") this.run(async () => (this.data.rating = await o.top()));
+    if (this.tab === "rating") this.run(async () => (this.data.rating = await o.top(this.ratingMode)));
     if (this.tab === "challenge" && o.loggedIn) this.run(async () => (this.data.arena = await o.arena()));
     if ((this.tab === "friends" || this.tab === "duel") && o.loggedIn) this.run(async () => this.game.onAccount((await o.me()).account));
   }
@@ -2362,7 +2523,7 @@ class MultiplayerScene extends Scene {
   buttons() {
     const L = mpLayout(this.game), o = this.online;
     const acc = o.loggedIn ? "ВЫЙТИ" : "ВОЙТИ";
-    if (this.tab === "rating") return bottomButtons(L, [acc, "ИМЯ", "ОБНОВИТЬ", "НАЗАД"]);
+    if (this.tab === "rating") return bottomButtons(L, [acc, "ИМЯ", this.ratingMode === "btn" ? "КНОПКИ" : "КАМЕРА", "НАЗАД"]);
     if (this.tab === "challenge" || this.tab === "friends") return bottomButtons(L, [acc, "ОБНОВИТЬ", "НАЗАД"]);
     return bottomButtons(L, [acc, "НАЗАД"]);
   }
@@ -2442,6 +2603,11 @@ class MultiplayerScene extends Scene {
       if (label === "ВОЙТИ" || label === "ВЫЙТИ") return this.account();
       if (label === "ИМЯ") return this.rename();
       if (label === "ОБНОВИТЬ") return this.load();
+      if (label === "КАМЕРА" || label === "КНОПКИ") { // переключить рейтинг: с камерой / без камеры
+        this.ratingMode = this.ratingMode === "btn" ? "cam" : "btn";
+        this.data.rating = null;
+        return this.load();
+      }
     }
     if (g.key("Escape")) { this.cancelRoom(); return g.change(new TitleScene(g)); }
     if (!this.online.loggedIn || this.busy) return;
@@ -2512,7 +2678,10 @@ class MultiplayerScene extends Scene {
   drawRating(L) {
     const g = this.game, r = this.data.rating, myId = this.online.account && this.online.account.id;
     const cols = L.P ? [[18, "#"], [138, "ИМЯ"], [410, "БОССЫ"], [500, "УР."], [566, "РАУНД"]] : [[20, "#"], [68, "ИМЯ"], [400, "БОССЫ"], [486, "УР."], [560, "РАУНД"]];
-    cols.forEach(([x, h]) => g.text(h, x, L.head, L.small, COL.dim));
+    cols.forEach(([x, h], i) => {
+      if (i === 1) h = `${tr(h)} · ${tr(this.ratingMode === "btn" ? "БЕЗ КАМЕРЫ" : "С КАМЕРОЙ")}`; // чей это рейтинг
+      g.text(h, x, L.head, L.small, i === 1 ? COL.gold : COL.dim);
+    });
     g.rect([12, L.top - 6, W - 24, 1], "rgb(90,64,50)");
     if (!r) return;
     const step = mpStep(L, Math.min(r.rows.length + 1, 12));
@@ -2521,7 +2690,8 @@ class MultiplayerScene extends Scene {
     const mine = r.rows.findIndex((x) => x.id === myId);
     if ((r.rank && mine < 0) || mine >= cap) { // своё место — последней строкой
       show.length = Math.min(show.length, cap - 1);
-      show.push([r.rank, { id: myId, name: g.profile.name, look: heroSnapshot(g.player, g.skin, g.outfit), ...this.online.account.best }]);
+      const acc = this.online.account, best = this.ratingMode === "btn" ? acc.best_btn || g.profile.bests.btn : acc.best;
+      show.push([r.rank, { id: myId, name: g.profile.name, look: heroSnapshot(g.player, g.skin, g.outfit), ...best }]);
     }
     show.forEach(([rank, row], i) => {
       const y = L.top + i * step, isMe = row.id === myId;
@@ -3402,7 +3572,7 @@ function settingsLayout(g) {
     const row = (y) => ({ label: [40, y + 12], minus: [300, y, 44, 36], plus: [556, y, 44, 36], bar: [352, y + 8, 196, 20] });
     return {
       title: 16, fs: { title: 24, label: 12, btn: 12, sign: 16 },
-      volume: row(60), alert: row(108), vibLabel: [40, 168], vib: [300, 156, 300, 36],
+      volume: row(60), alert: row(108), vibLabel: [40, 168], vib: [300, 156, 140, 36], diff: [448, 156, 152, 36],
       test: [40, 204, 170, 34], code: [218, 204, 180, 34], tg: [406, 204, 194, 34], camera: [40, 256, 270, 36], support: [330, 256, 270, 36],
       lang: [330, 308, 270, 34], back: [40, 308, 270, 34],
     };
@@ -3412,8 +3582,8 @@ function settingsLayout(g) {
   return {
     title: 36, fs: { title: 32, label: 24, btn: 24, sign: 32 },
     volume: row(110), alert: row(250), vibLabel: [24, 392], vib: [24, 428, W - 48, 74],
-    test: btn(0), tg: btn(1), camera: btn(2), support: btn(3), lang: btn(4), code: btn(5),
-    back: [W / 2 - 160, Math.max(btn(6)[1] + 16, g.H - 100), 320, 74],
+    test: btn(0), tg: btn(1), camera: btn(2), support: btn(3), lang: btn(4), code: btn(5), diff: btn(6),
+    back: [W / 2 - 160, Math.max(btn(7)[1] + 16, g.H - 100), 320, 74],
   };
 }
 
@@ -3436,6 +3606,10 @@ class SettingsScene extends Scene {
     if (g.tapped(L.alert.minus)) { this.set("alert", step(ai, -1)); sfx.alert(); }
     if (g.tapped(L.alert.plus)) { this.set("alert", step(ai, 1)); sfx.alert(); }
     if (g.tapped(L.vib)) { this.set("vibrate", !st.vibrate); sfx.click(); }
+    if (g.tapped(L.diff)) { // сложность: с камерой — на выбор, без камеры — всегда хардкор
+      if (g.mode === "btn") { sfx.deny(); g.say("Без камеры игра всегда на хардкоре", 3); }
+      else { this.set("hard", !st.hard); st.hard ? sfx.thunder() : sfx.click(); }
+    }
     if (g.tapped(L.test)) sfx.alert();
     if (g.tapped(L.tg)) {
       sfx.click();
@@ -3478,6 +3652,8 @@ class SettingsScene extends Scene {
     const al = ALERT_LEVELS.find(([v]) => v === st.alert) || ALERT_LEVELS[2];
     this.slider(L.alert, fs, "Сигнал «приседай»", st.alert / 1.5, al[1]);
     g.text(isNative() ? "Вибрация" : "Вибрация (Android)", L.vibLabel[0], L.vibLabel[1], fs.label);
+    const hard = g.hard, dl = g.portrait ? (hard ? "СЛОЖНОСТЬ: ХАРДКОР" : "СЛОЖНОСТЬ: ОБЫЧНАЯ") : hard ? "ХАРДКОР" : "ОБЫЧНАЯ";
+    g.button(L.diff, dl, { size: fs.btn, color: hard ? "rgb(255,90,70)" : COL.text, border: hard ? "rgb(150,30,30)" : undefined });
     g.button(L.vib, st.vibrate ? "ВКЛ" : "ВЫКЛ", { size: fs.btn, selected: st.vibrate });
     g.button(L.test, g.portrait ? "ПРОВЕРИТЬ СИГНАЛ" : "СИГНАЛ", { size: fs.btn });
     g.button(L.code, "ВВЕСТИ КОД", { size: fs.btn, color: COL.gold });
@@ -3618,4 +3794,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BattleScene, BonfireScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
+export { BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };

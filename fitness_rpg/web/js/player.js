@@ -4,7 +4,18 @@
 import { RELICS, SWORDS, item } from "./gear.js";
 import { loadJSON, saveJSON } from "./storage.js";
 
-const SAVE_KEY = "ash-and-iron-save";
+// У каждого режима своя «карьера»: с камерой — основное сохранение, без камеры (хардкор) — отдельное.
+const SAVE_KEYS = { cam: "ash-and-iron-save", btn: "ash-and-iron-save-btn" };
+let SAVE_KEY = SAVE_KEYS.cam;
+
+/** Выбрать сохранение режима. Первый запуск без камеры начинается с копии прежнего прогресса. */
+export function setSaveSlot(mode) {
+  SAVE_KEY = SAVE_KEYS[mode] || SAVE_KEYS.cam;
+  if (mode === "btn" && loadJSON(SAVE_KEY, null) === null) {
+    const legacy = loadJSON(SAVE_KEYS.cam, null);
+    if (legacy) saveJSON(SAVE_KEY, legacy);
+  }
+}
 
 export const STATS = {
   strength: ["СИЛА", "pushup", "урон атаки"],
