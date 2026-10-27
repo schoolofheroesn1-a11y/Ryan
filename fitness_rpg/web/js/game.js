@@ -199,6 +199,9 @@ function drawStreakFire(c, streak, cx, ground, t, k = 1, glow = true) {
   c.drawImage(spr, Math.round(cx - w / 2), Math.round(ground - h), Math.round(w), Math.round(h));
   c.restore();
 }
+/** Передовая героя (самый дальний открытый раунд). Старые сохранения (и старый player.js) её не знают —
+ *  тогда она не меньше текущего раунда. */
+const frontierOf = (p) => Math.max(Number(p.frontier) || 1, Number(p.wave) || 1);
 const inRect = (p, r) => p.x >= r[0] && p.x < r[0] + r[2] && p.y >= r[1] && p.y < r[1] + r[3];
 
 class Particles {
@@ -470,7 +473,7 @@ class Game {
       this.say(tf("Тест: {loc} (#{n})", { loc: LOCATIONS[loc].name, n: p.wave }));
     }
     if (["F2", "F3", "F4"].some((k) => this.codes.includes(k))) {
-      p.frontier = Math.max(p.frontier, p.wave);
+      p.frontier = frontierOf(p);
       p.save();
     }
   }
@@ -1213,9 +1216,13 @@ class MapScene extends Scene {
     this.pick = null; // выбранная земля: окно с раундами
     this.msg = "";
     this.msgT = 0;
+    game.player.frontier = frontierOf(game.player); // старое сохранение — передовая по текущему раунду
   }
   get player() {
     return this.game.player;
+  }
+  get frontier() {
+    return frontierOf(this.game.player);
   }
   /** Как карта лежит на экране: горизонтально ×2 во весь экран; в портрете — повёрнута
    *  (запад внизу: путь героя идёт снизу вверх) и растянута между заголовком и кнопками. */
@@ -1247,14 +1254,14 @@ class MapScene extends Scene {
   rounds(loc) {
     const p = this.player;
     let start = locationStart(loc);
-    if (loc === LAST_LOCATION) start = Math.max(start, Math.ceil(p.frontier / BOSS_EVERY) * BOSS_EVERY - MAP_ROUNDS + 1);
+    if (loc === LAST_LOCATION) start = Math.max(start, Math.ceil(this.frontier / BOSS_EVERY) * BOSS_EVERY - MAP_ROUNDS + 1);
     return Array.from({ length: MAP_ROUNDS }, (_, i) => start + i);
   }
   open(loc) {
-    return locationStart(loc) <= this.player.frontier;
+    return locationStart(loc) <= this.frontier;
   }
   cleared(loc) {
-    return loc !== LAST_LOCATION && this.player.frontier > this.rounds(loc)[MAP_ROUNDS - 1];
+    return loc !== LAST_LOCATION && this.frontier > this.rounds(loc)[MAP_ROUNDS - 1];
   }
   buttons() {
     const g = this.game;
@@ -1297,7 +1304,7 @@ class MapScene extends Scene {
       const L = this.pickLayout();
       for (const [w, r] of L.cells) {
         if (!g.tapped(r)) continue;
-        if (w > p.frontier) { sfx.deny(); this.say(tf("Сначала пройдите раунд {n}", { n: p.frontier })); return; }
+        if (w > this.frontier) { sfx.deny(); this.say(tf("Сначала пройдите раунд {n}", { n: this.frontier })); return; }
         return this.fight(w);
       }
       if (g.key("Escape") || g.tapped(L.close) || g.taps.some((t) => !inRect(t, L.box))) {
@@ -1305,7 +1312,7 @@ class MapScene extends Scene {
         this.pick = null;
         sfx.click();
       }
-      if (g.key("Enter", " ")) return this.fight(Math.min(p.frontier, this.rounds(this.pick)[MAP_ROUNDS - 1]));
+      if (g.key("Enter", " ")) return this.fight(Math.min(this.frontier, this.rounds(this.pick)[MAP_ROUNDS - 1]));
       return;
     }
     const b = this.buttons();
@@ -1368,7 +1375,7 @@ class MapScene extends Scene {
     c.drawImage(spr, hx + (P ? 50 : 22), hy - 10 * hk - spr.height * hk - Math.round(Math.abs(Math.sin(t * 3)) * 3), spr.width * hk, spr.height * hk);
     g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2 + 2, (P ? 40 : 8) + 2, P ? 32 : 16, COL.shadow, "center", false);
     g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2, P ? 40 : 8, P ? 32 : 16, COL.gold, "center");
-    g.text(tf("Передовая: раунд {n}", { n: p.frontier }), W / 2, P ? 86 : 28, P ? 16 : 8, COL.text, "center");
+    g.text(tf("Передовая: раунд {n}", { n: this.frontier }), W / 2, P ? 86 : 28, P ? 16 : 8, COL.text, "center");
     const b = this.buttons();
     g.button(b.go, tf("В БОЙ: раунд {n}", { n: p.wave }), { size: P ? 24 : 12, ...GO_STYLE });
     g.button(b.back, "НАЗАД", { size: P ? 24 : 12 });
@@ -1391,7 +1398,7 @@ class MapScene extends Scene {
     g.text(tr(LOCATIONS[this.pick].name).toUpperCase(), x + w / 2, y + (P ? 30 : 12), P ? 28 : 16, COL.gold, "center");
     g.text("Выберите раунд. Каждый пятый — босс", x + w / 2, y + (P ? 80 : 36), P ? 14 : 8, COL.dim, "center");
     for (const [wv, [cx, cy, cw, ch]] of L.cells) {
-      const boss = isBossWave(wv), locked = wv > p.frontier, front = wv === p.frontier, cur = wv === p.wave;
+      const boss = isBossWave(wv), locked = wv > this.frontier, front = wv === this.frontier, cur = wv === p.wave;
       g.rect([cx, cy, cw, ch], locked ? "rgba(26,22,30,0.9)" : front ? "rgba(80,56,20,0.95)" : boss ? "rgba(60,16,18,0.95)" : "rgba(30,44,30,0.95)");
       c.strokeStyle = cur ? COL.gold : front ? `rgba(255,210,120,${0.6 + 0.4 * Math.sin(t * 5)})` : "rgb(80,66,62)";
       c.lineWidth = cur || front ? (P ? 3 : 2) : 1;
@@ -1955,7 +1962,7 @@ class BattleScene extends Scene {
     this.enemy = new Skeleton(p.wave);
     if (game.hard) this.enemy.makeHard(); // хардкор (без камеры — всегда)
     this.location = locationFor(p.wave);
-    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave) && p.wave === p.frontier; // первый бой на новой земле
+    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave) && p.wave === frontierOf(p); // первый бой на новой земле
     this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
     this.burnT = 0;
     this.ghosts = []; // призрачное пламя Короля-Призрака
@@ -2155,7 +2162,7 @@ class BattleScene extends Scene {
     en.set("dead", 0);
     this.result = "won";
     this.resultT = 0;
-    const first = en.wave >= p.frontier; // впервые (не повтор пройденного раунда с карты)
+    const first = en.wave >= frontierOf(p); // впервые (не повтор пройденного раунда с карты)
     let [ash, red, blue] = rewards(en.wave);
     if (!first) blue = 0; // синие камни за босса — только за первую победу
     if (p.lostSouls && p.lostAtWave === en.wave) {
@@ -2167,7 +2174,7 @@ class BattleScene extends Scene {
     p.blueGems += blue;
     this.reward = [ash, red, blue];
     p.wave += 1;
-    p.frontier = Math.max(p.frontier, p.wave);
+    p.frontier = frontierOf(p);
     if (en.boss && first) p.bossesDefeated += 1; // в рейтинг — только новые боссы
     p.save();
     this.saveRun();
