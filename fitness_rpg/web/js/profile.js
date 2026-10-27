@@ -1,6 +1,7 @@
 // Профиль устройства: имя в рейтинге, лучший результат и выбранный облик.
 // Хранится отдельно от персонажа, поэтому «Новая игра» не стирает рекорд, покупки и облик.
 import { loadJSON, saveJSON } from "./storage.js";
+import { Streak } from "./streak.js";
 
 const KEY = "ash-and-iron-profile";
 
@@ -35,6 +36,7 @@ export class Profile {
     this.mode = "cam";
     // выбранный облик: меч, доспех, эффект удара, оформление победы (null — стандартный)
     this.style = { sword: null, armor: null, hit: null, victory: null, ...(data.style || {}) };
+    this.streak = new Streak(data.streak); // серия огоньков — одна на устройство, для обоих режимов
   }
 
   /** Рекорд текущего режима. */
@@ -65,7 +67,7 @@ export class Profile {
   }
 
   save() {
-    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style });
+    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style, streak: this.streak.toJSON() });
   }
 
   static load() {

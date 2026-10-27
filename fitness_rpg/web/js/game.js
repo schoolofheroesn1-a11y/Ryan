@@ -12,6 +12,7 @@ import { initAudio, setAudio, sfx } from "./sfx.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
+import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { isNative, keepAwake, openAppSettings, openUrl, restoreBackup, vibrate } from "./platform.js";
@@ -174,6 +175,29 @@ function drawPlankAura(c, cx, foot, bonus, t, k = 1) {
     c.fillStyle = `rgba(255,240,190,${(1 - ph) * (0.35 + 0.35 * s)})`;
     c.fillRect(Math.round(cx + Math.sin(i * 2.4 + t) * 9 * k), Math.round(foot - ph * 34 * k), k, k);
   }
+}
+/**
+ * Костёр серии огоньков: чем больше огоньков, тем крупнее пламя; если сегодня огонёк ещё не зажжён —
+ * пламя гаснет (меньше, тусклее, неровно мерцает). cx — центр, ground — низ, k — масштаб пикселя.
+ */
+function drawStreakFire(c, streak, cx, ground, t, k = 1, glow = true) {
+  const fade = streak.fading(), out = streak.points <= 0 && streak.lost > 0; // погасло — тлеют угли
+  let z = FLAME_TIERS[streak.tier][2] * k;
+  if (fade) z *= 0.78 + 0.08 * Math.sin(t * 9) * Math.sin(t * 3.7);
+  if (out) z *= 0.55;
+  if (glow) {
+    const r = (17 + Math.sin(t * 6)) * z * (fade || out ? 0.7 : 1);
+    c.fillStyle = out ? "rgba(140,140,150,0.12)" : fade ? "rgba(255,90,40,0.12)" : "rgba(255,120,40,0.16)";
+    c.beginPath();
+    c.ellipse(cx, ground - 2 * k, r, 4 * z, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  const spr = anim("bonfire", t, fade ? 5 : 8, 4), w = spr.width * z, h = spr.height * z;
+  c.save();
+  if (fade || out) c.globalAlpha = out ? 0.45 : 0.75 + 0.2 * Math.sin(t * 11);
+  if (out) c.filter = "grayscale(1) brightness(0.6)";
+  c.drawImage(spr, Math.round(cx - w / 2), Math.round(ground - h), Math.round(w), Math.round(h));
+  c.restore();
 }
 const inRect = (p, r) => p.x >= r[0] && p.x < r[0] + r[2] && p.y >= r[1] && p.y < r[1] + r[3];
 
@@ -792,6 +816,21 @@ class TitleScene extends Scene {
     this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.confirmT = 0;
     this.ownsPanel = true; // в портрете меню занимает место панели камеры
+    const st = game.profile.streak;
+    if (st.refresh()) game.profile.save(); // пропущен день — пламя гаснет
+    // окно серии огоньков — при входе в игру (раз за запуск) и сразу, если серия только что сгорела
+    this.popup = !game.streakShown || st.lost > 0;
+    this.popupT = 0;
+    game.streakShown = true;
+  }
+  closePopup() {
+    const g = this.game;
+    this.popup = false;
+    if (g.profile.streak.lost) { // «пламя погасло» показали — больше не напоминаем
+      g.profile.streak.lost = 0;
+      g.profile.save();
+    }
+    sfx.click();
   }
   newGame() {
     // Защита от случайного касания: прогресс стирается только со второго нажатия
@@ -828,6 +867,13 @@ class TitleScene extends Scene {
   }
   handle() {
     const g = this.game;
+    if (this.popup) { // окно серии: любое касание или клавиша закрывает (не сразу — чтобы не смахнуть случайно)
+      if (this.popupT > 0.4 && (g.taps.length || g.key("Enter", " ", "Escape"))) {
+        g.taps.length = 0;
+        this.closePopup();
+      }
+      return;
+    }
     if (g.key("ArrowUp")) this.index = (this.index + this.items.length - 1) % this.items.length;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % this.items.length;
     const activate = (i) => {
@@ -844,16 +890,12 @@ class TitleScene extends Scene {
     this.aura.update(dt, this.game.skin, "idle", 172, GROUND_TITLE - 32);
     this.outfitFx.update(dt, this.game.outfit, 172, GROUND_TITLE - 32);
     this.confirmT -= dt;
+    this.popupT += dt;
   }
   draw(c) {
     const t = this.game.time;
     c.drawImage(IMG.title_bg, 0, 0);
-    const r = 34 + Math.round(Math.sin(t * 6) * 2);
-    c.fillStyle = "rgba(255,120,40,0.16)";
-    c.beginPath();
-    c.ellipse(208, GROUND_TITLE - 2, r, 8, 0, 0, Math.PI * 2);
-    c.fill();
-    c.drawImage(anim("bonfire", t, 8, 4), 200, GROUND_TITLE - 22);
+    drawStreakFire(c, this.game.profile.streak, 208, GROUND_TITLE, t); // пламя растёт с серией огоньков
     const p = this.game.player;
     const heroIdle = anim(`${heroSprite(p.sword, p.worn, this.game.skin, this.game.outfit)}_idle`, t, 1.5, 2);
     drawPlankAura(c, 184, GROUND_TITLE, p.aura, t);
@@ -930,6 +972,74 @@ class TitleScene extends Scene {
     if (g.portrait) g.text(status, W / 2, GAME_H + 14, status.length * 12 <= W - 24 ? 12 : 8, COL.text, "center");
     else g.text(status, 12, GAME_H - 16, 8, COL.dim);
     if (!g.portrait && !isNative()) g.text("ПК: J K L, тест F2-F4", W - 12, GAME_H - 16, 8, COL.dim, "right");
+    const st = g.profile.streak; // подпись под костром: огоньки серии
+    const fade = st.fading();
+    g.text(tf("Огоньки: {n}", { n: st.points }), 416, GROUND_TITLE * 2 + 6, 8, fade ? "rgb(255,120,90)" : "rgb(255,200,110)", "center");
+    if (fade) g.text("пламя гаснет!", 416, GROUND_TITLE * 2 + 18, 8, "rgb(255,120,90)", "center");
+    if (this.popup) this.drawPopup();
+  }
+  /** Окно серии огоньков: костёр, огоньки, последние 7 дней и что делать дальше. */
+  drawPopup() {
+    const g = this.game, P = g.portrait, st = g.profile.streak, t = g.time, c = g.ctx;
+    const today = dayKey(), lit = st.litToday(today), fade = st.fading(today), out = st.points <= 0 && st.lost > 0;
+    c.fillStyle = "rgba(4,2,8,0.78)";
+    c.fillRect(0, 0, W, g.H);
+    const [x, y, w, h] = P ? [28, 110, W - 56, Math.min(g.H - 180, 820)] : [120, 14, 400, 332];
+    g.rect([x, y, w, h], "rgba(18,12,20,0.97)");
+    c.strokeStyle = fade ? "rgb(200,80,60)" : out ? "rgb(110,110,120)" : COL.gold;
+    c.lineWidth = P ? 3 : 2;
+    c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    c.lineWidth = 1;
+    const cx = x + w / 2, fs = P ? 16 : 8;
+    let yy = y + (P ? 24 : 12);
+    g.text("СЕРИЯ ОГОНЬКОВ", cx, yy, P ? 32 : 16, COL.gold, "center");
+    yy += P ? 54 : 26;
+    // костёр крупно
+    const fireK = P ? 6.5 : 2.5, ground = yy + (P ? 250 : 76);
+    c.imageSmoothingEnabled = false;
+    drawStreakFire(c, st, cx, ground, t, fireK);
+    yy = ground + (P ? 14 : 8);
+    const big = `${st.points}`;
+    g.text(big, cx, yy, P ? 64 : 32, out ? COL.dim : fade ? "rgb(255,120,90)" : "rgb(255,200,110)", "center");
+    yy += P ? 72 : 36;
+    g.text(tf("огоньков в серии · дней подряд: {d}", { d: st.days }), cx, yy, fs, COL.text, "center");
+    yy += P ? 26 : 14;
+    g.text(tf("Рекорд: {b}", { b: st.best }), cx, yy, fs, COL.dim, "center");
+    yy += P ? 40 : 20;
+    // последние 7 дней: сегодня — справа
+    const DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], bw = P ? 64 : 34, gap = P ? 10 : 6;
+    const x0 = cx - (7 * bw + 6 * gap) / 2;
+    for (let i = 0; i < 7; i++) {
+      const key = shiftDay(today, i - 6), pts = st.hist[key] || 0, bx = x0 + i * (bw + gap);
+      const [yr, mo, dd] = key.split("-").map(Number);
+      g.rect([bx, yy, bw, bw], pts ? "rgba(90,40,16,0.9)" : "rgba(30,24,34,0.9)");
+      c.strokeStyle = i === 6 ? (lit ? COL.gold : "rgb(255,120,90)") : "rgb(70,56,60)";
+      c.strokeRect(bx + 0.5, yy + 0.5, bw - 1, bw - 1);
+      if (pts) {
+        const f = anim("bonfire", t + i * 0.13, 8, 4), k = P ? 2 : 1;
+        c.drawImage(f, bx + (bw - f.width * k) / 2, yy + bw - 4 - f.height * k, f.width * k, f.height * k);
+        if (pts > 1) g.text("x2", bx + bw - 3, yy + 3, P ? 12 : 8, "rgb(255,230,160)", "right");
+      }
+      g.text(DAYS[new Date(yr, mo - 1, dd).getDay()], bx + bw / 2, yy + bw + (P ? 6 : 3), P ? 12 : 8, i === 6 ? COL.text : COL.dim, "center");
+    }
+    yy += bw + (P ? 40 : 18);
+    // что сейчас с пламенем
+    let msg, col = COL.text;
+    if (out) [msg, col] = [tf("Пламя погасло: серия из {n} огоньков сгорела. Победите врага — зажгите новый огонёк!", { n: st.lost }), "rgb(190,190,200)"];
+    else if (lit) [msg, col] = ["Огонёк сегодня горит! Приходите завтра, чтобы пламя не погасло.", "rgb(150,240,150)"];
+    else if (fade) [msg, col] = ["Пламя гаснет! Победите врага сегодня, иначе серия сгорит.", "rgb(255,120,90)"];
+    else msg = "Победите врага — зажгите первый огонёк. Босс даёт 2 огонька.";
+    for (const line of g.wrap(msg, P ? 32 : 46)) {
+      g.text(line, cx, yy, fs, col, "center");
+      yy += P ? 24 : 12;
+    }
+    yy += P ? 12 : 6;
+    const tier = st.tier, next = FLAME_TIERS[tier + 1];
+    const tierText = next ? tf("Пламя: {name}. До «{next}» — {n}", { name: tr(FLAME_TIERS[tier][1]), next: tr(next[1]), n: next[0] - st.points })
+      : tf("Пламя: {name} — сильнее не бывает!", { name: tr(FLAME_TIERS[tier][1]) });
+    g.text(tierText, cx, yy, fs, COL.gold, "center");
+    g.text("Враг — 1 огонёк в день, босс — 2", cx, y + h - (P ? 64 : 30), P ? 12 : 8, COL.dim, "center");
+    if (this.popupT > 0.4) g.text("Касание — продолжить", cx, y + h - (P ? 34 : 16), P ? 14 : 8, `rgba(220,210,196,${0.6 + 0.4 * Math.sin(t * 4)})`, "center");
   }
 }
 
@@ -985,6 +1095,8 @@ class ProfileScene extends Scene {
       rows.push(["Медали дуэлей", `${acc.medals || 0}`, A]);
       rows.push(["Лестница вызовов", `#${acc.arena_pos}`, B]);
     }
+    const st = g.profile.streak;
+    rows.push(["Серия огоньков", tf("{n} · дней подряд: {d} · рекорд {b}", { n: st.points, d: st.days, b: st.best }), "rgb(255,200,110)"]);
     rows.push(["Пепел · камни", `${p.souls} · ${tr("алые")} ${p.redGems} · ${tr("синие")} ${p.blueGems}`, COL.text]);
     rows.push(["Снаряжение", `${tr(p.weapon.name)}${p.armor ? ` · ${tr(RELICS[p.armor].name)}` : ""}`, COL.text]);
     if (g.mode === "cam") { // аура — за время в планке
@@ -1694,6 +1806,12 @@ class BattleScene extends Scene {
     p.save();
     this.saveRun();
     this.game.recordProgress();
+    const st = this.game.profile.streak, lit = st.award(en.boss); // огонёк дня: враг — 1, босс — 2
+    this.streakLine = "";
+    if (lit.add) {
+      this.game.profile.save();
+      this.streakLine = tf(lit.fresh ? "Огонёк дня зажжён! +{n} · в серии {p}" : "Пламя разгорается! +{n} · в серии {p}", { n: lit.add, p: st.points });
+    }
     const style = this.game.style("victory");
     if (style) { // купленное оформление победы
       this.victory = new VictoryFx(style);
@@ -2124,6 +2242,7 @@ class BattleScene extends Scene {
         loot: `+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`,
         hint: this.autoHint(),
       });
+      if (this.streakLine) g.text(this.streakLine, W / 2, 8, 8, "rgb(255,200,110)", "center");
     } else if (this.result) {
       g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
@@ -2135,6 +2254,7 @@ class BattleScene extends Scene {
         g.text(en.boss ? "БОСС ПОВЕРЖЕН" : "ВРАГ ПОВЕРЖЕН", W / 2, g.gameH / 2 - 28, 32, COL.gold, "center");
         g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, g.gameH / 2 + 12, 8, COL.gold, "center");
         g.text(this.autoHint(), W / 2, g.gameH / 2 + 26, 8, COL.text, "center");
+        if (this.streakLine) g.text(this.streakLine, W / 2, g.gameH / 2 + 37, 8, "rgb(255,200,110)", "center");
       }
     }
   }
