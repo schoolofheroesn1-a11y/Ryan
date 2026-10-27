@@ -469,7 +469,10 @@ class Game {
       p.wave = Math.max(p.wave, locationStart(loc));
       this.say(tf("Тест: {loc} (#{n})", { loc: LOCATIONS[loc].name, n: p.wave }));
     }
-    if (["F2", "F3", "F4"].some((k) => this.codes.includes(k))) p.save();
+    if (["F2", "F3", "F4"].some((k) => this.codes.includes(k))) {
+      p.frontier = Math.max(p.frontier, p.wave);
+      p.save();
+    }
   }
 
   say(text, t = 2.5) {
@@ -805,7 +808,7 @@ class TitleScene extends Scene {
     this.index = 0;
     const g = game;
     this.items = [
-      ["Продолжить путь", () => g.change(new BattleScene(g))],
+      ["Карта приключений", () => g.change(new MapScene(g))],
       ["Костёр: прокачка", () => g.change(new BonfireScene(g))],
       ["Лавка образов", () => g.change(new CosmeticsScene(g))],
       ["Мультиплеер", () => g.change(new MultiplayerScene(g))],
@@ -1040,6 +1043,220 @@ class TitleScene extends Scene {
     g.text(tierText, cx, yy, fs, COL.gold, "center");
     g.text("Враг — 1 огонёк в день, босс — 2", cx, y + h - (P ? 64 : 30), P ? 12 : 8, COL.dim, "center");
     if (this.popupT > 0.4) g.text("Касание — продолжить", cx, y + h - (P ? 34 : 16), P ? 14 : 8, `rgba(220,210,196,${0.6 + 0.4 * Math.sin(t * 4)})`, "center");
+  }
+}
+
+// ------------------------------------------------------------------ Карта приключений
+const MAP_BOSS = { 1: "boss", 2: "chief", 3: "wraith", 4: "seraph" }; // кто сторожит землю (спрайт)
+const MAP_SLOTS = 8; // 4 земли открыты, ещё 4 — в будущих обновлениях («?»)
+const MAP_ROUNDS = 15; // раундов в земле: 3 по 5, каждый пятый — босс
+
+/** Карта: тапнул землю — выбрал раунд — в бой. Пройденные раунды можно переиграть (без синих камней и новых боссов). */
+class MapScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.ownsPanel = true;
+    this.pick = null; // выбранная земля: окно с раундами
+    this.msg = "";
+    this.msgT = 0;
+  }
+  get player() {
+    return this.game.player;
+  }
+  /** Центры земель по порядку пути и размер рамки. Горизонтально — змейкой в 2 ряда, вертикально — в 4. */
+  layout() {
+    const g = this.game;
+    if (!g.portrait) {
+      const xs = [90, 250, 410, 570];
+      return { fw: 128, fh: 72, spots: Array.from({ length: MAP_SLOTS }, (_, i) => [i < 4 ? xs[i] : xs[7 - i], i < 4 ? 104 : 228]) };
+    }
+    const top = 190, step = Math.min(250, Math.floor((g.H - top - 300) / 3));
+    const xs = [170, 470];
+    return { fw: 240, fh: 135, spots: Array.from({ length: MAP_SLOTS }, (_, i) => {
+      const row = Math.floor(i / 2), col = row % 2 ? 1 - (i % 2) : i % 2;
+      return [xs[col], top + row * step];
+    }) };
+  }
+  frame(i) {
+    const { fw, fh, spots } = this.layout(), [x, y] = spots[i];
+    return [x - fw / 2, y - fh / 2, fw, fh];
+  }
+  /** Раунды земли: первые три земли — по 15, Бездна бесконечна — окно из 15 вокруг передовой. */
+  rounds(loc) {
+    const p = this.player;
+    let start = locationStart(loc);
+    if (loc === LAST_LOCATION) start = Math.max(start, Math.ceil(p.frontier / BOSS_EVERY) * BOSS_EVERY - MAP_ROUNDS + 1);
+    return Array.from({ length: MAP_ROUNDS }, (_, i) => start + i);
+  }
+  open(loc) {
+    return locationStart(loc) <= this.player.frontier;
+  }
+  buttons() {
+    const g = this.game;
+    if (g.portrait) return { go: [40, g.H - 220, W - 80, 90], back: [40, g.H - 116, W - 80, 80] };
+    return { go: [150, GAME_H - 42, 300, 32], back: [470, GAME_H - 42, 150, 32] };
+  }
+  /** Окно раундов: рамка и клетки 5×3. */
+  pickLayout() {
+    const g = this.game, P = g.portrait;
+    const box = P ? [30, 220, W - 60, 660] : [90, 34, 460, 290];
+    const cw = P ? 100 : 72, ch = P ? 110 : 50, gap = P ? 12 : 10;
+    const x0 = box[0] + (box[2] - (5 * cw + 4 * gap)) / 2, y0 = box[1] + (P ? 150 : 64);
+    const cells = this.rounds(this.pick).map((w, i) => [w, [x0 + (i % 5) * (cw + gap), y0 + Math.floor(i / 5) * (ch + gap), cw, ch]]);
+    const close = P ? [box[0] + 40, box[1] + box[3] - 110, box[2] - 80, 80] : [box[0] + 150, box[1] + box[3] - 40, 160, 28];
+    return { box, cells, close };
+  }
+  fight(wave) {
+    const g = this.game, p = this.player;
+    if (wave !== p.wave) {
+      p.wave = wave;
+      g.run = null; // другой раунд — бой с начала
+      p.save();
+    }
+    sfx.click();
+    g.change(new BattleScene(g));
+  }
+  say(msg) {
+    this.msg = msg;
+    this.msgT = 2.5;
+  }
+  handle() {
+    const g = this.game, p = this.player;
+    if (this.pick) {
+      const L = this.pickLayout();
+      for (const [w, r] of L.cells) {
+        if (!g.tapped(r)) continue;
+        if (w > p.frontier) { sfx.deny(); this.say(tf("Сначала пройдите раунд {n}", { n: p.frontier })); return; }
+        return this.fight(w);
+      }
+      if (g.key("Escape") || g.tapped(L.close) || g.taps.some((t) => !inRect(t, L.box))) {
+        g.taps.length = 0;
+        this.pick = null;
+        sfx.click();
+      }
+      if (g.key("Enter", " ")) return this.fight(Math.min(p.frontier, this.rounds(this.pick)[MAP_ROUNDS - 1]));
+      return;
+    }
+    const b = this.buttons();
+    if (g.key("Escape") || g.tapped(b.back)) { sfx.click(); return g.change(new TitleScene(g)); }
+    if (g.key("Enter", " ") || g.tapped(b.go)) return this.fight(p.wave);
+    for (let i = 0; i < MAP_SLOTS; i++) {
+      if (!g.tapped(this.frame(i))) continue;
+      const loc = i + 1;
+      if (!LOCATIONS[loc]) { sfx.deny(); return this.say("Эта земля откроется в будущих обновлениях"); }
+      if (!this.open(loc)) { sfx.deny(); return this.say(tf("Закрыто: победите босса раунда {n}", { n: locationStart(loc) - 1 })); }
+      sfx.click();
+      this.pick = loc;
+    }
+  }
+  update(dt) {
+    this.msgT -= dt;
+  }
+  draw(c) {
+    c.drawImage(IMG.title_bg, 0, 0);
+  }
+  drawUi() {
+    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player;
+    c.fillStyle = "rgb(14,10,16)";
+    c.fillRect(0, 0, W, g.H);
+    c.imageSmoothingEnabled = false;
+    g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2, P ? 40 : 10, P ? 32 : 16, COL.gold, "center");
+    g.text(tf("Передовая: раунд {n}", { n: p.frontier }), W / 2, P ? 86 : 32, P ? 16 : 8, COL.dim, "center");
+    const { spots } = this.layout(), cur = locationFor(p.wave);
+    // путь между землями: пунктир, к закрытым — бледнее
+    for (let i = 0; i + 1 < MAP_SLOTS; i++) {
+      const [x0, y0] = spots[i], [x1, y1] = spots[i + 1], n = Math.round(Math.hypot(x1 - x0, y1 - y0) / (P ? 16 : 9));
+      const lit = LOCATIONS[i + 2] && this.open(i + 2);
+      c.fillStyle = lit ? "rgb(150,110,70)" : "rgb(60,50,56)";
+      for (let k = 1; k < n; k += 2) {
+        const s = P ? 5 : 3;
+        c.fillRect(Math.round(x0 + (x1 - x0) * k / n) - s / 2, Math.round(y0 + (y1 - y0) * k / n) - s / 2, s, s);
+      }
+    }
+    for (let i = 0; i < MAP_SLOTS; i++) this.drawSpot(i, i + 1 === cur);
+    const b = this.buttons();
+    g.button(b.go, tf("В БОЙ: раунд {n}", { n: p.wave }), { size: P ? 24 : 12, ...GO_STYLE });
+    g.button(b.back, "НАЗАД", { size: P ? 24 : 12 });
+    if (this.pick) this.drawPick();
+    if (this.msgT > 0) {
+      const y = P ? g.H - 270 : GAME_H - 62;
+      g.rect([0, y - 4, W, P ? 30 : 16], "rgba(0,0,0,0.75)");
+      g.text(this.msg, W / 2, y, P ? 16 : 8, "rgb(255,140,110)", "center");
+    }
+  }
+  /** Земля на карте: картинка локации в рамке, босс в углу, подпись; будущие — туман и «?». */
+  drawSpot(i, here) {
+    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player;
+    const loc = i + 1, L = LOCATIONS[loc], [x, y, w, h] = this.frame(i), fs = P ? 14 : 8;
+    if (!L) { // будущая земля
+      g.rect([x, y, w, h], "rgb(26,22,30)");
+      for (let k = 0; k < 6; k++) { // туман
+        c.fillStyle = `rgba(90,84,100,${0.08 + 0.04 * Math.sin(t + k)})`;
+        c.fillRect(x + ((k * 37 + t * 6) % w), y + (k * 13) % h, w / 3, h / 4);
+      }
+      c.strokeStyle = "rgb(70,62,74)";
+      c.setLineDash([P ? 8 : 4, P ? 6 : 3]);
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      c.setLineDash([]);
+      g.text("?", x + w / 2, y + h / 2 - (P ? 28 : 14), P ? 56 : 28, `rgba(200,190,210,${0.6 + 0.25 * Math.sin(t * 2 + i)})`, "center");
+      g.text("Скоро", x + w / 2, y + h + (P ? 8 : 4), fs, COL.dim, "center");
+      return;
+    }
+    const open = this.open(loc), rs = this.rounds(loc);
+    const bg = IMG[L.bg];
+    c.drawImage(bg, 40, 30, 240, 135, x, y, w, h);
+    const boss = IMG[`${MAP_BOSS[loc]}_idle_0`];
+    if (boss) { // страж земли — в правом нижнем углу
+      const k = P ? 2 : 1, bh = Math.min(boss.height * k, h - 6), bw = boss.width * bh / boss.height;
+      c.drawImage(boss, x + w - bw - 4, y + h - bh - 2, bw, bh);
+    }
+    const done = p.frontier > rs[MAP_ROUNDS - 1] && loc !== LAST_LOCATION;
+    if (!open) {
+      g.rect([x, y, w, h], "rgba(0,0,0,0.7)");
+      g.text("ЗАКРЫТО", x + w / 2, y + h / 2 - fs, fs, COL.dim, "center");
+      g.text(tf("после раунда {n}", { n: locationStart(loc) - 1 }), x + w / 2, y + h / 2 + fs / 2, P ? 12 : 8, COL.dim, "center");
+    }
+    if (done) { // значок «пройдено» в углу рамки
+      const bw = P ? 110 : 64, bh = P ? 24 : 12;
+      g.rect([x + w - bw - 2, y + 2, bw, bh], "rgba(20,50,20,0.9)");
+      g.text("ПРОЙДЕНО", x + w - bw / 2 - 2, y + 2 + (P ? 5 : 2), P ? 12 : 8, "rgb(150,230,140)", "center");
+    }
+    c.strokeStyle = here ? COL.gold : done ? "rgb(110,170,100)" : open ? "rgb(140,110,80)" : "rgb(60,52,58)";
+    c.lineWidth = here ? (P ? 4 : 2) : P ? 2 : 1;
+    c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    c.lineWidth = 1;
+    g.text(L.name, x + w / 2, y + h + (P ? 8 : 4), fs, open ? COL.text : COL.dim, "center");
+    const range = loc === LAST_LOCATION ? `${locationStart(loc)}+` : `${rs[0]}–${rs[MAP_ROUNDS - 1]}`;
+    g.text(tf("раунды {r}", { r: range }), x + w / 2, y + h + (P ? 28 : 14), P ? 12 : 8, done ? "rgb(150,220,140)" : COL.dim, "center");
+    if (here) { // герой стоит на своей земле
+      const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, t, 1.5, 2), k = P ? 2 : 1;
+      c.drawImage(spr, x + 4, y + h - 2 - spr.height * k - Math.round(Math.abs(Math.sin(t * 3)) * 2 * k), spr.width * k, spr.height * k);
+    }
+  }
+  /** Окно выбора раунда в земле. */
+  drawPick() {
+    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player, L = this.pickLayout();
+    c.fillStyle = "rgba(4,2,8,0.75)";
+    c.fillRect(0, 0, W, g.H);
+    const [x, y, w, h] = L.box;
+    g.rect(L.box, "rgba(20,14,22,0.98)");
+    c.strokeStyle = COL.gold;
+    c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    g.text(tr(LOCATIONS[this.pick].name).toUpperCase(), x + w / 2, y + (P ? 30 : 12), P ? 28 : 16, COL.gold, "center");
+    g.text("Выберите раунд. Каждый пятый — босс", x + w / 2, y + (P ? 80 : 36), P ? 14 : 8, COL.dim, "center");
+    for (const [wv, [cx, cy, cw, ch]] of L.cells) {
+      const boss = isBossWave(wv), locked = wv > p.frontier, front = wv === p.frontier, cur = wv === p.wave;
+      g.rect([cx, cy, cw, ch], locked ? "rgba(26,22,30,0.9)" : front ? "rgba(80,56,20,0.95)" : boss ? "rgba(60,16,18,0.95)" : "rgba(30,44,30,0.95)");
+      c.strokeStyle = cur ? COL.gold : front ? `rgba(255,210,120,${0.6 + 0.4 * Math.sin(t * 5)})` : "rgb(80,66,62)";
+      c.lineWidth = cur || front ? (P ? 3 : 2) : 1;
+      c.strokeRect(cx + 0.5, cy + 0.5, cw - 1, ch - 1);
+      c.lineWidth = 1;
+      g.text(`${wv}`, cx + cw / 2, cy + (P ? 14 : 6), P ? 24 : 12, locked ? COL.dim : boss ? "rgb(255,120,100)" : COL.text, "center");
+      const note = locked ? "закрыто" : front ? "новый" : boss ? "БОСС" : "пройден";
+      g.text(note, cx + cw / 2, cy + ch - (P ? 30 : 14), P ? 12 : 8,
+        locked ? "rgb(90,84,96)" : front ? COL.gold : boss ? "rgb(255,120,100)" : "rgb(140,200,130)", "center");
+    }
+    g.button(L.close, "ЗАКРЫТЬ", { size: P ? 24 : 12 });
   }
 }
 
@@ -1592,7 +1809,7 @@ class BattleScene extends Scene {
     this.enemy = new Skeleton(p.wave);
     if (game.hard) this.enemy.makeHard(); // хардкор (без камеры — всегда)
     this.location = locationFor(p.wave);
-    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave); // первый бой на новой земле
+    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave) && p.wave === p.frontier; // первый бой на новой земле
     this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
     this.burnT = 0;
     this.ghosts = []; // призрачное пламя Короля-Призрака
@@ -1792,7 +2009,9 @@ class BattleScene extends Scene {
     en.set("dead", 0);
     this.result = "won";
     this.resultT = 0;
+    const first = en.wave >= p.frontier; // впервые (не повтор пройденного раунда с карты)
     let [ash, red, blue] = rewards(en.wave);
+    if (!first) blue = 0; // синие камни за босса — только за первую победу
     if (p.lostSouls && p.lostAtWave === en.wave) {
       ash += p.lostSouls;
       p.lostSouls = 0;
@@ -1802,7 +2021,8 @@ class BattleScene extends Scene {
     p.blueGems += blue;
     this.reward = [ash, red, blue];
     p.wave += 1;
-    if (en.boss) p.bossesDefeated += 1;
+    p.frontier = Math.max(p.frontier, p.wave);
+    if (en.boss && first) p.bossesDefeated += 1; // в рейтинг — только новые боссы
     p.save();
     this.saveRun();
     this.game.recordProgress();
@@ -4094,4 +4314,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
+export { MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };

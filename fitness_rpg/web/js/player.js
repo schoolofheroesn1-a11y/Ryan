@@ -45,7 +45,8 @@ export class Player {
     this.vigor = 1;
     this.endurance = 1;
     this.souls = 100; // пепел — валюта прокачки (поле зовётся souls ради старых сохранений)
-    this.wave = 1;
+    this.wave = 1; // раунд следующего боя (на карте можно вернуться в пройденные земли)
+    this.frontier = 1; // передовая: самый дальний открытый раунд
     this.lostSouls = 0;
     this.lostAtWave = 0;
     this.totalReps = { pushup: 0, squat: 0, jack: 0 };
@@ -62,6 +63,7 @@ export class Player {
     this.plankSeconds = 0; // аура: сколько секунд простоял в планке (только с камерой, не сбрасывается)
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
+    this.frontier = Math.max(Number(this.frontier) || 1, this.wave);
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
     if (!this.owned.includes("rusty")) this.owned.unshift("rusty");
     if (!SWORDS[this.sword] || !this.owned.includes(this.sword)) this.sword = "rusty";
