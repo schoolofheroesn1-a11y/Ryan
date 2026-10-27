@@ -1,19 +1,109 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+
+// ---------------------------------------------------------------------------
+// Shared portfolio storage
+// Teachers, students and parents all read/write the same JSON store so that
+// uploads made in one portal show up in the others.
+// ---------------------------------------------------------------------------
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const STORE_FILE = path.join(DATA_DIR, 'store.json');
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// Only document / image types are accepted so uploaded files can never be served as executable HTML or SVG
+const ALLOWED_EXTENSIONS = new Set([
+  'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'odt', 'ods', 'odp',
+]);
+
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+interface StoreShape {
+  revision: number;
+  students: unknown[] | null;
+  alerts: unknown[] | null;
+}
+
+function readStore(): StoreShape {
+  try {
+    return JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
+  } catch {
+    return { revision: 0, students: null, alerts: null };
+  }
+}
+
+function writeStore(store: StoreShape) {
+  const tmp = `${STORE_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(store));
+  fs.renameSync(tmp, STORE_FILE);
+}
+
+app.get('/api/state', (_req: Request, res: Response) => {
+  res.json(readStore());
+});
+
+app.get('/api/state/revision', (_req: Request, res: Response) => {
+  res.json({ revision: readStore().revision });
+});
+
+app.put('/api/state', (req: Request, res: Response) => {
+  const { students, alerts } = req.body || {};
+  if (!Array.isArray(students) || !Array.isArray(alerts)) {
+    return res.status(400).json({ error: 'students and alerts must be arrays' });
+  }
+  const store = readStore();
+  const next = { revision: store.revision + 1, students, alerts };
+  writeStore(next);
+  res.json({ revision: next.revision });
+});
+
+app.post('/api/files', (req: Request, res: Response) => {
+  const { name, dataBase64 } = req.body || {};
+  if (typeof name !== 'string' || typeof dataBase64 !== 'string') {
+    return res.status(400).json({ error: 'name and dataBase64 are required' });
+  }
+  const ext = path.extname(name).slice(1).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return res.status(400).json({ error: `.${ext || '?'} files are not allowed` });
+  }
+  const buffer = Buffer.from(dataBase64, 'base64');
+  if (buffer.length === 0 || buffer.length > MAX_UPLOAD_BYTES) {
+    return res.status(400).json({ error: 'File must be between 1 byte and 10 MB' });
+  }
+  const safeBase = path.basename(name, path.extname(name)).replace(/[^\w-]+/g, '_').slice(0, 60) || 'file';
+  const storedName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeBase}.${ext}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, storedName), buffer);
+  res.json({ url: `/uploads/${storedName}`, size: buffer.length });
+});
+
+app.delete('/api/files/:storedName', (req: Request, res: Response) => {
+  const { storedName } = req.params;
+  if (!/^[\w.-]+$/.test(storedName)) {
+    return res.status(400).json({ error: 'Invalid file name' });
+  }
+  fs.rm(path.join(UPLOADS_DIR, storedName), { force: true }, () => res.json({ ok: true }));
+});
+
+app.use(
+  '/uploads',
+  express.static(UPLOADS_DIR, {
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  })
+);
 
 // Helper for Gemini AI client with telemetry header
 function getGeminiClient(): GoogleGenAI | null {

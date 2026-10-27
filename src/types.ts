@@ -1,4 +1,4 @@
-export type Role = 'teacher' | 'parent';
+export type Role = 'teacher' | 'parent' | 'student';
 
 export type GradeCategory = 'Homework' | 'Quiz' | 'Exam' | 'Project' | 'Lab';
 export type AssignmentStatus = 'Graded' | 'Pending' | 'Late' | 'Missing';
@@ -76,6 +76,35 @@ export interface Student {
   goals: AcademicGoal[];
   messages: MessageLog[];
   teacherNotes: string[];
+  portfolioFiles?: PortfolioFile[];
+  progressTables?: ProgressTable[];
+}
+
+export type PortfolioFileCategory = 'Task' | 'Exam' | 'Project' | 'Certificate' | 'Report' | 'Other';
+
+export interface PortfolioFile {
+  id: string;
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number; // bytes
+  category: PortfolioFileCategory;
+  subjectId?: string;
+  description?: string;
+  uploadedAt: string; // ISO timestamp
+  uploadedBy: Role;
+}
+
+// A free-form table uploaded from a CSV / Excel file (reading logs, behaviour charts, test breakdowns...)
+export interface ProgressTable {
+  id: string;
+  title: string;
+  description?: string;
+  columns: string[];
+  rows: string[][];
+  sourceFileName?: string;
+  uploadedAt: string;
+  uploadedBy: Role;
 }
 
 export interface RealtimeAlert {

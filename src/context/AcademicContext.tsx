@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import confetti from 'canvas-confetti';
 import {
   Student,
@@ -8,7 +8,11 @@ import {
   AttendanceStatus,
   AcademicGoal,
   MessageLog,
+  PortfolioFile,
+  ProgressTable,
+  Subject,
 } from '../types';
+import { GradebookRow } from '../lib/tableImport';
 import { INITIAL_STUDENTS, INITIAL_ALERTS } from '../data/mockData';
 import {
   calculateSubjectScore,
@@ -17,6 +21,30 @@ import {
   getTrendDirection,
 } from '../lib/calculations';
 
+export type SyncStatus = 'connecting' | 'synced' | 'saving' | 'offline';
+
+export interface GradebookImportSummary {
+  added: number;
+  updated: number;
+  newSubjects: string[];
+  newStudents: string[];
+}
+
+const SUBJECT_COLORS = ['indigo', 'emerald', 'amber', 'sky', 'teal', 'rose', 'violet', 'orange'];
+
+// Self-contained initials avatar so student names are never sent to an external avatar service
+function initialsAvatar(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || '')
+    .join('')
+    .replace(/[^A-Z0-9]/g, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" fill="#4f46e5"/><text x="50%" y="50%" dy=".35em" text-anchor="middle" font-family="sans-serif" font-size="38" font-weight="700" fill="#fff">${initials}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 interface AcademicContextType {
   role: Role;
   setRole: (role: Role) => void;
@@ -24,6 +52,8 @@ interface AcademicContextType {
   selectedStudentId: string;
   setSelectedStudentId: (id: string) => void;
   selectedStudent: Student;
+  // Students the current portal may see: teacher = everyone, parent = the selected child's family, student = themself
+  visibleStudents: Student[];
   alerts: RealtimeAlert[];
   unreadAlertCount: number;
   liveToast: { title: string; message: string; type: 'grade' | 'attendance' | 'milestone' | 'info' } | null;
@@ -57,6 +87,19 @@ interface AcademicContextType {
   clearAllAlerts: () => void;
   simulateLiveUpdate: () => void;
   resetToDefaults: () => void;
+  syncStatus: SyncStatus;
+  addStudent: (data: {
+    name: string;
+    gradeLevel: string;
+    studentIdNumber?: string;
+    parentName?: string;
+    parentEmail?: string;
+  }) => string;
+  importGradebook: (rows: GradebookRow[], fallbackStudentId: string) => GradebookImportSummary;
+  addProgressTable: (studentId: string, table: Omit<ProgressTable, 'id' | 'uploadedAt'>) => void;
+  removeProgressTable: (studentId: string, tableId: string) => void;
+  addPortfolioFile: (studentId: string, file: Omit<PortfolioFile, 'id' | 'uploadedAt'>) => void;
+  removePortfolioFile: (studentId: string, fileId: string) => void;
 }
 
 const AcademicContext = createContext<AcademicContextType | undefined>(undefined);
@@ -69,7 +112,7 @@ const LOCAL_STORAGE_KEY_STUDENT_ID = 'academic_tracker_student_id_v1';
 export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [role, setRoleState] = useState<Role>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY_ROLE);
-    return saved === 'parent' ? 'parent' : 'teacher';
+    return saved === 'parent' || saved === 'student' ? saved : 'teacher';
   });
 
   const [students, setStudents] = useState<Student[]>(() => {
@@ -116,14 +159,93 @@ export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }
     localStorage.setItem(LOCAL_STORAGE_KEY_ALERTS, JSON.stringify(alerts));
   }, [alerts]);
 
+  // Shared server store: every portal (teacher / student / parent) reads and writes the same data.
+  // localStorage above remains as an offline cache.
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('connecting');
+  const serverReadyRef = useRef(false);
+  const revisionRef = useRef(0);
+  const skipNextSaveRef = useRef(false);
+  const savePendingRef = useRef(false);
+  const latestStateRef = useRef({ students, alerts });
+  latestStateRef.current = { students, alerts };
+
+  const pushState = async () => {
+    const res = await fetch('/api/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(latestStateRef.current),
+    });
+    if (!res.ok) throw new Error(`Save failed (${res.status})`);
+    const { revision } = await res.json();
+    revisionRef.current = revision;
+  };
+
+  const applyServerState = (store: { revision: number; students: Student[]; alerts: RealtimeAlert[] | null }) => {
+    revisionRef.current = store.revision;
+    skipNextSaveRef.current = true;
+    setStudents(store.students);
+    setAlerts(store.alerts || []);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/state')
+      .then((r) => r.json())
+      .then(async (store) => {
+        if (cancelled) return;
+        if (Array.isArray(store.students)) {
+          applyServerState(store);
+        } else {
+          // First run: seed the server with the data this browser already has
+          await pushState();
+        }
+        serverReadyRef.current = true;
+        setSyncStatus('synced');
+      })
+      .catch(() => !cancelled && setSyncStatus('offline'));
+
+    // Pick up changes made from other devices / portals
+    const poll = setInterval(async () => {
+      if (!serverReadyRef.current || savePendingRef.current) return;
+      try {
+        const { revision } = await (await fetch('/api/state/revision')).json();
+        if (revision > revisionRef.current && !savePendingRef.current) {
+          const store = await (await fetch('/api/state')).json();
+          if (Array.isArray(store.students) && !savePendingRef.current) applyServerState(store);
+        }
+      } catch {
+        setSyncStatus('offline');
+      }
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!serverReadyRef.current) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    savePendingRef.current = true;
+    setSyncStatus('saving');
+    const timer = setTimeout(() => {
+      pushState()
+        .then(() => setSyncStatus('synced'))
+        .catch(() => setSyncStatus('offline'))
+        .finally(() => {
+          savePendingRef.current = false;
+        });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [students, alerts]);
+
   const setRole = (newRole: Role) => {
     setRoleState(newRole);
     localStorage.setItem(LOCAL_STORAGE_KEY_ROLE, newRole);
-    // If switching to parent, default to student-1 (Leo Vance)
-    if (newRole === 'parent' && selectedStudentId !== 'student-1' && selectedStudentId !== 'student-2') {
-      setSelectedStudentIdState('student-1');
-      localStorage.setItem(LOCAL_STORAGE_KEY_STUDENT_ID, 'student-1');
-    }
   };
 
   const setSelectedStudentId = (id: string) => {
@@ -143,6 +265,13 @@ export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const selectedStudent =
     students.find((s) => s.id === selectedStudentId) || students[0] || INITIAL_STUDENTS[0];
+
+  const visibleStudents =
+    role === 'teacher'
+      ? students
+      : role === 'parent'
+        ? students.filter((s) => s.id === selectedStudent.id || (s.parentName && s.parentName === selectedStudent.parentName))
+        : [selectedStudent];
 
   const updateAssignmentScore = (
     studentId: string,
@@ -447,6 +576,178 @@ export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }
     triggerToast('Data Reset', 'All academic tracking data returned to starting state.', 'info');
   };
 
+  const pushAlert = (studentId: string, studentName: string, title: string, message: string) => {
+    const newAlert: RealtimeAlert = {
+      id: `alert-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toLocaleString(),
+      type: 'milestone',
+      studentId,
+      studentName,
+      title,
+      message,
+      read: false,
+    };
+    setAlerts((prev) => [newAlert, ...prev]);
+  };
+
+  const recalcSubject = (sub: Subject): Subject => {
+    const { score, letterGrade } = calculateSubjectScore(sub);
+    return {
+      ...sub,
+      previousScore: sub.currentScore,
+      currentScore: score,
+      letterGrade,
+      trend: getTrendDirection(score, sub.currentScore),
+    };
+  };
+
+  const buildStudent = (data: {
+    name: string;
+    gradeLevel: string;
+    studentIdNumber?: string;
+    parentName?: string;
+    parentEmail?: string;
+  }): Student => ({
+    id: `student-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: data.name.trim(),
+    gradeLevel: data.gradeLevel.trim() || 'Unassigned',
+    studentIdNumber: data.studentIdNumber?.trim() || `STU-${Math.floor(1000 + Math.random() * 9000)}`,
+    avatarUrl: initialsAvatar(data.name),
+    parentName: data.parentName?.trim() || '',
+    parentEmail: data.parentEmail?.trim() || '',
+    parentPhone: '',
+    targetGpa: 3.5,
+    overallGpa: 0,
+    attendanceRate: 100,
+    attendanceHistory: [],
+    subjects: [],
+    goals: [],
+    messages: [],
+    teacherNotes: [],
+    portfolioFiles: [],
+    progressTables: [],
+  });
+
+  const addStudent: AcademicContextType['addStudent'] = (data) => {
+    const student = buildStudent(data);
+    setStudents((prev) => [...prev, student]);
+    triggerToast('Student Added', `${student.name} now has a portfolio.`, 'info');
+    return student.id;
+  };
+
+  const importGradebook: AcademicContextType['importGradebook'] = (rows, fallbackStudentId) => {
+    const summary: GradebookImportSummary = { added: 0, updated: 0, newSubjects: [], newStudents: [] };
+    const next = students.map((s) => ({ ...s, subjects: s.subjects.map((sub) => ({ ...sub, assignments: [...sub.assignments] })) }));
+    const touched = new Map<string, Set<string>>(); // studentId -> subjectIds to recalculate
+    const norm = (v: string) => v.trim().toLowerCase();
+
+    for (const row of rows) {
+      let student = row.studentName
+        ? next.find((s) => norm(s.name) === norm(row.studentName!) || norm(s.studentIdNumber) === norm(row.studentName!))
+        : next.find((s) => s.id === fallbackStudentId);
+      if (!student && row.studentName) {
+        student = buildStudent({ name: row.studentName, gradeLevel: '' });
+        next.push(student);
+        summary.newStudents.push(student.name);
+      }
+      if (!student) continue;
+
+      let subject = student.subjects.find(
+        (sub) => norm(sub.name) === norm(row.subjectName) || norm(sub.code) === norm(row.subjectName)
+      );
+      if (!subject) {
+        subject = {
+          id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: row.subjectName,
+          code: row.subjectName.slice(0, 4).toUpperCase(),
+          teacherName: '',
+          teacherEmail: '',
+          currentScore: 0,
+          letterGrade: '-',
+          previousScore: 0,
+          trend: 'neutral',
+          color: SUBJECT_COLORS[student.subjects.length % SUBJECT_COLORS.length],
+          assignments: [],
+        };
+        student.subjects.push(subject);
+        summary.newSubjects.push(`${row.subjectName} (${student.name})`);
+      }
+
+      const fields = {
+        title: row.title,
+        category: row.category,
+        score: row.score ?? 0,
+        maxScore: row.maxScore,
+        weight: row.weight,
+        dueDate: row.dueDate,
+        status: row.status,
+        ...(row.status === 'Graded' ? { submittedDate: row.dueDate } : {}),
+        ...(row.feedback ? { feedback: row.feedback } : {}),
+      };
+      const existing = subject.assignments.findIndex((a) => norm(a.title) === norm(row.title));
+      if (existing >= 0) {
+        subject.assignments[existing] = { ...subject.assignments[existing], ...fields };
+        summary.updated++;
+      } else {
+        subject.assignments.unshift({ id: `asg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...fields });
+        summary.added++;
+      }
+
+      if (!touched.has(student.id)) touched.set(student.id, new Set());
+      touched.get(student.id)!.add(subject.id);
+    }
+
+    const result = next.map((s) => {
+      const subIds = touched.get(s.id);
+      if (!subIds) return s;
+      const subjects = s.subjects.map((sub) => (subIds.has(sub.id) ? recalcSubject(sub) : sub));
+      return { ...s, subjects, overallGpa: calculateStudentOverallGpa(subjects) };
+    });
+    setStudents(result);
+
+    for (const [studentId] of touched) {
+      const st = result.find((s) => s.id === studentId)!;
+      pushAlert(studentId, st.name, 'Tasks & Exams Uploaded', `New gradebook results were uploaded for ${st.name}.`);
+    }
+    triggerToast(
+      'Gradebook Imported',
+      `${summary.added} added, ${summary.updated} updated across ${touched.size} student(s).`,
+      'grade'
+    );
+    return summary;
+  };
+
+  const updateStudent = (studentId: string, fn: (s: Student) => Student) =>
+    setStudents((prev) => prev.map((s) => (s.id === studentId ? fn(s) : s)));
+
+  const addProgressTable: AcademicContextType['addProgressTable'] = (studentId, table) => {
+    const newTable: ProgressTable = { ...table, id: `tbl-${Date.now()}`, uploadedAt: new Date().toISOString() };
+    updateStudent(studentId, (s) => ({ ...s, progressTables: [newTable, ...(s.progressTables || [])] }));
+    const name = students.find((s) => s.id === studentId)?.name || 'Student';
+    pushAlert(studentId, name, 'Progress Table Uploaded', `"${table.title}" was added to ${name}'s portfolio.`);
+    triggerToast('Progress Table Added', `"${table.title}" is now visible to the student and parents.`, 'info');
+  };
+
+  const removeProgressTable: AcademicContextType['removeProgressTable'] = (studentId, tableId) => {
+    updateStudent(studentId, (s) => ({ ...s, progressTables: (s.progressTables || []).filter((t) => t.id !== tableId) }));
+  };
+
+  const addPortfolioFile: AcademicContextType['addPortfolioFile'] = (studentId, file) => {
+    const newFile: PortfolioFile = { ...file, id: `file-${Date.now()}`, uploadedAt: new Date().toISOString() };
+    updateStudent(studentId, (s) => ({ ...s, portfolioFiles: [newFile, ...(s.portfolioFiles || [])] }));
+    const name = students.find((s) => s.id === studentId)?.name || 'Student';
+    pushAlert(studentId, name, `New ${file.category} Document`, `"${file.name}" was uploaded to ${name}'s portfolio.`);
+    triggerToast('Document Uploaded', `"${file.name}" added to the portfolio.`, 'info');
+  };
+
+  const removePortfolioFile: AcademicContextType['removePortfolioFile'] = (studentId, fileId) => {
+    const file = students.find((s) => s.id === studentId)?.portfolioFiles?.find((f) => f.id === fileId);
+    if (file?.url.startsWith('/uploads/')) {
+      fetch(`/api/files/${encodeURIComponent(file.url.replace('/uploads/', ''))}`, { method: 'DELETE' }).catch(() => {});
+    }
+    updateStudent(studentId, (s) => ({ ...s, portfolioFiles: (s.portfolioFiles || []).filter((f) => f.id !== fileId) }));
+  };
+
   const unreadAlertCount = alerts.filter((a) => !a.read).length;
 
   return (
@@ -458,6 +759,7 @@ export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }
         selectedStudentId,
         setSelectedStudentId,
         selectedStudent,
+        visibleStudents,
         alerts,
         unreadAlertCount,
         liveToast,
@@ -473,6 +775,13 @@ export const AcademicProvider: React.FC<{ children: ReactNode }> = ({ children }
         clearAllAlerts,
         simulateLiveUpdate,
         resetToDefaults,
+        syncStatus,
+        addStudent,
+        importGradebook,
+        addProgressTable,
+        removeProgressTable,
+        addPortfolioFile,
+        removePortfolioFile,
       }}
     >
       {children}

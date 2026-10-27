@@ -9,15 +9,25 @@ import {
   ChevronDown,
   ShieldCheck,
   Zap,
+  Backpack,
+  Upload,
 } from 'lucide-react';
 import { useAcademic } from '../context/AcademicContext';
 import { Role } from '../types';
 
 interface NavbarProps {
   onOpenReportModal: () => void;
+  onOpenUpload: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
+const SYNC_BADGE = {
+  connecting: { label: 'Connecting', cls: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+  synced: { label: 'Synced', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  saving: { label: 'Saving…', cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  offline: { label: 'Offline (saved on this device)', cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+};
+
+export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal, onOpenUpload }) => {
   const {
     role,
     setRole,
@@ -31,19 +41,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
     clearAllAlerts,
     simulateLiveUpdate,
     resetToDefaults,
+    visibleStudents,
+    syncStatus,
   } = useAcademic();
+  const sync = SYNC_BADGE[syncStatus];
 
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
 
-  // For parent role, filter to children in the family (Leo and Maya)
-  const familyStudents = students.filter(
-    (s) => s.parentName === 'Eleanor Vance' || s.id === 'student-1' || s.id === 'student-2'
-  );
+  // Parents switch between their own children; the student portal can pick any student (no login yet)
+  const pickableStudents = role === 'parent' ? visibleStudents : students;
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3 min-h-16">
           {/* Logo and Brand */}
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
@@ -52,12 +63,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-lg text-slate-900 tracking-tight">AcademiTrack</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
-                  Live Sync
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${sync.cls}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full mr-1 animate-pulse ${sync.dot}`}></span>
+                  {sync.label}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
+              <p className="text-xs text-slate-500 hidden lg:block">
                 Real-Time Student Academic Progress & Analytics
               </p>
             </div>
@@ -75,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
               }`}
             >
               <GraduationCap className="w-4 h-4" />
-              <span>Teacher Portal</span>
+              <span className="hidden sm:inline">Teacher</span>
             </button>
             <button
               id="role-parent-btn"
@@ -87,23 +98,35 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Parent Portal</span>
+              <span className="hidden sm:inline">Parent</span>
+            </button>
+            <button
+              id="role-student-btn"
+              onClick={() => setRole('student')}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-150 ${
+                role === 'student'
+                  ? 'bg-white text-indigo-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Backpack className="w-4 h-4" />
+              <span className="hidden sm:inline">Student</span>
             </button>
           </div>
 
           {/* Right Action Tools */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* If Parent role, Child selector */}
-            {role === 'parent' && (
-              <div className="hidden md:flex items-center space-x-2 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                <span className="text-xs text-slate-500 font-medium">Child:</span>
+            {role !== 'teacher' && (
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">{role === 'parent' ? 'Child:' : 'I am:'}</span>
                 <select
                   id="parent-child-select"
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="text-xs sm:text-sm font-semibold text-slate-800 bg-transparent border-none focus:outline-hidden cursor-pointer"
+                  className="text-xs sm:text-sm font-semibold text-slate-800 bg-transparent border-none focus:outline-hidden cursor-pointer max-w-[11rem] sm:max-w-none"
                 >
-                  {familyStudents.map((child) => (
+                  {pickableStudents.map((child) => (
                     <option key={child.id} value={child.id}>
                       {child.name} ({child.gradeLevel})
                     </option>
@@ -111,6 +134,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
                 </select>
               </div>
             )}
+
+            <button
+              id="open-upload-btn"
+              onClick={onOpenUpload}
+              title="Upload tasks, exams, progress tables or documents"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Upload</span>
+            </button>
 
             {/* Quick Simulate Live Score Entry */}
             <button
@@ -120,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
               className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors"
             >
               <Zap className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="hidden lg:inline">Simulate Live Update</span>
+              <span className="hidden xl:inline whitespace-nowrap">Simulate Live Update</span>
             </button>
 
             {/* Print / Report button */}
@@ -131,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenReportModal }) => {
               className="p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors"
             >
               <Printer className="w-3.5 h-3.5 text-slate-600" />
-              <span className="hidden sm:inline">Progress Report</span>
+              <span className="hidden sm:inline whitespace-nowrap">Progress Report</span>
             </button>
 
             {/* Real-Time Alerts Bell */}

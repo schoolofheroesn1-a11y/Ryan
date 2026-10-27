@@ -5,24 +5,63 @@ import { TeacherDashboard } from './components/teacher/TeacherDashboard';
 import { ParentDashboard } from './components/parent/ParentDashboard';
 import { LiveActivityFeed } from './components/common/LiveActivityFeed';
 import { ProgressReportModal } from './components/common/ProgressReportModal';
+import { UploadCenter, UploadTab } from './components/common/UploadCenter';
+import { PortfolioSection } from './components/common/PortfolioSection';
+import { StudentDashboard } from './components/student/StudentDashboard';
 import { Student } from './types';
-import { ShieldCheck, Activity, GraduationCap } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
-  const { role, selectedStudent } = useAcademic();
+  const { role, students, selectedStudent, setSelectedStudentId } = useAcademic();
   const [reportStudent, setReportStudent] = useState<Student | null>(null);
+  const [uploadTab, setUploadTab] = useState<UploadTab | null>(null);
 
   return (
     <div className="min-h-screen bg-slate-100/60 text-slate-900 flex flex-col font-sans">
-      <Navbar onOpenReportModal={() => setReportStudent(selectedStudent)} />
+      <Navbar
+        onOpenReportModal={() => setReportStudent(selectedStudent)}
+        onOpenUpload={() => setUploadTab(role === 'teacher' ? 'gradebook' : 'document')}
+      />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        {role === 'teacher' ? (
-          <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
-        ) : (
-          <ParentDashboard onOpenReport={(student) => setReportStudent(student)} />
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+        {role === 'teacher' && (
+          <>
+            <TeacherDashboard onOpenReport={(student) => setReportStudent(student)} />
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-bold text-slate-900">Student Portfolios</h2>
+                <select
+                  value={selectedStudent.id}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  className="text-xs font-semibold border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.gradeLevel})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <PortfolioSection student={selectedStudent} onUpload={setUploadTab} />
+            </div>
+          </>
         )}
+        {role === 'parent' && (
+          <>
+            <ParentDashboard onOpenReport={(student) => setReportStudent(student)} />
+            <PortfolioSection student={selectedStudent} onUpload={setUploadTab} />
+          </>
+        )}
+        {role === 'student' && <StudentDashboard onUpload={setUploadTab} />}
       </main>
+
+      {uploadTab && (
+        <UploadCenter
+          key={`${role}-${uploadTab}-${selectedStudent.id}`}
+          isOpen
+          initialTab={uploadTab}
+          onClose={() => setUploadTab(null)}
+        />
+      )}
 
       {/* Floating Live Toast Notifications */}
       <LiveActivityFeed />

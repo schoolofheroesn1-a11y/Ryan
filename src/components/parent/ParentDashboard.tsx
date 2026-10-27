@@ -37,6 +37,7 @@ export const ParentDashboard: React.FC<{ onOpenReport: (student: Student) => voi
     selectedStudentId,
     setSelectedStudentId,
     selectedStudent,
+    visibleStudents,
     toggleGoal,
     addGoal,
     markAttendance,
@@ -68,10 +69,8 @@ export const ParentDashboard: React.FC<{ onOpenReport: (student: Student) => voi
     selectedStudent.subjects[0] || {}
   );
 
-  // Available children in Eleanor Vance's family
-  const familyStudents = students.filter(
-    (s) => s.parentName === 'Eleanor Vance' || s.id === 'student-1' || s.id === 'student-2'
-  );
+  // Children in the selected student's family
+  const familyStudents = visibleStudents;
 
   // Real-time chart data constructed from student subjects
   const timelineData = selectedStudent.subjects.map((sub) => ({
