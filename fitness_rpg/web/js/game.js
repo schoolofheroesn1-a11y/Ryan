@@ -13,6 +13,7 @@ import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx
 import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
 import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
+import { ACH, ACHIEVEMENTS, ACH_CATS, achContext, achProgress, battleEvents, checkAchievements } from "./achievements.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { isNative, keepAwake, openAppSettings, openUrl, restoreBackup, vibrate } from "./platform.js";
@@ -199,6 +200,32 @@ function drawStreakFire(c, streak, cx, ground, t, k = 1, glow = true) {
   c.drawImage(spr, Math.round(cx - w / 2), Math.round(ground - h), Math.round(w), Math.round(h));
   c.restore();
 }
+// Значки категорий достижений 7×7 (k — контур, a — основной цвет, b — блик)
+const ACH_ICON = {
+  fist: [".......", "kk...kk", "kak.kak", "kabbbak", "kak.kak", "kk...kk", "......."], // гантеля
+  flame: ["...k...", "..kak..", ".kaak..", ".kabak.", "kabbbak", "kabbbak", ".kkkkk."],
+  lotus: ["...k...", "..kak..", "k.kak.k", "kakakak", ".kabak.", "kaaaaak", ".kkkkk."],
+  skull: [".kkkkk.", "kaaaaak", "kakakak", "kaaaaak", ".kakak.", ".kaaak.", "..kkk.."],
+  sword: ["......k", ".....ka", "....kak", "k..kak.", ".kkak..", "..kk...", ".k.k..."],
+  medal: ["kk...kk", ".kk.kk.", "..kak..", ".kabak.", "kabbbak", ".kabak.", "..kkk.."],
+  gem: ["..kkk..", ".kabak.", "kabbbak", "kaaaaak", ".kaaak.", "..kak..", "...k..."],
+};
+const ACH_COLOR = { fist: [230, 170, 110], flame: [255, 140, 50], lotus: [255, 230, 160], skull: [220, 214, 200],
+  sword: [170, 200, 230], medal: [232, 190, 92], gem: [150, 200, 255] };
+/** Значок достижения: цветной, если открыто, иначе серый. */
+function drawAchIcon(c, cat, x, y, k, on = true) {
+  const icon = ACH_CATS[cat][1], rows = ACH_ICON[icon], col = on ? ACH_COLOR[icon] : [86, 80, 90];
+  const light = col.map((v) => Math.min(255, v + 50)), dark = on ? [24, 16, 20] : [40, 36, 44];
+  rows.forEach((row, yy) => [...row].forEach((ch, xx) => {
+    if (ch === ".") return;
+    const cc = ch === "k" ? dark : ch === "b" ? light : col;
+    c.fillStyle = `rgb(${cc[0]},${cc[1]},${cc[2]})`;
+    c.fillRect(x + xx * k, y + yy * k, k, k);
+  }));
+}
+/** Название титула (переведённое) по id достижения или "". */
+const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
+
 /** Передовая героя (самый дальний открытый раунд). Старые сохранения (и старый player.js) её не знают —
  *  тогда она не меньше текущего раунда. */
 const frontierOf = (p) => Math.max(Number(p.frontier) || 1, Number(p.wave) || 1);
@@ -278,6 +305,8 @@ class Game {
     this.codes = []; // физические клавиши (e.code) — J/K/L работают на любой раскладке
     this.toast = "";
     this.toastT = 0;
+    this.achQueue = []; // открытые достижения — показываются по одному плашкой сверху
+    this.achT = 0;
     addEventListener("keydown", (e) => {
       if (modalOpen()) return; // открыто окно (имя, покупка) — игра клавиши не слушает
       if (["F2", "F3", "F4", "Space", "ArrowUp", "ArrowDown"].includes(e.code)) e.preventDefault();
@@ -309,6 +338,7 @@ class Game {
     if (this.plankUnsaved && (this.plankUnsaved >= 5 || !plank)) {
       this.plankUnsaved = 0;
       this.player.save();
+      this.checkAch(); // минуты в планке
     }
     this.inPlank = !!plank;
   }
@@ -483,6 +513,52 @@ class Game {
     this.toastT = t;
   }
 
+  /** Проверить достижения (events — подвиги последней победы). Новые — плашкой, звуком и в профиль. */
+  checkAch(events = []) {
+    const acc = this.online.loggedIn ? this.online.account : null;
+    const fresh = checkAchievements(this.profile.ach, achContext(this.player, this.profile, acc), events, dayKey());
+    if (!fresh.length) return fresh;
+    if (!this.profile.title) this.profile.title = fresh[0].id; // первый титул надевается сам
+    this.profile.save();
+    if (fresh.length > 2) this.achQueue.push({ summary: fresh.length, cat: fresh[0].cat }); // разом много — одной плашкой
+    else this.achQueue.push(...fresh);
+    sfx.fanfare();
+    vibrate([40, 30, 40, 30, 80]);
+    this.accountSync(); // титул — в рейтинг
+    return fresh;
+  }
+
+  /** Плашка «Достижение!» сверху экрана. */
+  drawAchBanner(dt) {
+    if (!this.achQueue.length) return;
+    this.achT += dt;
+    if (this.achT > 3.2) {
+      this.achQueue.shift();
+      this.achT = 0;
+      if (!this.achQueue.length) return;
+    }
+    const a = this.achQueue[0], P = this.portrait, c = this.ctx;
+    const w = P ? 560 : 340, h = P ? 104 : 52, slide = Math.min(1, this.achT * 5, (3.2 - this.achT) * 5);
+    const x = (W - w) / 2, y = Math.round((P ? 24 : 8) - (1 - slide) * (h + 20));
+    this.rect([x, y, w, h], "rgba(24,16,20,0.96)");
+    c.strokeStyle = COL.gold;
+    c.lineWidth = P ? 3 : 2;
+    c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    c.lineWidth = 1;
+    const k = P ? 10 : 5;
+    drawAchIcon(c, a.cat, x + (P ? 18 : 10), y + (h - 7 * k) / 2, k);
+    const tx = x + (P ? 110 : 56);
+    if (a.summary) {
+      this.text("ДОСТИЖЕНИЯ!", tx, y + (P ? 12 : 6), P ? 16 : 8, COL.gold);
+      this.text(tf("Открыто: {n}", { n: a.summary }), tx, y + (P ? 36 : 18), P ? 20 : 10, COL.text);
+      this.text("Титулы — в профиле", tx, y + (P ? 70 : 34), P ? 14 : 8, "rgb(200,170,255)");
+      return;
+    }
+    this.text("ДОСТИЖЕНИЕ!", tx, y + (P ? 12 : 6), P ? 16 : 8, COL.gold);
+    this.text(a.name, tx, y + (P ? 36 : 18), P ? 20 : 10, COL.text);
+    this.text(tf("Титул: «{t}»", { t: tr(a.title) }), tx, y + (P ? 70 : 34), P ? 14 : 8, "rgb(200,170,255)");
+  }
+
   /** Оплаченное оружие (гриф) остаётся у персонажа и после «Новой игры» и восстановления покупок. */
   syncPaid() {
     for (const [key, sw] of Object.entries(SWORDS)) {
@@ -522,7 +598,7 @@ class Game {
   /** Рекорд и характеристики героя — в аккаунт (для рейтинга и боёв с этим героем). Без сети — молча позже. */
   accountSync() {
     if (this.online.loggedIn) { // ответ сервера несёт и награды (например, облик за друга)
-      this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit)).then((r) => this.onAccount(r.account)).catch(() => {});
+      this.online.sync(this.profile.best, heroSnapshot(this.player, this.skin, this.outfit, this.profile.title)).then((r) => this.onAccount(r.account)).catch(() => {});
     }
   }
 
@@ -578,6 +654,7 @@ class Game {
     if (acc.name && this.profile.rename(acc.name)) this.profile.save();
     const fresh = this.applyUnlocks(acc.unlocks || []);
     if (fresh.length) this.say(tf("Новый облик: {name}! Наденьте в Лавке образов", { name: fresh.join(", ") }), 5);
+    this.checkAch(); // медали дуэлей
   }
 
   /** Платный контент, открытый кодом: облики, эффекты и гриф. Возвращает названия новых вещей. */
@@ -782,6 +859,7 @@ class Game {
       this.toastT -= dt;
       this.text(this.toast, W / 2, 4, 8, "rgb(120,220,255)", "center");
     }
+    this.drawAchBanner(dt);
     this.keys.length = 0;
     this.codes.length = 0;
     this.taps.length = 0;
@@ -826,6 +904,7 @@ class TitleScene extends Scene {
     if (st.refresh()) game.profile.save(); // пропущен день — пламя гаснет
     // окно серии огоньков — при входе в игру (раз за запуск) и сразу, если серия только что сгорела
     this.popup = !game.streakShown || st.lost > 0;
+    game.checkAch(); // упражнения у костра, огоньки и прочее, накопленное с прошлой проверки
     this.popupT = 0;
     game.streakShown = true;
   }
@@ -1419,16 +1498,38 @@ class ProfileScene extends Scene {
     super(game);
     this.rank = null; // место в рейтинге своего режима (с сервера)
     this.ownsPanel = true;
+    this.tab = "stats"; // stats | ach
+    this.page = 0; // страница достижений
     const o = game.online;
     if (o.loggedIn) {
       o.me().then((r) => game.onAccount(r.account)).catch(() => {});
       o.top(game.mode).then((r) => (this.rank = r.rank)).catch(() => {});
     }
+    game.checkAch();
   }
-  buttons() {
-    const g = this.game;
-    if (g.portrait) return { back: [24, g.H - 196, W - 48, 80], exit: [24, g.H - 100, W - 48, 80] };
-    return { back: [24, GAME_H - 40, 200, 30], exit: [W - 224, GAME_H - 40, 200, 30] };
+  /** Раскладка экрана: шапка, вкладки, область содержимого, кнопки. */
+  layout() {
+    const g = this.game, P = g.portrait;
+    if (P) {
+      const top = 280, bottom = g.H - 214;
+      return { P, head: [16, 16, W - 32, 170], tabs: [[16, 200, 296, 60], [328, 200, 296, 60]], top, bottom,
+        back: [24, g.H - 196, W - 48, 80], exit: [24, g.H - 100, W - 48, 80] };
+    }
+    return { P, head: [12, 6, W - 24, 74], tabs: [[12, 86, 196, 22], [214, 86, 196, 22]], top: 114, bottom: 314,
+      back: [24, GAME_H - 40, 200, 30], exit: [W - 224, GAME_H - 40, 200, 30] };
+  }
+  /** Плитки достижений текущей страницы и кнопки листания. */
+  achLayout() {
+    const L = this.layout(), P = L.P;
+    const cols = P ? 1 : 2, th = P ? 88 : 46, gap = P ? 10 : 4;
+    const rows = Math.max(1, Math.floor((L.bottom - L.top - (P ? 70 : 0) + gap) / (th + gap)));
+    const per = rows * cols, pages = Math.ceil(ACHIEVEMENTS.length / per);
+    const page = Math.min(this.page, pages - 1), tw = (W - (P ? 32 : 24) - (cols - 1) * 8) / cols;
+    const tiles = ACHIEVEMENTS.slice(page * per, page * per + per).map((a, i) => [a,
+      [(P ? 16 : 12) + (i % cols) * (tw + 8), L.top + Math.floor(i / cols) * (th + gap), tw, th]]);
+    const py = P ? L.bottom - 60 : 86;
+    const prev = P ? [16, py, 140, 56] : [430, py, 44, 22], next = P ? [W - 156, py, 140, 56] : [W - 56, py, 44, 22];
+    return { tiles, page, pages, prev, next };
   }
   /** Выйти из игры: в приложении — закрыть его, в браузере — вернуться на стартовый экран. */
   async exitGame() {
@@ -1439,75 +1540,180 @@ class ProfileScene extends Scene {
     location.reload();
   }
   handle() {
-    const g = this.game, b = this.buttons();
-    if (g.key("Escape") || g.tapped(b.back)) { sfx.click(); return g.change(new TitleScene(g)); }
-    if (g.tapped(b.exit)) { sfx.click(); this.exitGame(); }
+    const g = this.game, L = this.layout();
+    if (g.key("Escape") || g.tapped(L.back)) { sfx.click(); return g.change(new TitleScene(g)); }
+    if (g.tapped(L.exit)) { sfx.click(); return this.exitGame(); }
+    ["stats", "ach"].forEach((tab, i) => { if (g.tapped(L.tabs[i]) && this.tab !== tab) { sfx.click(); this.tab = tab; } });
+    if (g.key("Tab")) this.tab = this.tab === "stats" ? "ach" : "stats";
+    if (this.tab !== "ach") return;
+    const A = this.achLayout();
+    if ((g.tapped(A.prev) || g.key("ArrowLeft")) && A.page > 0) { sfx.click(); this.page = A.page - 1; }
+    if ((g.tapped(A.next) || g.key("ArrowRight")) && A.page < A.pages - 1) { sfx.click(); this.page = A.page + 1; }
+    for (const [a, r] of A.tiles) {
+      if (!g.tapped(r)) continue;
+      const pr = g.profile;
+      if (!pr.ach[a.id]) { sfx.deny(); return g.say(tf("Ещё не открыто: {d}", { d: tr(a.desc) })); }
+      pr.title = pr.title === a.id ? null : a.id; // повторное касание — снять титул
+      pr.save();
+      sfx.level();
+      g.accountSync(); // титул виден в рейтинге
+      g.say(pr.title ? tf("Титул: «{t}»", { t: tr(a.title) }) : "Титул снят");
+    }
   }
   draw(c) {
     c.drawImage(IMG.title_bg, 0, 0);
-    c.fillStyle = this.game.hard ? "rgba(20,0,6,0.78)" : "rgba(0,0,0,0.72)";
+    c.fillStyle = this.game.hard ? "rgba(20,0,6,0.8)" : "rgba(0,0,0,0.76)";
     c.fillRect(0, 0, CW, CH);
   }
-  /** Строки статистики: [подпись, значение, цвет]. */
-  rows() {
-    const g = this.game, p = g.player, o = g.online, acc = o.loggedIn ? o.account : null, best = g.profile.best;
-    const A = COL.gold, B = "rgb(150,190,255)", R = "rgb(255,110,90)", Gr = "rgb(150,230,140)";
-    const rows = [
-      ["Режим", `${tr(g.mode === "cam" ? "С камерой" : "Без камеры")} · ${tr(g.hard ? "хардкор" : "обычная")}`, g.hard ? R : COL.text],
-      ["Уровень", `${p.level}`, A],
-      ["Навыки", `${tr("Сила")} ${p.strength} · ${tr("Живучесть")} ${p.vigor} · ${tr("Выносливость")} ${p.endurance}`, A],
-      ["Локация", `${tr(LOCATIONS[locationFor(p.wave)].name)}, ${tr("раунд")} ${p.wave}`, COL.text],
-      ["Боссов побеждено", `${p.bossesDefeated}`, R],
-      ["Рекорд", `${tr("раунд")} ${best.wave} · ${tr("ур.")} ${best.level} · ${tr("боссы")} ${best.bosses}`, A],
-      ["Место в рейтинге", !acc ? tr("войдите в аккаунт") : this.rank ? `#${this.rank}` : "...", B],
+  /** Карточки статистики: [заголовок, значок (категория достижений), строки [подпись, значение, цвет]]. */
+  cards() {
+    const g = this.game, p = g.player, o = g.online, acc = o.loggedIn ? o.account : null, best = g.profile.best, st = g.profile.streak;
+    const A = COL.gold, B = "rgb(150,190,255)", R = "rgb(255,120,100)", Gr = "rgb(150,230,140)", F = "rgb(255,200,110)";
+    const r = p.totalReps, sum = r.pushup + r.squat + r.jack, cam = g.mode === "cam";
+    return [
+      ["ПУТЬ", "path", [
+        ["Локация", tr(LOCATIONS[locationFor(p.wave)].name), COL.text],
+        ["Передовая", `${tr("раунд")} ${frontierOf(p)}`, A],
+        ["Боссов побеждено", `${p.bossesDefeated}`, R],
+        ["Рекорд", `${tr("раунд")} ${best.wave} · ${tr("ур.")} ${best.level}`, A],
+        ["Режим", `${tr(cam ? "С камерой" : "Без камеры")} · ${tr(g.hard ? "хардкор" : "обычная")}`, g.hard ? R : COL.dim],
+      ]],
+      ["ГЕРОЙ", "feat", [
+        ["Сила · Жив. · Вын.", `${p.strength} · ${p.vigor} · ${p.endurance}`, A],
+        ["Урон · Здоровье", `${p.damage} · ${p.maxHp}`, COL.text],
+        ["Оружие", tr(p.weapon.name), COL.text],
+        ["Доспех", p.armor ? tr(RELICS[p.armor].name) : "-", COL.text],
+        ["Талисман", p.talisman ? tr(RELICS[p.talisman].name) : "-", COL.text],
+        ["Аура", cam ? tf("+{pct}% ({m} мин в планке)", { pct: (p.aura * 100).toFixed(1), m: Math.floor(p.plankSeconds / 60) }) : tr("только с камерой"), "rgb(255,230,160)"],
+      ]],
+      ["ТРЕНИРОВКИ", "reps", cam ? [
+        ["Отжимания", `${r.pushup}`, Gr],
+        ["Приседания", `${r.squat}`, Gr],
+        ["Звёздочки", `${r.jack}`, Gr],
+        ["Всего упражнений", `${sum}`, A],
+      ] : [["Упражнения считаются", tr("только с камерой"), COL.dim]]],
+      ["АРЕНА И ОГОНЬКИ", "arena", [
+        ["Место в рейтинге", !acc ? tr("войдите в аккаунт") : this.rank ? `#${this.rank}` : "...", B],
+        ["Медали дуэлей", acc ? `${acc.medals || 0}` : "-", A],
+        ["Лестница вызовов", acc ? `#${acc.arena_pos}` : "-", B],
+        ["Огоньки", tf("{n} · {d} дн. · рекорд {b}", { n: st.points, d: st.days, b: st.best }), F],
+        ["Пепел · камни", tf("{a} · {r} ал. · {b} син.", { a: p.souls, r: p.redGems, b: p.blueGems }), COL.dim],
+      ]],
     ];
-    if (acc) {
-      rows.push(["Медали дуэлей", `${acc.medals || 0}`, A]);
-      rows.push(["Лестница вызовов", `#${acc.arena_pos}`, B]);
+  }
+  /** Скруглённая панель с рамкой. */
+  panel(r, border = "rgb(90,64,50)", fill = "rgba(16,12,18,0.9)") {
+    const g = this.game, c = g.ctx, [x, y, w, h] = r, rad = g.portrait ? 12 : 6;
+    c.beginPath();
+    c.moveTo(x + rad, y);
+    c.arcTo(x + w, y, x + w, y + h, rad);
+    c.arcTo(x + w, y + h, x, y + h, rad);
+    c.arcTo(x, y + h, x, y, rad);
+    c.arcTo(x, y, x + w, y, rad);
+    c.closePath();
+    c.fillStyle = fill;
+    c.fill();
+    c.strokeStyle = border;
+    c.lineWidth = g.portrait ? 2 : 1;
+    c.stroke();
+    c.lineWidth = 1;
+  }
+  drawHead(L) {
+    const g = this.game, c = g.ctx, P = L.P, p = g.player, pr = g.profile, o = g.online, [x, y, w, h] = L.head;
+    this.panel(L.head, g.hard ? "rgb(150,40,40)" : COL.gold, "rgba(22,16,22,0.94)");
+    // герой в рамке
+    const fs = P ? 140 : 62, fx = x + (P ? 14 : 6), fy = y + (h - fs) / 2;
+    g.rect([fx, fy, fs, fs], "rgba(40,30,36,0.9)");
+    c.strokeStyle = "rgb(140,128,118)";
+    c.strokeRect(fx + 0.5, fy + 0.5, fs - 1, fs - 1);
+    const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2), k = P ? 4 : 2;
+    const sh = Math.min(spr.height, Math.floor((fs - 4) / k));
+    c.drawImage(spr, 0, spr.height - sh, spr.width, sh, fx + (fs - spr.width * k) / 2, fy + fs - 2 - sh * k, spr.width * k, sh * k);
+    const tx = fx + fs + (P ? 20 : 12);
+    g.text(pr.name, tx, y + (P ? 18 : 8), P ? 28 : 16, g.hard ? "rgb(214,60,48)" : COL.gold);
+    const t = titleName(pr.title);
+    g.text(t ? `«${t}»` : tr("без титула"), tx, y + (P ? 60 : 28), P ? 18 : 8, t ? "rgb(200,170,255)" : COL.dim);
+    g.text(tf("Ур. {lv} · {mode}", { lv: p.level, mode: tr(g.mode === "cam" ? "с камерой" : "без камеры") }), tx, y + (P ? 92 : 42), P ? 14 : 8, COL.text);
+    if (o.loggedIn) g.text(tf("аккаунт {login}", { login: o.account.login }), tx, y + (P ? 116 : 54), P ? 12 : 8, "rgb(150,220,150)");
+    // справа: достижения и место
+    const n = ACHIEVEMENTS.filter((a) => pr.ach[a.id]).length, rx = x + w - (P ? 16 : 10);
+    if (P) { // в портрете — строкой под именем
+      g.text(tf("Достижения: {n}/{all}", { n, all: ACHIEVEMENTS.length }), tx, y + 140, 12, COL.gold);
+    } else {
+      g.text(tf("Достижения: {n}/{all}", { n, all: ACHIEVEMENTS.length }), rx, y + 10, 8, COL.gold, "right");
+      if (this.rank) g.text(tf("#{n} в рейтинге", { n: this.rank }), rx, y + 24, 8, "rgb(150,190,255)", "right");
+      g.text(tf("Огоньки: {n}", { n: pr.streak.points }), rx, y + 38, 8, "rgb(255,200,110)", "right");
+      if (this.tab === "ach") g.text("Касание открытого — выбрать титул", rx, y + 56, 8, COL.dim, "right");
     }
-    const st = g.profile.streak;
-    rows.push(["Серия огоньков", tf("{n} · дней подряд: {d} · рекорд {b}", { n: st.points, d: st.days, b: st.best }), "rgb(255,200,110)"]);
-    rows.push(["Пепел · камни", `${p.souls} · ${tr("алые")} ${p.redGems} · ${tr("синие")} ${p.blueGems}`, COL.text]);
-    rows.push(["Снаряжение", `${tr(p.weapon.name)}${p.armor ? ` · ${tr(RELICS[p.armor].name)}` : ""}`, COL.text]);
-    if (g.mode === "cam") { // аура — за время в планке
-      const sec = Math.floor(p.plankSeconds), mm = Math.floor(sec / 60), ss = String(sec % 60).padStart(2, "0");
-      rows.push(["Аура (время в планке)", tf("{t} · +{pct}% к урону, здоровью и силам", { t: `${mm}:${ss}`, pct: (p.aura * 100).toFixed(1) }), "rgb(255,230,160)"]);
+  }
+  drawStats(L) {
+    const g = this.game, c = g.ctx, P = L.P, cards = this.cards();
+    const cols = P ? 1 : 2, gap = P ? 12 : 8, n = cards.length;
+    const ch = P ? Math.floor((L.bottom - L.top - gap * (n - 1)) / n) : Math.floor((L.bottom - L.top - gap) / 2);
+    const cw = (W - (P ? 32 : 24) - (cols - 1) * gap) / cols;
+    cards.forEach(([title, cat, rows], i) => {
+      const x = (P ? 16 : 12) + (i % cols) * (cw + gap), y = L.top + Math.floor(i / cols) * (ch + gap);
+      this.panel([x, y, cw, ch]);
+      const k = P ? 3 : 2;
+      drawAchIcon(c, cat, x + (P ? 12 : 8), y + (P ? 10 : 6), k);
+      g.text(title, x + (P ? 44 : 26), y + (P ? 12 : 7), P ? 16 : 8, COL.gold);
+      const step = Math.min(P ? 26 : 14, Math.floor((ch - (P ? 44 : 22)) / rows.length)), fs = P ? 14 : 8;
+      rows.forEach(([label, value, col], j) => {
+        const ry = y + (P ? 42 : 22) + j * step, pad = P ? 14 : 8;
+        g.text(label, x + pad, ry, fs, COL.dim);
+        c.font = `${fs}px ${FONT}`;
+        const room = cw - 2 * pad - c.measureText(tr(label)).width - fs; // значение не налезает на подпись
+        let v = tr(value), vs = fs;
+        c.font = `${vs}px ${FONT}`;
+        while (vs > 8 && c.measureText(v).width > room) c.font = `${(vs -= 2)}px ${FONT}`;
+        while (v.length > 3 && c.measureText(v).width > room) v = v.slice(0, -2) + "…";
+        g.text(v, x + cw - pad, ry, vs, col, "right");
+      });
+    });
+  }
+  drawAch(L) {
+    const g = this.game, c = g.ctx, P = L.P, pr = g.profile, A = this.achLayout();
+    const ctx = achContext(g.player, pr, g.online.loggedIn ? g.online.account : null);
+    for (const [a, [x, y, w, h]] of A.tiles) {
+      const on = !!pr.ach[a.id], worn = pr.title === a.id;
+      this.panel([x, y, w, h], worn ? "rgb(200,170,255)" : on ? COL.gold : "rgb(60,52,60)", on ? "rgba(30,22,26,0.94)" : "rgba(14,12,16,0.9)");
+      const k = P ? 7 : 4;
+      drawAchIcon(c, a.cat, x + (P ? 14 : 8), y + (h - 7 * k) / 2, k, on);
+      const tx = x + (P ? 80 : 44), fs = P ? 16 : 8;
+      g.text(a.name, tx, y + (P ? 10 : 5), fs, on ? COL.text : COL.dim);
+      g.text(a.desc, tx, y + (P ? 34 : 17), P ? 12 : 8, on ? COL.dim : "rgb(100,94,104)");
+      const [cur, goal] = achProgress(a, ctx, on);
+      const by = y + h - (P ? 22 : 12), bw = w - (tx - x) - (P ? 150 : 90);
+      if (on) {
+        g.text(tf("Титул: «{t}»", { t: tr(a.title) }), tx, by - (P ? 4 : 2), P ? 12 : 8, "rgb(200,170,255)");
+        g.text(worn ? "НАДЕТ" : "ОТКРЫТО", x + w - (P ? 14 : 8), y + (P ? 10 : 5), P ? 12 : 8, worn ? "rgb(200,170,255)" : "rgb(150,230,140)", "right");
+      } else if (a.value) { // полоска прогресса
+        g.rect([tx, by, bw, P ? 10 : 5], "rgb(36,30,40)");
+        g.rect([tx, by, Math.round(bw * cur / goal), P ? 10 : 5], "rgb(170,130,70)");
+        g.text(`${cur}/${goal}`, x + w - (P ? 14 : 8), by - (P ? 4 : 2), P ? 12 : 8, COL.dim, "right");
+      } else {
+        g.text("подвиг в бою", tx, by - (P ? 4 : 2), P ? 12 : 8, "rgb(100,94,104)");
+      }
     }
-    if (g.mode === "cam") { // упражнения считаются только с камерой
-      const r = p.totalReps, sum = r.pushup + r.squat + r.jack;
-      rows.push(["Отжимания", `${r.pushup}`, Gr]);
-      rows.push(["Приседания", `${r.squat}`, Gr]);
-      rows.push(["Звёздочки", `${r.jack}`, Gr]);
-      rows.push(["Всего упражнений", `${sum}`, Gr]);
-    }
-    return rows;
+    // листание
+    g.button(A.prev, "<", { size: P ? 24 : 12, color: A.page > 0 ? undefined : COL.dim });
+    g.button(A.next, ">", { size: P ? 24 : 12, color: A.page < A.pages - 1 ? undefined : COL.dim });
+    const mx = (A.prev[0] + A.prev[2] + A.next[0]) / 2;
+    g.text(`${A.page + 1}/${A.pages}`, mx, A.prev[1] + (P ? 18 : 7), P ? 16 : 8, COL.text, "center");
+    if (P) g.text("Касание открытого — выбрать титул", W / 2, A.prev[1] - 30, 12, COL.dim, "center");
   }
   drawUi() {
-    const g = this.game, P = g.portrait, o = g.online, b = this.buttons();
+    const g = this.game, L = this.layout(), P = L.P;
     if (P) g.rect([0, GAME_H, W, g.H - GAME_H], "rgba(10,6,14,1)");
-    g.text("ПРОФИЛЬ", W / 2, P ? 18 : 12, P ? 36 : 20, g.hard ? "rgb(214,60,48)" : COL.gold, "center");
-    const who = o.loggedIn ? tf("{name} · аккаунт {login}", { name: g.profile.name, login: o.account.login }) : g.profile.name;
-    g.text(who, W / 2, P ? 64 : 38, P ? 16 : 8, "rgb(150,220,150)", "center");
-    // герой крупно
-    const p = g.player, spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, g.time, 1.5, 2), k = P ? 5 : 3;
-    const hx = P ? W - 30 - spr.width * k : W - 40 - spr.width * k, hy = P ? 300 - spr.height * k : 300 - spr.height * k;
-    g.ctx.drawImage(spr, hx, hy, spr.width * k, spr.height * k);
-    const rows = this.rows(), fs = P ? 20 : 8, step = P ? Math.min(66, Math.floor((g.H - 330 - 216) / rows.length))
-      : Math.min(18, Math.floor((GAME_H - 46 - 56) / rows.length)); // все строки — над кнопками
-    const x = P ? 24 : 24, vx = P ? 24 : 210;
-    let y = P ? 330 : 56; // в портрете строки — под героем
-    for (const [label, value, col] of rows) {
-      if (P) {
-        g.text(label, x, y, 14, COL.dim);
-        g.text(value, vx, y + 20, value.length * fs <= W - 48 ? fs : value.length * 16 <= W - 48 ? 16 : 12, col);
-      } else {
-        g.text(label, x, y, fs, COL.dim);
-        g.text(value, vx, y, fs, col);
-      }
-      y += step;
-    }
-    g.button(b.back, "НАЗАД", { size: P ? 24 : 12 });
-    g.button(b.exit, "ВЫЙТИ ИЗ ИГРЫ", { size: P ? 24 : 12, color: "rgb(255,120,100)", border: "rgb(150,40,40)" });
+    if (P) g.rect([0, 0, W, GAME_H], "rgba(10,6,14,0.5)");
+    this.drawHead(L);
+    const n = ACHIEVEMENTS.filter((a) => g.profile.ach[a.id]).length;
+    g.button(L.tabs[0], "СТАТИСТИКА", { selected: this.tab === "stats", size: P ? 16 : 8 });
+    g.button(L.tabs[1], tf("ДОСТИЖЕНИЯ {n}/{all}", { n, all: ACHIEVEMENTS.length }), { selected: this.tab === "ach", size: P ? 14 : 8 });
+    if (this.tab === "ach") this.drawAch(L);
+    else this.drawStats(L);
+    g.button(L.back, "НАЗАД", { size: P ? 24 : 12 });
+    g.button(L.exit, "ВЫЙТИ ИЗ ИГРЫ", { size: P ? 24 : 12, color: "rgb(255,120,100)", border: "rgb(150,40,40)" });
   }
 }
 
@@ -1611,6 +1817,7 @@ class BonfireScene extends Scene {
         p.levelUp(st);
         p.save();
         g.recordProgress();
+        g.checkAch(); // упражнения и уровень
         this.ritual = null;
         this.say(tf("{stat} повышена до {n}!", { stat: STATS[st][0], n: p[st] }), 4);
         this.embers.rate = 120;
@@ -1970,6 +2177,7 @@ class BattleScene extends Scene {
     const run = game.run || { hp: p.maxHp, estus: p.estusMax };
     this.hp = Math.min(run.hp, p.maxHp);
     this.estus = Math.min(run.estus, p.estusMax);
+    this.feat = { time: 0, potions: 0, tookDamage: false }; // итоги боя — для подвигов
     this.stamina = p.maxStamina;
     this.action = "idle";
     this.actionT = 0;
@@ -2127,6 +2335,7 @@ class BattleScene extends Scene {
       if (this.estus <= 0) return this.float("Зелья кончились", this.HERO_X + 10, 90, COL.dim, 8);
       if (this.hp >= p.maxHp && this.stamina >= p.maxStamina) return this.float("Здоровье и силы полные", this.HERO_X + 10, 90, COL.dim, 8);
       this.estus -= 1;
+      if (this.feat) this.feat.potions += 1;
       const heal = Math.floor(p.maxHp * 0.45);
       this.hp = Math.min(p.maxHp, this.hp + heal);
       this.stamina = p.maxStamina; // зелье восстанавливает и выносливость
@@ -2185,6 +2394,8 @@ class BattleScene extends Scene {
       this.game.profile.save();
       this.streakLine = tf(lit.fresh ? "Огонёк дня зажжён! +{n} · в серии {p}" : "Пламя разгорается! +{n} · в серии {p}", { n: lit.add, p: st.points });
     }
+    this.game.checkAch(battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind,
+      hard: this.game.hard, hour: new Date().getHours() }));
     const style = this.game.style("victory");
     if (style) { // купленное оформление победы
       this.victory = new VictoryFx(style);
@@ -2268,6 +2479,7 @@ class BattleScene extends Scene {
       if (Math.ceil(this.ready) !== before && this.ready > 0) sfx.warn();
       return;
     }
+    if (this.feat) this.feat.time += dt;
 
     this.actionT -= dt;
     if (this.actionT <= 0) this.action = "idle";
@@ -2399,6 +2611,7 @@ class BattleScene extends Scene {
     }
     const dmg = Math.round(en.damage * this.game.player.damageTakenMult);
     this.hp -= dmg;
+    if (this.feat) this.feat.tookDamage = true;
     this.hurtT = 0.3;
     this.game.shake = en.boss ? 0.4 : 0.3;
     sfx.hurt();
@@ -3091,7 +3304,7 @@ class MultiplayerScene extends Scene {
       await o.logout();
       this.data = {};
     }
-    const best = g.profile.best, hero = heroSnapshot(g.player, g.skin, g.outfit);
+    const best = g.profile.best, hero = heroSnapshot(g.player, g.skin, g.outfit, g.profile.title);
     const ok = await promptAccount({
       name: g.profile.name,
       ref: savedRef(),
@@ -3122,7 +3335,7 @@ class MultiplayerScene extends Scene {
     if (raw == null) return;
     if (!g.profile.rename(raw)) return g.say("Такое имя не подходит");
     g.profile.save();
-    if (this.online.loggedIn) await this.run(() => this.online.sync(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit), g.profile.name));
+    if (this.online.loggedIn) await this.run(() => this.online.sync(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit, g.profile.title), g.profile.name));
     this.load();
   }
   challenge(row) {
@@ -3136,7 +3349,7 @@ class MultiplayerScene extends Scene {
   createRoom() {
     const g = this.game;
     this.run(async () => {
-      const r = await this.online.duelCreate(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit));
+      const r = await this.online.duelCreate(g.profile.best, heroSnapshot(g.player, g.skin, g.outfit, g.profile.title));
       this.room = r.code;
       this.waitT = 0;
     });
@@ -3146,7 +3359,7 @@ class MultiplayerScene extends Scene {
     const code = await promptText({ title: "ВОЙТИ ПО КОДУ", text: "Код комнаты из 4 символов: его видит на экране создатель дуэли.", maxLength: 4, ok: "ВОЙТИ" });
     if (!code) return;
     this.run(async () => {
-      const r = await this.online.duelJoin(code.trim().toUpperCase(), g.profile.best, heroSnapshot(g.player, g.skin, g.outfit));
+      const r = await this.online.duelJoin(code.trim().toUpperCase(), g.profile.best, heroSnapshot(g.player, g.skin, g.outfit, g.profile.title));
       g.change(new DuelScene(g, r));
     });
   }
@@ -3332,14 +3545,21 @@ class MultiplayerScene extends Scene {
     if ((r.rank && mine < 0) || mine >= cap) { // своё место — последней строкой
       show.length = Math.min(show.length, cap - 1);
       const acc = this.online.account, best = this.ratingMode === "btn" ? acc.best_btn || g.profile.bests.btn : acc.best;
-      show.push([r.rank, { id: myId, name: g.profile.name, look: heroSnapshot(g.player, g.skin, g.outfit), ...best }]);
+      show.push([r.rank, { id: myId, name: g.profile.name, look: heroSnapshot(g.player, g.skin, g.outfit, g.profile.title), ...best }]);
     }
     show.forEach(([rank, row], i) => {
       const y = L.top + i * step, isMe = row.id === myId;
       const col = isMe ? COL.gold : rank <= 3 ? "rgb(255,220,150)" : COL.text;
       const ty = this.drawRowBase(L, y, step, rank, row, isMe, col);
       const nameFs = L.P ? (row.name.length > 12 ? 14 : 16) : 8;
-      g.text(row.name, cols[1][0], ty + (L.fs - nameFs) / 2, nameFs, col);
+      const title = titleName(row.look && row.look.title);
+      if (title && L.P) { // в портрете титул — мелко под именем
+        g.text(row.name, cols[1][0], ty + (L.fs - nameFs) / 2 - 8, nameFs, col);
+        g.text(`«${title}»`, cols[1][0], ty + (L.fs - nameFs) / 2 + nameFs - 4, 10, "rgb(200,170,255)");
+      } else {
+        g.text(row.name, cols[1][0], ty + (L.fs - nameFs) / 2, nameFs, col);
+        if (title) g.text(`«${title}»`, cols[1][0] + (row.name.length + 1) * 8, ty, 8, "rgb(200,170,255)"); // рядом с именем
+      }
       [[2, row.bosses], [3, row.level], [4, row.wave]].forEach(([c, v]) => g.text(`${v}`, cols[c][0], ty, L.fs, col));
     });
     if (!r.rows.length) g.text("Пока никого: станьте первым!", W / 2, L.top + 40, L.fs, COL.dim, "center");
@@ -3366,6 +3586,8 @@ class MultiplayerScene extends Scene {
       const ty = this.drawRowBase(L, y, v.step, row.pos, row, row.me, col);
       const nameFs = L.P ? (row.name.length > 11 ? 14 : 16) : 8;
       g.text(row.bot ? `${row.name} *` : row.name, nameX, ty + (L.fs - nameFs) / 2, nameFs, col);
+      const title = titleName(row.look && row.look.title);
+      if (title && !L.P) g.text(`«${title}»`, nameX + (row.name.length + (row.bot ? 3 : 1)) * 8, ty, 8, "rgb(200,170,255)");
       g.text(`${row.level}`, lvX + (L.P ? 0 : 0), ty, L.fs, col);
       if (row.can) g.button(this.challengeButton(L, i, v.step), "ВЫЗОВ", { size: L.P ? 16 : 8, color: a.attempts ? "rgb(255,140,100)" : COL.dim });
     });
@@ -3532,6 +3754,7 @@ class ShopScene extends Scene {
       const ok = await confirmDialog({ title: "КУПИТЬ?", text: tf("{name} за {price} — {desc}", { name: it.name, price: priceText(key), desc: it.desc }), ok: "КУПИТЬ" });
       this.busy = false;
       if (!ok || !p.buy(key)) return;
+      g.checkAch(); // собрал снаряжение
       sfx.level();
       this.say(tf(SWORDS[key] ? "Куплено: {name}! Меч надет." : ARMORS.includes(key) ? "Куплено: {name}! Доспех надет."
         : TALISMANS.includes(key) ? "Куплено: {name}! Талисман надет." : "Куплено: {name}!", { name: it.name }));

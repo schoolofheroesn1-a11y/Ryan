@@ -53,8 +53,9 @@ export function apiUrl(api) {
 }
 
 /** Снимок героя для боёв с ним: бот играет его снаряжением и характеристиками. */
-export function heroSnapshot(player, skin = null, outfit = null) {
+export function heroSnapshot(player, skin = null, outfit = null, title = null) {
   return {
+    title, // титул (id достижения) — виден в рейтинге рядом с именем
     sword: player.sword,
     looks: player.worn.filter((k) => ["armor", "kingarmor", "wingarmor", "amulet", "windcharm", "fang"].includes(k)),
     skin,

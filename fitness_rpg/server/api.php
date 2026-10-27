@@ -136,6 +136,8 @@ function clean_hero($h) {
     $looks = [];
     foreach ((isset($h['looks']) && is_array($h['looks'])) ? $h['looks'] : [] as $k) if (in_array($k, RELICS, true)) $looks[] = $k;
     return [
+        // титул — id достижения (латиница, цифры, _): название подставляет игра, свободный текст не принимается
+        'title' => (isset($h['title']) && is_string($h['title']) && preg_match('/^[a-z0-9_]{1,24}$/', $h['title'])) ? $h['title'] : null,
         'sword' => (isset($h['sword']) && in_array($h['sword'], SWORDS, true)) ? $h['sword'] : 'rusty',
         'looks' => array_values(array_unique($looks)),
         'skin' => (isset($h['skin']) && in_array($h['skin'], SKINS, true)) ? $h['skin'] : null,
@@ -424,9 +426,10 @@ if ($action === 'top') {
 // ---------------------------------------------------------------- бросить вызов
 /** Облик для иконки: меч, доспехи, облики из лавки — без характеристик. */
 function hero_look($hero) {
-    if (!is_array($hero)) return ['sword' => 'rusty', 'looks' => [], 'skin' => null, 'outfit' => null];
+    if (!is_array($hero)) return ['sword' => 'rusty', 'looks' => [], 'skin' => null, 'outfit' => null, 'title' => null];
     return ['sword' => isset($hero['sword']) ? $hero['sword'] : 'rusty', 'looks' => isset($hero['looks']) ? $hero['looks'] : [],
-        'skin' => isset($hero['skin']) ? $hero['skin'] : null, 'outfit' => isset($hero['outfit']) ? $hero['outfit'] : null];
+        'skin' => isset($hero['skin']) ? $hero['skin'] : null, 'outfit' => isset($hero['outfit']) ? $hero['outfit'] : null,
+        'title' => isset($hero['title']) ? $hero['title'] : null];
 }
 
 function arena_row($r, $me) {
