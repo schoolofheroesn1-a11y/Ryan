@@ -1047,11 +1047,165 @@ class TitleScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Карта приключений
-const MAP_BOSS = { 1: "boss", 2: "chief", 3: "wraith", 4: "seraph" }; // кто сторожит землю (спрайт)
 const MAP_SLOTS = 8; // 4 земли открыты, ещё 4 — в будущих обновлениях («?»)
 const MAP_ROUNDS = 15; // раундов в земле: 3 по 5, каждый пятый — босс
+const MAP_W = 320, MAP_H = 180; // карта рисуется в пикселях мира и растягивается ×2
+// Сердца областей на материке: 1 Склеп, 2 Подступы к замку, 3 Кладбище, 4 Алая Бездна, 5–8 — неоткрытые земли
+const MAP_SEEDS = [[46, 112], [114, 104], [186, 112], [258, 98], [84, 56], [158, 46], [232, 48], [300, 136]];
+// Земля области: базовый цвет, разброс и что на ней растёт
+const MAP_BIOME = {
+  1: { base: [92, 86, 84], dv: 18, deco: "rock" }, // Склеп: серые скалы
+  2: { base: [70, 104, 54], dv: 16, deco: "tree" }, // Подступы: луга и рощи
+  3: { base: [48, 70, 66], dv: 14, deco: "cross" }, // Кладбище: сырая земля, кресты
+  4: { base: [70, 18, 20], dv: 18, deco: "lava" }, // Алая Бездна: выжженная земля и лава
+};
+const MAP_GLYPH = { // ориентиры в сердце области (k — контур, остальные буквы — цвета ниже)
+  1: ["...kkkkk...", "..kgggggk..", ".kgg...ggk.", "kgg.....ggk", "kg.......gk", "kg.......gk", "kkkkkkkkkkk"],
+  2: ["k.k.....k.k", "kkk..r..kkk", "kgk.kkk.kgk", "kgkkgggkkgk", "kggggggggk.", "kgg.kkk.ggk", "kkkkkkkkkkk"],
+  3: ["....kkk....", "...kwwwk...", "..kwwwwwk..", "..kwk.kwk..", "..kwwwwwk..", "..kwwwwwk..", ".kkkkkkkkk."],
+  4: ["....rrr....", "..rroooorr.", ".roooyyooor", "rooyy..yyoo", ".rooyyyyoor", "..rroooorr.", "....rrr...."],
+};
+const GLYPH_COL = { k: [16, 12, 22], g: [150, 140, 130], w: [200, 204, 196], r: [170, 30, 28], o: [240, 110, 40], y: [255, 220, 120] };
 
-/** Карта: тапнул землю — выбрал раунд — в бой. Пройденные раунды можно переиграть (без синих камней и новых боссов). */
+/** Детерминированный шум: одна и та же карта у всех игроков. */
+function mapHash(x, y, s = 0) {
+  let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function mapNoise(x, y, s = 0) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const sm = (t) => t * t * (3 - 2 * t), u = sm(fx), v = sm(fy);
+  const a = mapHash(xi, yi, s), b = mapHash(xi + 1, yi, s), c = mapHash(xi, yi + 1, s), d = mapHash(xi + 1, yi + 1, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const mapFbm = (x, y, s = 0) => 0.5 * mapNoise(x / 32, y / 32, s) + 0.3 * mapNoise(x / 12, y / 12, s + 1) + 0.2 * mapNoise(x / 5, y / 5, s + 2);
+
+/** Геометрия карты (без цветов): чей каждый пиксель (0 — море), центры и контуры областей. Считается один раз. */
+let MAP_GEO = null;
+function mapGeometry() {
+  if (MAP_GEO) return MAP_GEO;
+  const region = new Uint8Array(MAP_W * MAP_H);
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      // материк: вытянутый овал с изрезанным берегом и парой островков
+      const dx = (x - 166) / 152, dy = (y - 86) / 64;
+      const land = 1 - Math.hypot(dx, dy) + (mapFbm(x, y, 7) - 0.5) * 0.7 - Math.max(0, y - 146) * 0.08; // низ — под кнопки
+      if (land < 0.08) continue;
+      let best = 0, bd = Infinity;
+      MAP_SEEDS.forEach(([sx, sy], i) => { // ближайшее сердце, границы изломаны шумом
+        const d = Math.hypot(x - sx, (y - sy) * 1.25) + (mapFbm(x + i * 61, y - i * 37, 3) - 0.5) * 44;
+        if (d < bd) { bd = d; best = i + 1; }
+      });
+      region[y * MAP_W + x] = best;
+    }
+  }
+  const sum = Array.from({ length: MAP_SLOTS + 1 }, () => [0, 0, 0]), edges = Array.from({ length: MAP_SLOTS + 1 }, () => []);
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const r = region[y * MAP_W + x];
+      if (!r) continue;
+      sum[r][0] += x; sum[r][1] += y; sum[r][2] += 1;
+      const at = (xx, yy) => (xx < 0 || yy < 0 || xx >= MAP_W || yy >= MAP_H ? 0 : region[yy * MAP_W + xx]);
+      if (at(x + 1, y) !== r || at(x - 1, y) !== r || at(x, y + 1) !== r || at(x, y - 1) !== r) edges[r].push([x, y]);
+    }
+  }
+  const centers = sum.map(([sx, sy, n], i) => (n ? [Math.round(sx / n), Math.round(sy / n)] : MAP_SEEDS[i - 1] || [0, 0]));
+  MAP_GEO = { region, centers, edges };
+  return MAP_GEO;
+}
+
+/** Картинка карты для заданного числа открытых земель (кэш: перерисовка — только когда открылась новая). */
+const MAP_ART = {};
+function mapArt(openCount) {
+  if (MAP_ART[openCount]) return MAP_ART[openCount];
+  const { region, centers } = mapGeometry();
+  const cv = document.createElement("canvas");
+  cv.width = MAP_W;
+  cv.height = MAP_H;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(MAP_W, MAP_H), px = img.data;
+  const at = (x, y) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? 0 : region[y * MAP_W + x]);
+  const put = (x, y, [r, g, b]) => {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return;
+    const i = (y * MAP_W + x) * 4;
+    px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+  };
+  const shade = (c, k) => c.map((v) => Math.max(0, Math.min(255, Math.round(v * k))));
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const r = at(x, y);
+      if (!r) { // море: тёмная вода, у берега светлее, редкие гребни волн
+        let near = 0;
+        for (let k = 1; k <= 4 && !near; k++) if (at(x + k, y) || at(x - k, y) || at(x, y + k) || at(x, y - k)) near = k;
+        const wave = mapHash(x >> 2, y, 9) > 0.93 && y % 4 === 0;
+        put(x, y, near ? [22 + 6 * (5 - near), 34 + 7 * (5 - near), 52 + 8 * (5 - near)] : wave ? [40, 58, 84] : [14, 20, 36]);
+        continue;
+      }
+      const B = MAP_BIOME[r], n = mapFbm(x, y, r * 11);
+      let col;
+      if (!B || r > openCount) { // туман над неоткрытой землёй
+        const f = 52 + Math.round(n * 30);
+        col = [f, f - 4, f + 8];
+      } else {
+        col = B.base.map((v) => v + Math.round((n - 0.5) * 2 * B.dv));
+      }
+      const coast = !at(x + 1, y) || !at(x - 1, y) || !at(x, y + 1) || !at(x, y - 1);
+      const border = !coast && (at(x + 1, y) !== r || at(x, y + 1) !== r);
+      if (coast) col = B && r <= openCount ? [150, 136, 100] : [96, 92, 104]; // песок / серый берег
+      if (border) col = [18, 14, 20]; // граница областей
+      put(x, y, col);
+    }
+  }
+  // убранство областей: скалы, деревья, кресты, трещины лавы
+  for (let i = 0; i < 1400; i++) {
+    const x = Math.floor(mapHash(i, 1, 21) * MAP_W), y = Math.floor(mapHash(i, 2, 21) * MAP_H), r = at(x, y);
+    const B = MAP_BIOME[r];
+    if (!B || r > openCount) continue;
+    const inside = (dx0, dx1, dy0, dy1) => { // весь значок — на своей земле
+      for (let yy = y + dy0; yy <= y + dy1; yy++) for (let xx = x + dx0; xx <= x + dx1; xx++) if (at(xx, yy) !== r) return false;
+      return true;
+    };
+    const [cx, cy] = centers[r];
+    if (Math.hypot(x - cx, y - cy) < 9) continue; // в сердце — ориентир
+    if (B.deco === "rock" && inside(-3, 3, -4, 1)) {
+      for (let k = 0; k < 4; k++) for (let xx = -k; xx <= k; xx++) put(x + xx, y - 3 + k, xx < 0 ? [132, 126, 122] : [70, 64, 64]);
+      put(x, y - 4, [210, 210, 214]);
+    } else if (B.deco === "tree" && inside(-2, 2, -4, 1) && i % 2) {
+      for (const [xx, yy] of [[0, -4], [-1, -3], [0, -3], [1, -3], [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [-1, -1], [0, -1], [1, -1]]) {
+        put(x + xx, y + yy, yy === -4 || xx < 0 ? [70, 130, 60] : [34, 74, 36]);
+      }
+      put(x, y, [70, 46, 30]);
+    } else if (B.deco === "cross" && inside(-1, 1, -3, 0) && i % 3 === 0) {
+      for (let yy = -3; yy <= 0; yy++) put(x, y + yy, [170, 176, 170]);
+      put(x - 1, y - 2, [170, 176, 170]);
+      put(x + 1, y - 2, [170, 176, 170]);
+    } else if (B.deco === "lava" && i % 2 === 0) { // трещина: несколько шагов вбок
+      let xx = x, yy = y;
+      for (let k = 0; k < 6 && at(xx, yy) === r; k++) {
+        put(xx, yy, k % 3 ? [240, 110, 40] : [255, 200, 90]);
+        xx += mapHash(i, k, 5) < 0.5 ? 1 : -1;
+        yy += mapHash(i, k, 6) < 0.4 ? 1 : 0;
+      }
+    }
+  }
+  // дорога героя: Склеп → Подступы → Кладбище → Бездна (дальше — к неоткрытым землям)
+  const road = [1, 2, 3, 4];
+  for (let i = 0; i + 1 < road.length; i++) {
+    const [x0, y0] = centers[road[i]], [x1, y1] = centers[road[i + 1]], n = Math.round(Math.hypot(x1 - x0, y1 - y0));
+    if (road[i + 1] > openCount) continue;
+    for (let k = 0; k <= n; k++) {
+      if (k % 4 > 1) continue;
+      const t = k / n, wob = Math.sin(t * Math.PI) * 6 * (i % 2 ? 1 : -1);
+      put(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t + wob), [196, 168, 110]);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  MAP_ART[openCount] = cv;
+  return cv;
+}
+
+/** Карта: материк с областями. Касание области — окно раундов — бой.
+ *  Пройденные раунды можно переиграть (без синих камней и новых боссов). */
 class MapScene extends Scene {
   constructor(game) {
     super(game);
@@ -1063,23 +1217,31 @@ class MapScene extends Scene {
   get player() {
     return this.game.player;
   }
-  /** Центры земель по порядку пути и размер рамки. Горизонтально — змейкой в 2 ряда, вертикально — в 4. */
-  layout() {
+  /** Как карта лежит на экране: горизонтально ×2 во весь экран; в портрете — повёрнута
+   *  (запад внизу: путь героя идёт снизу вверх) и растянута между заголовком и кнопками. */
+  view() {
     const g = this.game;
-    if (!g.portrait) {
-      const xs = [90, 250, 410, 570];
-      return { fw: 128, fh: 72, spots: Array.from({ length: MAP_SLOTS }, (_, i) => [i < 4 ? xs[i] : xs[7 - i], i < 4 ? 104 : 228]) };
-    }
-    const top = 190, step = Math.min(250, Math.floor((g.H - top - 300) / 3));
-    const xs = [170, 470];
-    return { fw: 240, fh: 135, spots: Array.from({ length: MAP_SLOTS }, (_, i) => {
-      const row = Math.floor(i / 2), col = row % 2 ? 1 - (i % 2) : i % 2;
-      return [xs[col], top + row * step];
-    }) };
+    if (!g.portrait) return { k: 2, ox: 0, oy: 0, rot: false };
+    const top = 120, k = Math.min((W - 16) / MAP_H, (g.H - top - 250) / MAP_W);
+    return { k, ox: (W - MAP_H * k) / 2, oy: top, rot: true };
   }
-  frame(i) {
-    const { fw, fh, spots } = this.layout(), [x, y] = spots[i];
-    return [x - fw / 2, y - fh / 2, fw, fh];
+  /** Пиксель карты → точка экрана. */
+  toScreen(mx, my) {
+    const v = this.view();
+    return v.rot ? [v.ox + my * v.k, v.oy + (MAP_W - mx) * v.k] : [v.ox + mx * v.k, v.oy + my * v.k];
+  }
+  /** Сколько земель открыто (по передовой). */
+  get openCount() {
+    let n = 0;
+    for (let loc = 1; LOCATIONS[loc]; loc++) if (this.open(loc)) n = loc;
+    return n;
+  }
+  /** Область под точкой экрана: 1..8 или 0 (море). */
+  regionAt(x, y) {
+    const v = this.view();
+    const mx = Math.floor(v.rot ? MAP_W - (y - v.oy) / v.k : (x - v.ox) / v.k), my = Math.floor(v.rot ? (x - v.ox) / v.k : (y - v.oy) / v.k);
+    if (mx < 0 || my < 0 || mx >= MAP_W || my >= MAP_H) return 0;
+    return mapGeometry().region[my * MAP_W + mx];
   }
   /** Раунды земли: первые три земли — по 15, Бездна бесконечна — окно из 15 вокруг передовой. */
   rounds(loc) {
@@ -1091,10 +1253,13 @@ class MapScene extends Scene {
   open(loc) {
     return locationStart(loc) <= this.player.frontier;
   }
+  cleared(loc) {
+    return loc !== LAST_LOCATION && this.player.frontier > this.rounds(loc)[MAP_ROUNDS - 1];
+  }
   buttons() {
     const g = this.game;
     if (g.portrait) return { go: [40, g.H - 220, W - 80, 90], back: [40, g.H - 116, W - 80, 80] };
-    return { go: [150, GAME_H - 42, 300, 32], back: [470, GAME_H - 42, 150, 32] };
+    return { go: [150, GAME_H - 38, 300, 30], back: [470, GAME_H - 38, 150, 30] };
   }
   /** Окно раундов: рамка и клетки 5×3. */
   pickLayout() {
@@ -1120,6 +1285,12 @@ class MapScene extends Scene {
     this.msg = msg;
     this.msgT = 2.5;
   }
+  choose(loc) {
+    if (!LOCATIONS[loc]) { sfx.deny(); return this.say("Эта земля откроется в будущих обновлениях"); }
+    if (!this.open(loc)) { sfx.deny(); return this.say(tf("Закрыто: победите босса раунда {n}", { n: locationStart(loc) - 1 })); }
+    sfx.click();
+    this.pick = loc;
+  }
   handle() {
     const g = this.game, p = this.player;
     if (this.pick) {
@@ -1140,13 +1311,9 @@ class MapScene extends Scene {
     const b = this.buttons();
     if (g.key("Escape") || g.tapped(b.back)) { sfx.click(); return g.change(new TitleScene(g)); }
     if (g.key("Enter", " ") || g.tapped(b.go)) return this.fight(p.wave);
-    for (let i = 0; i < MAP_SLOTS; i++) {
-      if (!g.tapped(this.frame(i))) continue;
-      const loc = i + 1;
-      if (!LOCATIONS[loc]) { sfx.deny(); return this.say("Эта земля откроется в будущих обновлениях"); }
-      if (!this.open(loc)) { sfx.deny(); return this.say(tf("Закрыто: победите босса раунда {n}", { n: locationStart(loc) - 1 })); }
-      sfx.click();
-      this.pick = loc;
+    for (const t of g.taps.splice(0)) {
+      const loc = this.regionAt(t.x, t.y);
+      if (loc) return this.choose(loc);
     }
   }
   update(dt) {
@@ -1156,81 +1323,60 @@ class MapScene extends Scene {
     c.drawImage(IMG.title_bg, 0, 0);
   }
   drawUi() {
-    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player;
-    c.fillStyle = "rgb(14,10,16)";
+    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player, v = this.view();
+    const { centers, edges } = mapGeometry(), open = this.openCount, cur = locationFor(p.wave);
+    c.fillStyle = "rgb(14,20,36)"; // море и за краем карты
     c.fillRect(0, 0, W, g.H);
     c.imageSmoothingEnabled = false;
-    g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2, P ? 40 : 10, P ? 32 : 16, COL.gold, "center");
-    g.text(tf("Передовая: раунд {n}", { n: p.frontier }), W / 2, P ? 86 : 32, P ? 16 : 8, COL.dim, "center");
-    const { spots } = this.layout(), cur = locationFor(p.wave);
-    // путь между землями: пунктир, к закрытым — бледнее
-    for (let i = 0; i + 1 < MAP_SLOTS; i++) {
-      const [x0, y0] = spots[i], [x1, y1] = spots[i + 1], n = Math.round(Math.hypot(x1 - x0, y1 - y0) / (P ? 16 : 9));
-      const lit = LOCATIONS[i + 2] && this.open(i + 2);
-      c.fillStyle = lit ? "rgb(150,110,70)" : "rgb(60,50,56)";
-      for (let k = 1; k < n; k += 2) {
-        const s = P ? 5 : 3;
-        c.fillRect(Math.round(x0 + (x1 - x0) * k / n) - s / 2, Math.round(y0 + (y1 - y0) * k / n) - s / 2, s, s);
-      }
+    c.save();
+    if (v.rot) { // поворот на 90° против часовой: запад — внизу
+      c.translate(v.ox, v.oy + MAP_W * v.k);
+      c.rotate(-Math.PI / 2);
+    } else c.translate(v.ox, v.oy);
+    c.drawImage(mapArt(open), 0, 0, MAP_W * v.k, MAP_H * v.k);
+    // текущая земля — мерцающая золотая граница
+    c.fillStyle = `rgba(232,190,92,${0.55 + 0.4 * Math.sin(t * 4)})`;
+    const e = Math.ceil(v.k);
+    for (const [x, y] of edges[cur]) c.fillRect(Math.floor(x * v.k), Math.floor(y * v.k), e, e);
+    c.restore();
+    for (let loc = 1; loc <= Math.min(open, 4); loc++) { // ориентиры в сердцах земель — всегда стоят прямо
+      const [x, y] = this.toScreen(...centers[loc]), k = v.k;
+      MAP_GLYPH[loc].forEach((row, yy) => [...row].forEach((ch, xx) => {
+        if (ch === ".") return;
+        c.fillStyle = `rgb(${GLYPH_COL[ch].join(",")})`;
+        c.fillRect(Math.round(x + (xx - 5) * k), Math.round(y + (yy - 9) * k), Math.ceil(k), Math.ceil(k));
+      }));
     }
-    for (let i = 0; i < MAP_SLOTS; i++) this.drawSpot(i, i + 1 === cur);
+    // подписи областей
+    const fs = P ? 14 : 8, lh = P ? 18 : 10;
+    for (let loc = 1; loc <= MAP_SLOTS; loc++) {
+      const [x, y] = this.toScreen(...centers[loc]), L = LOCATIONS[loc];
+      if (!L || loc > open) {
+        g.text("?", x, y - (P ? 22 : 14), P ? 36 : 24, `rgba(220,212,230,${0.65 + 0.25 * Math.sin(t * 2 + loc)})`, "center");
+        if (!L) g.text("Скоро", x, y + lh, fs, "rgb(200,196,210)", "center");
+        else g.text(tf("после раунда {n}", { n: locationStart(loc) - 1 }), x, y + lh, P ? 12 : 8, "rgb(220,200,200)", "center");
+        continue;
+      }
+      const nameFs = P && L.name.length > 12 ? 12 : fs;
+      g.text(L.name, x, y + 4, nameFs, loc === cur ? COL.gold : COL.text, "center");
+      const range = loc === LAST_LOCATION ? `${locationStart(loc)}+` : `${locationStart(loc)}–${locationStart(loc) + MAP_ROUNDS - 1}`;
+      g.text(range, x, y + 4 + lh, P ? 12 : 8, this.cleared(loc) ? "rgb(160,230,150)" : "rgb(220,210,190)", "center");
+      if (this.cleared(loc)) g.text("пройдено", x, y + 4 + 2 * lh, P ? 12 : 8, "rgb(160,230,150)", "center");
+    }
+    // герой стоит на своей земле
+    const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, t, 1.5, 2), hk = P ? 2 : 1, [hx, hy] = this.toScreen(...centers[cur]);
+    c.drawImage(spr, hx + (P ? 50 : 22), hy - 10 * hk - spr.height * hk - Math.round(Math.abs(Math.sin(t * 3)) * 3), spr.width * hk, spr.height * hk);
+    g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2 + 2, (P ? 40 : 8) + 2, P ? 32 : 16, COL.shadow, "center", false);
+    g.text("КАРТА ПРИКЛЮЧЕНИЙ", W / 2, P ? 40 : 8, P ? 32 : 16, COL.gold, "center");
+    g.text(tf("Передовая: раунд {n}", { n: p.frontier }), W / 2, P ? 86 : 28, P ? 16 : 8, COL.text, "center");
     const b = this.buttons();
     g.button(b.go, tf("В БОЙ: раунд {n}", { n: p.wave }), { size: P ? 24 : 12, ...GO_STYLE });
     g.button(b.back, "НАЗАД", { size: P ? 24 : 12 });
     if (this.pick) this.drawPick();
     if (this.msgT > 0) {
-      const y = P ? g.H - 270 : GAME_H - 62;
+      const y = P ? g.H - 270 : GAME_H - 58;
       g.rect([0, y - 4, W, P ? 30 : 16], "rgba(0,0,0,0.75)");
       g.text(this.msg, W / 2, y, P ? 16 : 8, "rgb(255,140,110)", "center");
-    }
-  }
-  /** Земля на карте: картинка локации в рамке, босс в углу, подпись; будущие — туман и «?». */
-  drawSpot(i, here) {
-    const g = this.game, c = g.ctx, P = g.portrait, t = g.time, p = this.player;
-    const loc = i + 1, L = LOCATIONS[loc], [x, y, w, h] = this.frame(i), fs = P ? 14 : 8;
-    if (!L) { // будущая земля
-      g.rect([x, y, w, h], "rgb(26,22,30)");
-      for (let k = 0; k < 6; k++) { // туман
-        c.fillStyle = `rgba(90,84,100,${0.08 + 0.04 * Math.sin(t + k)})`;
-        c.fillRect(x + ((k * 37 + t * 6) % w), y + (k * 13) % h, w / 3, h / 4);
-      }
-      c.strokeStyle = "rgb(70,62,74)";
-      c.setLineDash([P ? 8 : 4, P ? 6 : 3]);
-      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-      c.setLineDash([]);
-      g.text("?", x + w / 2, y + h / 2 - (P ? 28 : 14), P ? 56 : 28, `rgba(200,190,210,${0.6 + 0.25 * Math.sin(t * 2 + i)})`, "center");
-      g.text("Скоро", x + w / 2, y + h + (P ? 8 : 4), fs, COL.dim, "center");
-      return;
-    }
-    const open = this.open(loc), rs = this.rounds(loc);
-    const bg = IMG[L.bg];
-    c.drawImage(bg, 40, 30, 240, 135, x, y, w, h);
-    const boss = IMG[`${MAP_BOSS[loc]}_idle_0`];
-    if (boss) { // страж земли — в правом нижнем углу
-      const k = P ? 2 : 1, bh = Math.min(boss.height * k, h - 6), bw = boss.width * bh / boss.height;
-      c.drawImage(boss, x + w - bw - 4, y + h - bh - 2, bw, bh);
-    }
-    const done = p.frontier > rs[MAP_ROUNDS - 1] && loc !== LAST_LOCATION;
-    if (!open) {
-      g.rect([x, y, w, h], "rgba(0,0,0,0.7)");
-      g.text("ЗАКРЫТО", x + w / 2, y + h / 2 - fs, fs, COL.dim, "center");
-      g.text(tf("после раунда {n}", { n: locationStart(loc) - 1 }), x + w / 2, y + h / 2 + fs / 2, P ? 12 : 8, COL.dim, "center");
-    }
-    if (done) { // значок «пройдено» в углу рамки
-      const bw = P ? 110 : 64, bh = P ? 24 : 12;
-      g.rect([x + w - bw - 2, y + 2, bw, bh], "rgba(20,50,20,0.9)");
-      g.text("ПРОЙДЕНО", x + w - bw / 2 - 2, y + 2 + (P ? 5 : 2), P ? 12 : 8, "rgb(150,230,140)", "center");
-    }
-    c.strokeStyle = here ? COL.gold : done ? "rgb(110,170,100)" : open ? "rgb(140,110,80)" : "rgb(60,52,58)";
-    c.lineWidth = here ? (P ? 4 : 2) : P ? 2 : 1;
-    c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    c.lineWidth = 1;
-    g.text(L.name, x + w / 2, y + h + (P ? 8 : 4), fs, open ? COL.text : COL.dim, "center");
-    const range = loc === LAST_LOCATION ? `${locationStart(loc)}+` : `${rs[0]}–${rs[MAP_ROUNDS - 1]}`;
-    g.text(tf("раунды {r}", { r: range }), x + w / 2, y + h + (P ? 28 : 14), P ? 12 : 8, done ? "rgb(150,220,140)" : COL.dim, "center");
-    if (here) { // герой стоит на своей земле
-      const spr = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, t, 1.5, 2), k = P ? 2 : 1;
-      c.drawImage(spr, x + 4, y + h - 2 - spr.height * k - Math.round(Math.abs(Math.sin(t * 3)) * 2 * k), spr.width * k, spr.height * k);
     }
   }
   /** Окно выбора раунда в земле. */

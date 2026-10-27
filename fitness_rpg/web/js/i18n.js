@@ -428,6 +428,7 @@ const EN = {
   "Скоро": "Soon",
   "ЗАКРЫТО": "LOCKED",
   "ПРОЙДЕНО": "CLEARED",
+  "пройдено": "cleared",
   "после раунда {n}": "after round {n}",
   "раунды {r}": "rounds {r}",
   "Выберите раунд. Каждый пятый — босс": "Pick a round. Every fifth is a boss",
