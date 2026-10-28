@@ -1,4 +1,5 @@
-// Музыка локаций: заранее сгенерированные петли (tools/music/location_music.py) — у каждой земли свой голос.
+// Музыка локаций: заранее сгенерированные петли (tools/music/location_music.py) — у каждой земли свой голос,
+// у главного меню — увертюра «Ash & Iron», у костра (кузница, инвентарь) — своя тихая тема.
 // Петли бесшовные (точка петли — из music.json), при смене сцены треки плавно перетекают друг в друга,
 // позиция каждого трека запоминается. В памяти держатся только звучащие сейчас треки (расжатый звук тяжёлый).
 // Модуль ничего не импортирует: звуковой контекст ему передаёт sfx.js (attachMusic) — без циклических импортов.
@@ -7,7 +8,7 @@
 const FILES = {
   crypt: ["assets/music/crypt.m4a", "assets/music/crypt.ogg"], castle: ["assets/music/castle.m4a", "assets/music/castle.ogg"],
   grave: ["assets/music/grave.m4a", "assets/music/grave.ogg"], abyss: ["assets/music/abyss.m4a", "assets/music/abyss.ogg"],
-  bonfire: ["assets/music/bonfire.m4a", "assets/music/bonfire.ogg"],
+  bonfire: ["assets/music/bonfire.m4a", "assets/music/bonfire.ogg"], menu: ["assets/music/menu.m4a", "assets/music/menu.ogg"],
 };
 let format = 0; // какой формат декодируется в этом браузере (выясняется на первом треке)
 const MANIFEST = "assets/music/music.json";
@@ -67,8 +68,10 @@ function stop(track) {
   if (!track) return;
   const a = audioOut();
   if (!a) return;
-  const now = a.ctx.currentTime, len = track.loopEnd || track.buf.duration;
-  positions[track.id] = (track.offset + (now - track.start)) % len;
+  const now = a.ctx.currentTime, { loopStart: ls, loopEnd: le } = track;
+  let pos = track.offset + (now - track.start);
+  if (pos > le) pos = ls + ((pos - ls) % (le - ls)); // после первого круга играет петля [ls, le)
+  positions[track.id] = pos;
   track.gain.gain.cancelScheduledValues(now);
   track.gain.gain.setValueAtTime(track.gain.gain.value, now);
   track.gain.gain.linearRampToValueAtTime(0, now + FADE_OUT);
@@ -96,15 +99,16 @@ export async function playMusic(id) {
   const src = a.ctx.createBufferSource(), gain = a.ctx.createGain();
   src.buffer = buf;
   src.loop = true;
-  const loopEnd = Math.min(buf.duration, man[id] || buf.duration); // кодек дописывает тишину в конец — петля по точной длине
-  src.loopStart = 0;
+  // петля — внутри файла (music.json: [начало, конец]): края файла кодек искажает, там стык щёлкал бы
+  const m = man[id], [loopStart, end] = Array.isArray(m) ? m : [0, m || buf.duration], loopEnd = Math.min(buf.duration, end);
+  src.loopStart = loopStart;
   src.loopEnd = loopEnd;
   src.connect(gain).connect(bus);
   const now = a.ctx.currentTime, offset = positions[id] || 0;
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(1, now + FADE_IN);
   src.start(now, offset);
-  current = { id, src, gain, buf, start: now, offset, loopEnd };
+  current = { id, src, gain, buf, start: now, offset, loopStart, loopEnd };
 }
 
 /** Звук разрешён (касание): sfx.js передаёт контекст и общую громкость; отложенная тема запускается. */

@@ -21,6 +21,8 @@ import numpy as np
 from scipy.signal import butter, fftconvolve, sosfilt
 
 SR = 44100
+LOOP_IN = 0.5  # петля в файле: с LOOP_IN до L + LOOP_IN (см. Track.render)
+TAIL = 1.0
 rng = np.random.default_rng(1337)
 
 NOTE = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7,
@@ -246,11 +248,13 @@ class Track:
         # мастер: убрать гул (до вырезки петли — иначе фильтр щёлкает на стыке), ограничитель, громкость
         out = np.stack([hp(out[0], 35), hp(out[1], 35)])
         a, b = int(SR * self.L), int(SR * self.L * 2)
-        loop = out[:, a:b]
-        rms = np.sqrt(np.mean(loop ** 2)) + 1e-9
-        loop = loop * (0.16 / rms)
-        loop = np.tanh(loop * 1.1) / np.tanh(1.1)
-        return loop * (0.92 / max(1e-9, np.max(np.abs(loop))))
+        # в файл — петля и ещё секунда её начала: точки петли (LOOP_IN … L+LOOP_IN) лежат внутри потока,
+        # а не на краях файла, где кодек искажает звук — так стык не щёлкает ни в одном браузере
+        full = out[:, a:b + int(SR * TAIL)]
+        rms = np.sqrt(np.mean(out[:, a:b] ** 2)) + 1e-9
+        full = full * (0.16 / rms)
+        full = np.tanh(full * 1.1) / np.tanh(1.1)
+        return full * (0.92 / max(1e-9, np.max(np.abs(full[:, : b - a]))))
 
 
 def chord_tones(root, kind, octave):
@@ -420,7 +424,57 @@ def bonfire():
     return tr.render(rt60=2.0, damp=5000)
 
 
-TRACKS = {"crypt": crypt, "castle": castle, "grave": grave, "abyss": abyss, "bonfire": bonfire}
+# ------------------------------------------------------------------ Главное меню: увертюра «Ash & Iron»
+def menu():
+    """Главная тема: тихое вступление (хор, арфа, колокол) → мелодия струнных в октаву с валторнами
+    и литаврами → кульминация всем оркестром с хором → затихание к началу петли."""
+    tr = Track(bpm=80, bars=32)
+    A = [("C", "m"), ("G#", "M"), ("D#", "M"), ("A#", "M"), ("C", "m"), ("G#", "M"), ("F", "m"), ("G", "M")]
+    B = [("G#", "M"), ("D#", "M"), ("F", "m"), ("C", "m"), ("G#", "M"), ("A#", "M"), ("G", "sus"), ("G", "M")]
+    prog = A + A + B + A
+    for b, (r, k) in enumerate(prog):
+        dur = tr.beats * tr.beat
+        ct = chord_tones(r, k, 3)
+        part = b // 8  # 0 вступление, 1 тема, 2 кульминация, 3 затихание
+        loud = [0.5, 0.85, 1.0, 0.6][part]
+        for i, f in enumerate(ct):
+            tr.add(strings(f, dur, 1800 + 600 * part, 5, 0.6, 0.9), tr.at(b), (i - 1) * 0.55, 0.16 * loud, 0.55)
+        tr.add(cello(chord_tones(r, k, 2)[0], dur * 0.96, 0.6), tr.at(b), -0.25, 0.3 * loud, 0.4)
+        tr.add(choir(ct[0], dur, "a" if part == 2 else "o", 4, 0.7, 1.0), tr.at(b), -0.45, (0.3 if part != 1 else 0.18) * loud, 0.7)
+        tr.add(choir(ct[2], dur, "a" if part == 2 else "o", 4, 0.7, 1.0), tr.at(b), 0.45, (0.24 if part != 1 else 0.14) * loud, 0.7)
+        if part in (0, 3):  # арфа: перебор вверх-вниз
+            notes = chord_tones(r, k, 4) + chord_tones(r, k, 5)[:1]
+            for j, f in enumerate(notes + notes[-2:0:-1]):
+                tr.add(pluck(f, 2.0, 1.3, 0.5), tr.at(b, j * 4 / 6), 0.4 - j * 0.1, 0.24, 0.55)
+        if part in (1, 2):  # литавры и малый барабан
+            tr.add(timpani(chord_tones(r, k, 1)[0]), tr.at(b), 0.1, 0.7 * loud, 0.35)
+            tr.add(timpani(chord_tones(r, k, 1)[0] * 1.5), tr.at(b, 2), 0.1, 0.4 * loud, 0.35)
+            if part == 2:
+                for s_, v in ((1, 0.4), (3, 0.6), (3.5, 0.4)):
+                    tr.add(snare(vol=v), tr.at(b, s_), 0.25, 0.4, 0.25)
+        if b % 8 == 0:
+            tr.add(bell(hz("C3"), 6.0), tr.at(b), -0.5, 0.5 if part != 2 else 0.35, 0.75)
+        if b in (15, 23):  # нарастание к следующей части
+            for i in range(12):
+                tr.add(timpani(hz("G1")), tr.at(b, 1 + i * 0.25), 0.0, 0.15 + i * 0.04, 0.35)
+    theme = [("C5", 1.5), ("D5", 0.5), ("D#5", 1), ("G5", 1), ("G#5", 2), ("G5", 1), ("D#5", 1),
+             ("F5", 1.5), ("D#5", 0.5), ("D5", 1), ("A#4", 1), ("C5", 3), ("G4", 1),
+             ("C5", 1), ("D#5", 1), ("G5", 1.5), ("G#5", 0.5), ("A#5", 2), ("G#5", 1), ("G5", 1),
+             ("F5", 1), ("D#5", 1), ("D5", 1), ("F5", 1), ("D5", 2), ("B4", 2)]
+    high = [("D#5", 1.5), ("F5", 0.5), ("G5", 2), ("A#5", 1.5), ("G#5", 0.5), ("G5", 2), ("G#5", 1), ("G5", 1), ("F5", 1), ("D#5", 1), ("C5", 2), ("G4", 2),
+            ("G#4", 1), ("C5", 1), ("D#5", 1), ("G#5", 1), ("G5", 1.5), ("F5", 0.5), ("D#5", 1), ("D5", 1), ("C5", 1), ("D5", 1), ("D#5", 1), ("F5", 1), ("G5", 4)]
+    down = lambda ns: [(n[:-1] + str(int(n[-1]) - 1), d) for n, d in ns]
+    melody(tr, theme, 8, strings, pan=-0.1, gain=0.38, send=0.5, bright=3200, voices=6)
+    melody(tr, down(theme), 8, strings, pan=0.1, gain=0.3, send=0.5, bright=2400, voices=6)  # в октаву
+    melody(tr, down(theme), 12, brass, pan=0.25, gain=0.3, send=0.45)
+    melody(tr, high, 16, brass, pan=-0.15, gain=0.42, send=0.45, power=1.4)  # кульминация: медь ведёт
+    melody(tr, down(high), 16, brass, pan=0.2, gain=0.3, send=0.45)
+    melody(tr, high, 16, strings, pan=0.0, gain=0.3, send=0.5, bright=3400, voices=6)
+    melody(tr, theme[:13], 24, flute, pan=0.2, gain=0.36, send=0.55)  # затихание: флейта вспоминает тему
+    return tr.render(rt60=3.0, damp=4600)
+
+
+TRACKS = {"crypt": crypt, "castle": castle, "grave": grave, "abyss": abyss, "bonfire": bonfire, "menu": menu}
 
 
 def save(name, loop, out_dir):
@@ -436,7 +490,7 @@ def save(name, loop, out_dir):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", tmp, "-c:a", "aac", "-b:a", "112k", "-movflags", "+faststart", dst], check=True)
     # запасной Opus — для браузеров без AAC (Firefox на Linux, некоторые сборки Chromium)
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", tmp, "-c:a", "libopus", "-b:a", "96k", dst[:-4] + ".ogg"], check=True)
-    return dst, loop.shape[1] / SR
+    return dst, loop.shape[1] / SR - TAIL
 
 
 def main():
@@ -446,7 +500,7 @@ def main():
     manifest = json.load(open(man_path)) if os.path.exists(man_path) else {}
     for n in names:
         dst, dur = save(n, TRACKS[n](), out)
-        manifest[n] = round(dur, 4)
+        manifest[n] = [LOOP_IN, round(dur + LOOP_IN, 4)]  # начало и конец петли в файле, сек
         print(f"{n}: {dur:.1f} с → {dst} ({os.path.getsize(dst) // 1024} КБ)")
     json.dump(manifest, open(man_path, "w"), indent=1, sort_keys=True)
 

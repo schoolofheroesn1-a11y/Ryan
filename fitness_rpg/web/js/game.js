@@ -238,11 +238,12 @@ function drawAchIcon(c, cat, x, y, k, on = true) {
 /** Название титула (переведённое) по id достижения или "". */
 const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
 
-/** Тема сцены: в бою — музыка земли, в остальном (меню, костёр, карта, кузница) — тема костра. */
+/** Тема сцены: в бою — музыка земли, у костра (кузница, инвентарь) — тема костра, в меню — увертюра. */
 const LOCATION_MUSIC = { 1: "crypt", 2: "castle", 3: "grave", 4: "abyss" };
 function sceneMusic(scene) {
   if (scene instanceof BattleScene) return LOCATION_MUSIC[scene.location] || "crypt";
-  return "bonfire";
+  if (scene instanceof BonfireScene || scene instanceof ShopScene || scene instanceof InventoryScene) return "bonfire";
+  return "menu"; // главное меню, карта, профиль, настройки, мультиплеер, лавка образов
 }
 
 /** Передовая героя (самый дальний открытый раунд). Старые сохранения (и старый player.js) её не знают —
