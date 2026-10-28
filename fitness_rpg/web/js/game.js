@@ -2711,7 +2711,7 @@ class BattleScene extends Scene {
     this.result = null;
     this.resultT = 0;
     this.reward = [0, 0, 0]; // пепел, алые, синие
-    this.ready = READY_TIME;
+    this.ready = game.settings.skipCountdown ? 0 : READY_TIME; // в настройках отсчёт можно пропускать (дуэль — всегда с отсчётом)
     this.absentT = 0;
     this.paused = false;
     this.torchL = new Particles(64, 58, 8, 2);
@@ -5008,17 +5008,18 @@ function settingsLayout(g) {
     return {
       title: 12, fs: { title: 24, label: 12, btn: 12, sign: 16 },
       volume: row(48), music: row(90), alert: row(132), vibLabel: [40, 190], vib: [300, 178, 140, 34], diff: [448, 178, 152, 34],
-      test: [40, 222, 170, 34], code: [218, 222, 180, 34], tg: [406, 222, 194, 34], camera: [40, 266, 270, 34], support: [330, 266, 270, 34],
+      test: [40, 222, 120, 34], count: [166, 222, 152, 34], code: [324, 222, 132, 34], tg: [462, 222, 138, 34],
+      camera: [40, 266, 270, 34], support: [330, 266, 270, 34],
       lang: [330, 312, 270, 34], back: [40, 312, 270, 34],
     };
   }
   const row = (y) => ({ label: [24, y], minus: [24, y + 34, 88, 68], plus: [W - 112, y + 34, 88, 68], bar: [128, y + 48, W - 256, 40] });
-  const btn = (i) => [24, 612 + i * 80, W - 48, 68];
+  const btn = (i) => [24, 608 + i * 76, W - 48, 64];
   return {
     title: 30, fs: { title: 32, label: 24, btn: 24, sign: 32 },
     volume: row(96), music: row(226), alert: row(356), vibLabel: [24, 490], vib: [24, 524, W - 48, 68],
-    test: btn(0), tg: btn(1), camera: btn(2), support: btn(3), lang: btn(4), code: btn(5), diff: btn(6),
-    back: [W / 2 - 160, Math.max(btn(7)[1] + 12, g.H - 92), 320, 70],
+    test: btn(0), count: btn(1), tg: btn(2), camera: btn(3), support: btn(4), lang: btn(5), code: btn(6), diff: btn(7),
+    back: [W / 2 - 160, Math.max(btn(8)[1] + 12, g.H - 92), 320, 70],
   };
 }
 
@@ -5044,6 +5045,7 @@ class SettingsScene extends Scene {
     if (g.tapped(L.alert.minus)) { this.set("alert", step(ai, -1)); sfx.alert(); }
     if (g.tapped(L.alert.plus)) { this.set("alert", step(ai, 1)); sfx.alert(); }
     if (g.tapped(L.vib)) { this.set("vibrate", !st.vibrate); sfx.click(); }
+    if (g.tapped(L.count)) { this.set("skipCountdown", !st.skipCountdown); sfx.click(); } // отсчёт перед боем
     if (g.tapped(L.diff)) { // сложность: с камерой — на выбор, без камеры — всегда хардкор
       if (g.mode === "btn") { sfx.deny(); g.say("Без камеры игра всегда на хардкоре", 3); }
       else { this.set("hard", !st.hard); st.hard ? sfx.thunder() : sfx.click(); }
@@ -5096,8 +5098,11 @@ class SettingsScene extends Scene {
     g.button(L.diff, dl, { size: fs.btn, color: hard ? "rgb(255,90,70)" : COL.text, border: hard ? "rgb(150,30,30)" : undefined });
     g.button(L.vib, st.vibrate ? "ВКЛ" : "ВЫКЛ", { size: fs.btn, selected: st.vibrate });
     g.button(L.test, g.portrait ? "ПРОВЕРИТЬ СИГНАЛ" : "СИГНАЛ", { size: fs.btn });
-    g.button(L.code, "ВВЕСТИ КОД", { size: fs.btn, color: COL.gold });
-    g.button(L.tg, "Наш Telegram", { size: fs.btn, color: "rgb(120,200,255)", border: "rgb(70,140,200)" });
+    const cl = tr(g.portrait ? (st.skipCountdown ? "ОТСЧЁТ ПЕРЕД БОЕМ: ВЫКЛ" : "ОТСЧЁТ ПЕРЕД БОЕМ: ВКЛ") : st.skipCountdown ? "ОТСЧЁТ: ВЫКЛ" : "ОТСЧЁТ: ВКЛ");
+    g.button(L.count, cl, { size: cl.length * fs.btn > L.count[2] - 8 ? Math.max(8, fs.btn - 4) : fs.btn, selected: !st.skipCountdown });
+    const fit = (r, label) => (tr(label).length * fs.btn > r[2] - 8 ? Math.max(8, fs.btn - 4) : fs.btn); // длинная надпись — мельче
+    g.button(L.code, "ВВЕСТИ КОД", { size: fit(L.code, "ВВЕСТИ КОД"), color: COL.gold });
+    g.button(L.tg, "Наш Telegram", { size: fit(L.tg, "Наш Telegram"), color: "rgb(120,200,255)", border: "rgb(70,140,200)" });
     g.button(L.camera, "Камера и советы", { size: fs.btn });
     g.button(L.support, "Поддержать проект", { size: fs.btn, color: "rgb(255,150,150)" });
     g.button(L.lang, `${tr("Язык")}: ${LANGS[getLang()]}`, { size: fs.btn, color: "rgb(150,220,150)" });
