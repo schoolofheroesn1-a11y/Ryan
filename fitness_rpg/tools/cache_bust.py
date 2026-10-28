@@ -44,6 +44,15 @@ def main(site, previous=None):
         out = final(name)
         if out != texts[name]:
             (site / name).write_text(out, encoding="utf-8")
+    # в index.html — отпечатки файлов игры: если игра не запустится, страница сама назовёт отсутствующие и старые
+    game_files = sorted(n for n in texts if n != "index.html" and not n.startswith("vision_")) + \
+        [n for n in ("atlas.json", "atlas.png", "music.json") if (site / n).exists()]
+    sums = {n: digest((site / n).read_bytes()) for n in game_files}
+    index = site / "index.html"
+    html = index.read_text(encoding="utf-8")
+    if "var GAME_FILES = {};" in html:
+        import json
+        index.write_text(html.replace("var GAME_FILES = {};", "var GAME_FILES = " + json.dumps(sums, separators=(",", ":")) + ";"), encoding="utf-8")
     if previous and Path(previous).is_dir():
         changed = [f.name for f in sorted(site.iterdir()) if f.is_file() and
                    (not (Path(previous) / f.name).exists() or (Path(previous) / f.name).read_bytes() != f.read_bytes())]

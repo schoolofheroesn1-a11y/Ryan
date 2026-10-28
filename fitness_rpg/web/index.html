@@ -44,6 +44,8 @@
   // Если скрипт игры не загрузился (файлы на сайте разных версий, нет сети) — показываем причину
   // вместо вечной «Загрузки…».
   (function () {
+    // список файлов игры с отпечатками содержимого — вписывается при сборке (tools/cache_bust.py)
+    var GAME_FILES = {};
     var shown = false;
     function show(msg) {
       var el = document.getElementById("gate-status");
@@ -52,8 +54,28 @@
       el.style.color = "#ff8a6a";
       el.textContent = "Не удалось запустить игру: " + msg + ". Обновите страницу; если не помогло — на сайте файлы разных версий, загрузите все файлы обновления.";
     }
-    window.addEventListener("error", function (e) { show((e && e.message) || "ошибка скрипта"); }, true);
-    window.addEventListener("unhandledrejection", function (e) { show(String((e && e.reason && e.reason.message) || e.reason || "ошибка")); });
+    // какие файлы на сайте отсутствуют или старые: скачиваем и сравниваем отпечатки
+    function diagnose() {
+      var names = Object.keys(GAME_FILES), el = document.getElementById("gate-status");
+      if (!names.length || !window.crypto || !crypto.subtle || !window.fetch) return;
+      Promise.all(names.map(function (n) {
+        return fetch(n + "?check=" + Date.now(), { cache: "no-store" }).then(function (r) {
+          if (!r.ok) return [n, "нет"];
+          return r.arrayBuffer().then(function (b) { return crypto.subtle.digest("SHA-256", b); }).then(function (h) {
+            var hex = Array.prototype.map.call(new Uint8Array(h), function (x) { return ("0" + x.toString(16)).slice(-2); }).join("");
+            return hex.slice(0, 8) === GAME_FILES[n] ? null : [n, "старый"];
+          });
+        }).catch(function () { return [n, "нет"]; });
+      })).then(function (res) {
+        var miss = [], old = [];
+        res.forEach(function (x) { if (x) (x[1] === "нет" ? miss : old).push(x[0]); });
+        if (!miss.length && !old.length) return;
+        el.textContent = "Не удалось запустить игру. " + (miss.length ? "На сайте нет файлов: " + miss.join(", ") + ". " : "") +
+          (old.length ? "Старые версии файлов: " + old.join(", ") + ". " : "") + "Загрузите эти файлы из обновления.";
+      });
+    }
+    window.addEventListener("error", function (e) { show((e && e.message) || "ошибка скрипта"); diagnose(); }, true);
+    window.addEventListener("unhandledrejection", function (e) { show(String((e && e.reason && e.reason.message) || e.reason || "ошибка")); diagnose(); });
     setTimeout(function () { show("загрузка идёт слишком долго"); }, 20000);
   })();
 </script>
