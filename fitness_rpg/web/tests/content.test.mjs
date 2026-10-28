@@ -40,7 +40,8 @@ test("new weapons and the Wraith King armor are in the forge", () => {
   for (const k of ["giant", "radiator", "barbell", "kingarmor"]) assert.ok(SHOP_ORDER.includes(k), k);
   assert.ok(SWORDS.giant.stun > 0 && SWORDS.giant.stun < 0.3, "ошеломление срабатывает нечасто");
   assert.equal(SWORDS.radiator.burn, 6);
-  assert.deepEqual(RELICS.kingarmor.price, [0, 7]);
+  assert.deepEqual(RELICS.kingarmor.price, [84, 7]); // синие вещи стоят и алые
+  assert.equal(priceText("kingarmor"), "7 син. + 84 ал.");
   assert.equal(priceText("barbell"), "10 $");
 });
 
@@ -54,14 +55,14 @@ test("barbell is paid only: gems cannot buy it, the store grants it", () => {
 });
 
 test("Wraith King armor: -35% damage taken and replaces the Bone Knight armor", () => {
-  const p = new Player({ blueGems: 8 });
+  const p = new Player({ blueGems: 8, redGems: 84 });
   assert.equal(p.damageTakenMult, 1);
   p.owned.push("armor");
   p.equip("armor");
   assert.equal(p.damageTakenMult, 0.75);
   assert.equal(p.buy("kingarmor"), true);
   assert.equal(p.damageTakenMult, 0.65);
-  assert.equal(p.blueGems, 1);
+  assert.deepEqual([p.blueGems, p.redGems], [1, 0]);
 });
 
 test("only one armor is worn at a time and can be switched", () => {
@@ -75,7 +76,7 @@ test("only one armor is worn at a time and can be switched", () => {
 });
 
 test("talismans: one worn at a time; wind regen, vampire fang, ember amulet", () => {
-  const p = new Player({ blueGems: 20, owned: ["rusty", "amulet"] });
+  const p = new Player({ blueGems: 20, redGems: 200, owned: ["rusty", "amulet"] });
   assert.equal(p.talisman, "amulet", "старое сохранение: надет Амулет Углей");
   const base = p.staminaRegen, estus = p.estusMax;
   assert.equal(p.buy("windcharm"), true);

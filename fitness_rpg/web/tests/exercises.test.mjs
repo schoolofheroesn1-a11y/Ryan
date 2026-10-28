@@ -108,7 +108,7 @@ test("every 5th wave is a boss, bosses give a blue gem", () => {
   assert.ok(rewards(6)[1] > rewards(1)[1]); // алых камней со временем больше
 });
 
-test("shop: buy, equip, unique items need blue gems", () => {
+test("shop: buy, equip, unique items need blue and red gems", () => {
   const p = new Player({ redGems: 5 });
   assert.equal(p.buy("steel"), false);
   p.redGems = 6;
@@ -119,7 +119,10 @@ test("shop: buy, equip, unique items need blue gems", () => {
   assert.equal(p.sword, "rusty");
   assert.equal(p.buy("ash"), false);
   p.blueGems = 6;
+  assert.equal(p.buy("ash"), false, "синих мало: нужны ещё и алые");
+  p.redGems = 72;
   assert.ok(p.buy("ash") && p.buy("armor") && p.buy("amulet"));
+  assert.deepEqual([p.redGems, p.blueGems], [0, 0]);
   assert.equal(p.estusMax, 4);
   assert.equal(p.damageTakenMult, 0.75);
   assert.equal(p.lifesteal, 4);

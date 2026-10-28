@@ -59,6 +59,12 @@ def main():
         for anim_name, surfs in frames.items():
             for i, surf in enumerate(surfs):
                 sprites[f"{who}_{anim_name}_{i}"] = surf
+    # сундуки земель (закрыт/открыт) и значки оружия для инвентаря
+    for kind in art.CHEST_STYLES:
+        for i, surf in enumerate(art.make_chest(kind)):
+            sprites[f"chest_{kind}_{i}"] = surf
+    for sword, rows in art.SWORD_MAPS.items():
+        sprites[f"sword_{sword}"] = art.sprite_from_map(rows, art.SWORD_PALETTE)
     # медитация у костра (аура) не зависит от меча — одна на облик: hero_meditate_<облик>_<кадр>
     for look in art.LOOKS:
         for i, surf in enumerate(art.make_meditate_frames(look)):

@@ -61,9 +61,14 @@ export class Player {
     this.armor = null; // надетый доспех (из купленных)
     this.talisman = null; // надетый талисман (из купленных)
     this.plankSeconds = 0; // аура: сколько секунд простоял в планке (только с камерой, не сбрасывается)
+    this.chests = {}; // сундуки в инвентаре: id земли → сколько
+    this.chestPity = {}; // сколько сундуков земли открыто подряд без её оружия
+    this.chestsOpened = 0;
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.frontier = Math.max(Number(this.frontier) || 1, this.wave);
+    if (!this.chests || typeof this.chests !== "object") this.chests = {};
+    if (!this.chestPity || typeof this.chestPity !== "object") this.chestPity = {};
     this.owned = Array.isArray(this.owned) ? this.owned.filter((k) => SWORDS[k] || RELICS[k]) : [];
     if (!this.owned.includes("rusty")) this.owned.unshift("rusty");
     if (!SWORDS[this.sword] || !this.owned.includes(this.sword)) this.sword = "rusty";
@@ -104,6 +109,7 @@ export class Player {
   /** Покупает вещь (меч сразу надевается). false — уже есть или не хватает камней. */
   buy(key) {
     if (item(key).paid) return false; // платные вещи выдаёт только магазин (grantPaid)
+    if (item(key).chest) return false; // оружие сундуков только выпадает
     if (this.owned.includes(key) || !this.canAfford(key)) return false;
     const [red, blue] = item(key).price;
     this.redGems -= red;

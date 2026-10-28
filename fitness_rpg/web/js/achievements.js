@@ -52,6 +52,10 @@ const LIST = [
   ["duel10", "arena", "Гроза арены", "10 медалей дуэлей", "Гроза Арены", 10, (c) => c.medals],
   ["talismans", "gear", "Собиратель", "Купить все талисманы", "Собиратель", 3, (c) => c.talismans],
   ["seraph_gear", "gear", "Крылатый", "Крыло и Доспех Серафима", "Крылатый", 2, (c) => c.seraphGear],
+  ["chests10", "gear", "Кладоискатель", "Открыть 10 сундуков", "Кладоискатель", 10, (c) => c.chestsOpened],
+  ["chests100", "gear", "Сто сундуков", "Открыть 100 сундуков", "Король Сокровищ", 100, (c) => c.chestsOpened],
+  ["legend", "gear", "Легендарная находка", "Найти оружие в сундуке", "Избранный Судьбой", 1, (c) => c.chestWeapons],
+  ["relics4", "gear", "Хранитель реликвий", "Найти оружие всех 4 сундуков", "Хранитель Реликвий", 4, (c) => c.chestWeapons],
 ];
 
 export const ACHIEVEMENTS = LIST.map(([id, cat, name, desc, title, goal, value]) => ({ id, cat, name, desc, title, goal: goal || 0, value: value || null }));
@@ -71,6 +75,8 @@ export function achContext(player, profile, account = null) {
     medals: account ? account.medals || 0 : 0,
     talismans: ["amulet", "windcharm", "fang"].filter((k) => o.includes(k)).length,
     seraphGear: ["seraph", "wingarmor"].filter((k) => o.includes(k)).length,
+    chestsOpened: player.chestsOpened || 0,
+    chestWeapons: ["bonewail", "rogueking", "moonreap", "abyssheart"].filter((k) => o.includes(k)).length,
   };
 }
 

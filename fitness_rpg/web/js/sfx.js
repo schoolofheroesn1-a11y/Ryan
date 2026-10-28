@@ -122,5 +122,9 @@ export const sfx = {
   fanfare: () => [[523, 0], [659, 0.12], [784, 0.24], [1047, 0.38], [784, 0.6], [1047, 0.72]]
     .forEach(([f, d]) => { tone(f, 0.28, { type: "square", delay: d, vol: 0.06 }); tone(f / 2, 0.28, { type: "triangle", delay: d, vol: 0.08 }); }),
   pyre: () => { noise(0.8, 0.12); [196, 247, 294].forEach((f) => tone(f, 1.2, { type: "sine", vol: 0.06 })); },
+  // сундуки: падение с врага, скрип и вспышка открытия, легендарная находка
+  chestDrop: () => { tone(110, 0.18, { type: "square", slide: -60, vol: 0.12 }); noise(0.08, 0.12); [0.15, 0.22].forEach((d) => tone(1320, 0.08, { type: "triangle", delay: d, vol: 0.06 })); },
+  chestOpen: () => { tone(160, 0.35, { type: "sawtooth", slide: 120, vol: 0.06 }); noise(0.4, 0.14, 0.3, 3000); [0, 0.06, 0.12, 0.18].forEach((d, i) => tone([784, 988, 1175, 1568][i], 0.18, { type: "triangle", delay: 0.32 + d, vol: 0.08 })); },
+  legendary: () => { [262, 330, 392, 523].forEach((f, i) => tone(f, 1.4, { type: "sine", delay: i * 0.12, vol: 0.07 })); [0, 0.1, 0.2, 0.3, 0.4, 0.5].forEach((d, i) => tone(1568 + i * 200, 0.12, { type: "triangle", delay: 0.6 + d, vol: 0.05 })); },
   buy: () => [0, 0.07, 0.14, 0.21].forEach((d, i) => tone([660, 880, 1100, 1320][i], 0.12, { type: "triangle", delay: d, vol: 0.09 })),
 };

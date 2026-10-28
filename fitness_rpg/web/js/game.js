@@ -13,6 +13,7 @@ import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx
 import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
 import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
+import { CHESTS, CHEST_ORDER, RARITY, addChest, chestCount, chestState, openChest, rollDrop } from "./chests.js";
 import { ACH, ACHIEVEMENTS, ACH_CATS, achContext, achProgress, battleEvents, checkAchievements } from "./achievements.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
@@ -64,6 +65,16 @@ const SLASH_TIME = 0.18;
 const SLASH_COLORS = {
   rusty: [190, 140, 100], steel: [235, 240, 250], great: [200, 210, 230], ash: [255, 150, 60],
   giant: [210, 220, 240], barbell: [170, 180, 200], radiator: [255, 170, 60], seraph: [230, 60, 50],
+  bonewail: [130, 220, 255], rogueking: [255, 214, 90], moonreap: [160, 255, 230], abyssheart: [255, 90, 30],
+};
+// Искры у клинка: [яркая, средняя, гаснущая]
+const BLADE_FX = {
+  ash: ["rgb(255,200,90)", "rgb(230,110,40)", "rgb(120,50,30)"], radiator: ["rgb(255,200,90)", "rgb(230,110,40)", "rgb(120,50,30)"],
+  seraph: ["rgb(255,200,90)", "rgb(230,110,40)", "rgb(120,50,30)"],
+  bonewail: ["rgb(220,250,255)", "rgb(110,210,255)", "rgb(40,70,120)"], // призрачные огни
+  rogueking: ["rgb(255,250,200)", "rgb(255,214,90)", "rgb(150,100,30)"], // золотые блёстки
+  moonreap: ["rgb(240,255,250)", "rgb(160,255,230)", "rgb(120,90,200)"], // лунная пыль
+  abyssheart: ["rgb(255,230,140)", "rgb(255,100,30)", "rgb(140,20,30)"], // лава
 };
 
 /** Дуга следа удара: k от 0 (начало) до 1 (исчезла). Двуручник — шире, пепельный — огненный. */
@@ -82,9 +93,9 @@ function drawSlash(c, x, y, sword, k, skin = null) {
       c.fillRect(Math.floor(x + Math.cos(rad) * (radius - shrink) * 0.55), Math.floor(y + Math.sin(rad) * (radius - shrink)), width, width);
     }
   }
-  if (sword === "ash" || sword === "radiator" || sword === "seraph") {
-    c.fillStyle = sword === "seraph" ? "rgb(255,90,60)" : "rgb(255,200,90)";
-    for (let i = 0; i < 4; i++) c.fillRect(x + Math.floor(rand(-4, 10)), y + Math.floor(rand(-radius, radius)), 1, 1);
+  if (BLADE_FX[sword]) { // особые клинки разбрасывают искры своего цвета
+    c.fillStyle = sword === "seraph" ? "rgb(255,90,60)" : BLADE_FX[sword][0];
+    for (let i = 0; i < (SWORDS[sword].chest ? 8 : 4); i++) c.fillRect(x + Math.floor(rand(-4, 10)), y + Math.floor(rand(-radius, radius)), 1, 1);
   }
 }
 
@@ -229,6 +240,28 @@ const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
 /** Передовая героя (самый дальний открытый раунд). Старые сохранения (и старый player.js) её не знают —
  *  тогда она не меньше текущего раунда. */
 const frontierOf = (p) => Math.max(Number(p.frontier) || 1, Number(p.wave) || 1);
+/** Сундук падает с поверженного врага: подлетает, отскакивает от земли и светится. */
+function drawChestDrop(c, drop, cx, ground) {
+  const t = drop.t, spr = IMG[`chest_${drop.kind}_0`];
+  if (!spr) return;
+  // подброс вверх и падение с двумя отскоками
+  let h;
+  if (t < 0.55) h = 34 * Math.sin((t / 0.55) * Math.PI) + 20 * (1 - t / 0.55);
+  else if (t < 0.8) h = 8 * Math.sin(((t - 0.55) / 0.25) * Math.PI);
+  else if (t < 0.95) h = 2 * Math.sin(((t - 0.8) / 0.15) * Math.PI);
+  else h = 0;
+  const x = Math.round(cx - spr.width / 2 + Math.min(1, t / 0.8) * 10), y = Math.round(ground - spr.height - h);
+  if (t > 0.8) { // свечение под сундуком
+    const a = 0.25 + 0.15 * Math.sin(t * 5);
+    c.fillStyle = `rgba(255,220,120,${a})`;
+    c.beginPath();
+    c.ellipse(x + spr.width / 2, ground - 1, 16, 3, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `rgba(255,240,200,${0.6 + 0.4 * Math.sin(t * 9)})`;
+    for (let i = 0; i < 3; i++) c.fillRect(x + 4 + ((i * 9 + Math.floor(t * 8)) % 18), y + 6 - ((t * 20 + i * 7) % 12), 1, 1);
+  }
+  c.drawImage(spr, x, y);
+}
 const inRect = (p, r) => p.x >= r[0] && p.x < r[0] + r[2] && p.y >= r[1] && p.y < r[1] + r[3];
 
 class Particles {
@@ -251,8 +284,9 @@ class Particles {
     this.items = this.items.filter((p) => p[4] > 0);
   }
   draw(c) {
+    const [hot, mid, cold] = this.colors || ["rgb(255,200,90)", "rgb(230,110,40)", "rgb(120,50,30)"];
     for (const [x, y, , , life] of this.items) {
-      c.fillStyle = life > 1.4 ? "rgb(255,200,90)" : life > 0.6 ? "rgb(230,110,40)" : "rgb(120,50,30)";
+      c.fillStyle = life > 1.4 ? hot : life > 0.6 ? mid : cold;
       c.fillRect(Math.floor(x), Math.floor(y), 1, 1);
     }
   }
@@ -1717,8 +1751,431 @@ class ProfileScene extends Scene {
   }
 }
 
+// ------------------------------------------------------------------ Инвентарь: сундуки и вещи
+const CHEST_GLOW = { crypt: [140, 220, 255], castle: [255, 220, 120], grave: [170, 255, 236], abyss: [255, 140, 50] };
+// Значки добычи 7×7: буквы → цвета
+const LOOT_ICON = {
+  ash: [["...o...", "..oyo..", ".ooyoo.", ".gooog.", "ggggggg", ".ggggg.", "......."], { o: [240, 120, 40], y: [255, 220, 120], g: [110, 100, 100] }],
+  red: [["..kkk..", ".krRrk.", "krRrrrk", "krrrrrk", ".krrrk.", "..krk..", "...k..."], { r: [210, 40, 50], R: [255, 150, 150] }],
+  blue: [["..kkk..", ".kbBbk.", "kbBbbbk", "kbbbbbk", ".kbbbk.", "..kbk..", "...k..."], { b: [60, 120, 230], B: [180, 215, 255] }],
+  amulet: [["y.....y", ".y...y.", "..yky..", ".kooOk.", ".koOok.", "..kok..", "...k..."], { y: [200, 160, 60], o: [240, 110, 40], O: [255, 210, 120] }],
+  windcharm: [["y.....y", ".y...y.", "..yky..", ".kttTk.", ".kTttk.", "..ktk..", "...k..."], { y: [200, 160, 60], t: [80, 190, 205], T: [225, 252, 255] }],
+  fang: [["n.....n", ".n...n.", "..nkn..", "..kwk..", "..kwwk.", "...kwk.", "...kr.."], { n: [110, 70, 50], w: [240, 234, 212], r: [214, 28, 44] }],
+  shield: [[".kkkkk.", "kaaaaak", "kabbbak", "kaabaak", ".kaaak.", "..kak..", "...k..."], { a: [120, 120, 130], b: [200, 200, 210] }],
+};
+const LOOT_K = [16, 12, 22];
+
+/** Значок предмета или добычи: центр (cx, cy), k — размер пикселя. Оружие — спрайт клинка наискосок. */
+function drawLootIcon(c, it, cx, cy, k, dim = false) {
+  const key = it.kind === "item" ? it.key : it.kind;
+  if (it.kind === "item" && SWORDS[key]) {
+    const spr = IMG[`sword_${key}`];
+    if (!spr) return;
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(Math.PI / 4);
+    if (dim) c.filter = "brightness(0)"; // не найдено — силуэт
+    const s = k * 0.9;
+    c.drawImage(spr, -spr.width * s / 2, -spr.height * s / 2, spr.width * s, spr.height * s);
+    c.restore();
+    return;
+  }
+  const [rows, pal] = LOOT_ICON[key] || LOOT_ICON.shield;
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch === ".") return;
+    const col = dim ? [50, 46, 56] : ch === "k" ? LOOT_K : pal[ch];
+    c.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+    c.fillRect(Math.round(cx + (x - 3.5) * k), Math.round(cy + (y - 3.5) * k), Math.ceil(k), Math.ceil(k));
+  }));
+}
+
+/** Подпись добычи. */
+function lootText(it) {
+  if (it.kind === "ash") return tf("+{n} пепла", { n: it.n });
+  if (it.kind === "red") return tf("+{n} алых", { n: it.n });
+  if (it.kind === "blue") return tf("+{n} синих", { n: it.n });
+  return tr(item(it.key).name);
+}
+
+/** Лучи за предметом (вращаются). */
+function drawRays(c, cx, cy, r, t, col, alpha, n = 12) {
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(t * 0.6);
+  c.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+  for (let i = 0; i < n; i++) {
+    c.rotate((Math.PI * 2) / n);
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(r, -r * 0.12);
+    c.lineTo(r, r * 0.12);
+    c.closePath();
+    c.fill();
+  }
+  c.restore();
+}
+
+/** Мягкое свечение. */
+function drawGlow(c, cx, cy, r, col, a) {
+  const gr = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+  gr.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a})`);
+  gr.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+  c.fillStyle = gr;
+  c.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+}
+
+const OPEN_BURST = 1.3; // тряска, вспышка — и крышка открыта
+const LOOT_GAP = 0.5; // добыча вылетает по одной
+
+/** Инвентарь у костра: сундуки (открываются упражнением) и вещи героя (касание — надеть). */
+class InventoryScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.tab = "chests";
+    this.open = null; // открываемый сундук: { kind, done, need, phase: reps|burst, t, loot, legend }
+    this.msg = "";
+    this.msgT = 0;
+    this.sparks = [];
+    chestState(game.player);
+  }
+  get ownsPanel() {
+    return true;
+  }
+  get needsCamera() {
+    return !!this.open && this.open.phase === "reps";
+  }
+  get player() {
+    return this.game.player;
+  }
+  say(m) {
+    this.msg = m;
+    this.msgT = 3;
+  }
+  /** Строка по центру, ужатая до ширины w (сначала шрифт, потом многоточие). */
+  line(s, x, y, w, fs, col, min = 8) {
+    const g = this.game, c = g.ctx;
+    let t = tr(s), f = fs;
+    c.font = `${f}px ${FONT}`;
+    while (f > min && c.measureText(t).width > w) c.font = `${(f -= 1)}px ${FONT}`;
+    while (t.length > 3 && c.measureText(t).width > w) t = t.slice(0, -2) + "…";
+    g.text(t, x, y, f, col, "center");
+  }
+  layout() {
+    const g = this.game, P = g.portrait;
+    if (P) return { P, tabs: [[16, 96, 296, 60], [328, 96, 296, 60]], top: 176, bottom: g.H - 130, back: [24, g.H - 110, W - 48, 86] };
+    return { P, tabs: [[12, 34, 200, 22], [218, 34, 200, 22]], top: 62, bottom: 312, back: [24, GAME_H - 40, 200, 30] };
+  }
+  cards() {
+    const L = this.layout();
+    if (L.P) {
+      const h = Math.floor((L.bottom - L.top - 16) / 2);
+      return CHEST_ORDER.map((k, i) => [k, [16 + (i % 2) * 312, L.top + Math.floor(i / 2) * (h + 16), 296, h]]);
+    }
+    return CHEST_ORDER.map((k, i) => [k, [12 + i * 156, L.top, 148, L.bottom - L.top]]);
+  }
+  openRect([x, y, w, h]) {
+    const P = this.game.portrait;
+    return P ? [x + 16, y + h - 76, w - 32, 60] : [x + 10, y + h - 30, w - 20, 24];
+  }
+  /** Вещи героя: оружие (и неоткрытое оружие сундуков — силуэтом), доспехи, талисманы. */
+  items() {
+    const p = this.player, out = [];
+    for (const key of Object.keys(SWORDS)) {
+      if (p.owned.includes(key)) out.push([key, true]);
+      else if (SWORDS[key].chest) out.push([key, false]);
+    }
+    for (const key of [...ARMORS, ...TALISMANS]) if (p.owned.includes(key)) out.push([key, true]);
+    const L = this.layout(), cols = L.P ? 3 : 6, gap = L.P ? 12 : 6;
+    const cw = (W - (L.P ? 32 : 24) - (cols - 1) * gap) / cols, ch = L.P ? 150 : 76;
+    return out.map(([key, own], i) => [key, own, [(L.P ? 16 : 12) + (i % cols) * (cw + gap), L.top + Math.floor(i / cols) * (ch + gap), cw, ch]]);
+  }
+  /** Где в окне открытия сундук и ряд добычи. */
+  stage() {
+    const g = this.game, P = g.portrait, reps = this.open && this.open.phase === "reps";
+    const h = P && reps ? GAME_H : P ? g.H : GAME_H;
+    const k = P ? (reps ? 4 : 8) : 5;
+    const by = Math.round(h * (reps ? (P ? 0.6 : 0.72) : 0.5));
+    return { cx: W / 2, by, k, h, slotY: by + (P ? 110 : 62) };
+  }
+  start(kind) {
+    const C = CHESTS[kind];
+    sfx.click();
+    this.open = { kind, done: 0, need: C.reps, phase: "reps", t: 0, shake: 0, loot: null, legend: null };
+  }
+  burst() {
+    const g = this.game, p = this.player, o = this.open;
+    o.loot = openChest(p, o.kind);
+    p.save();
+    o.phase = "burst";
+    o.t = 0;
+    o.shown = 0;
+    sfx.chestOpen();
+    vibrate([30, 40, 30, 40, 120]);
+  }
+  handle(moves) {
+    const g = this.game, p = this.player, o = this.open, L = this.layout();
+    if (o) {
+      if (o.phase === "reps") {
+        const ex = CHESTS[o.kind].ex;
+        for (const m of moves) {
+          if (m !== ex) continue;
+          o.done += 1;
+          o.shake = 0.25;
+          sfx.rep();
+          if (o.done >= o.need) return this.burst();
+        }
+        const cancel = g.portrait ? [W / 2 - 120, GAME_H - 46, 240, 40] : [W / 2 - 70, GAME_H - 26, 140, 22];
+        if (g.key("Escape") || g.tapped(cancel)) { sfx.click(); this.open = null; }
+        return;
+      }
+      if (o.legend) { // показ легендарного предмета: касание — дальше
+        if (o.legend.t > 1.2 && (g.taps.length || g.key("Enter", " ", "Escape"))) { g.taps.length = 0; o.legend = null; }
+        return;
+      }
+      const done = o.t > OPEN_BURST + o.loot.length * LOOT_GAP + 0.3;
+      if (done && (g.taps.length || g.key("Enter", " ", "Escape"))) {
+        g.taps.length = 0;
+        g.checkAch(); // сундуки и находки
+        this.open = null;
+        sfx.click();
+      }
+      return;
+    }
+    if (g.key("Escape") || g.tapped(L.back)) { sfx.click(); return g.change(new BonfireScene(g)); }
+    ["chests", "items"].forEach((tab, i) => { if (g.tapped(L.tabs[i]) && this.tab !== tab) { sfx.click(); this.tab = tab; } });
+    if (this.tab === "chests") {
+      for (const [kind, r] of this.cards()) {
+        if (!g.tapped(this.openRect(r)) && !g.tapped(r)) continue;
+        if (!(p.chests[kind] > 0)) { sfx.deny(); return this.say("Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда"); }
+        return this.start(kind);
+      }
+    } else {
+      for (const [key, own, r] of this.items()) {
+        if (!g.tapped(r)) continue;
+        if (!own) { sfx.deny(); return this.say(tf("Не найдено. Выпадает из сундука: {chest}", { chest: tr(CHESTS[SWORDS[key].chest].name) })); }
+        p.equip(key);
+        p.save();
+        sfx.click();
+        this.say(tf("Надет: {name}", { name: tr(item(key).name) }));
+      }
+    }
+  }
+  update(dt) {
+    this.manual = this.needsCamera; // кнопки упражнений — только пока открываем сундук
+    this.msgT -= dt;
+    const o = this.open;
+    for (const s of this.sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 260 * dt; s.life -= dt; }
+    this.sparks = this.sparks.filter((s) => s.life > 0);
+    if (!o) return;
+    o.shake = Math.max(0, o.shake - dt);
+    if (o.legend) { o.legend.t += dt; return; } // пока показывается легенда — время добычи стоит
+    o.t += dt;
+    if (o.phase !== "burst") return;
+    const st = this.stage();
+    if (o.t >= 0.8 && !o.flashed) { // крышка отлетает: вспышка и искры
+      o.flashed = true;
+      const col = CHEST_GLOW[o.kind];
+      for (let i = 0; i < 60; i++) {
+        const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 260;
+        this.sparks.push({ x: st.cx, y: st.by - 13 * st.k, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 160, life: 0.6 + Math.random() * 0.9,
+          col: Math.random() < 0.5 ? col : [255, 250, 220], s: this.game.portrait ? 6 : 3 });
+      }
+    }
+    // предметы вылетают по одному; легендарный — с отдельным показом
+    while (o.shown < o.loot.length && o.t >= OPEN_BURST + o.shown * LOOT_GAP) {
+      const it = o.loot[o.shown++];
+      if (it.rarity === "legendary") {
+        o.legend = { it, t: 0 };
+        sfx.legendary();
+        vibrate([80, 60, 80, 60, 200]);
+      } else if (it.rarity === "epic") {
+        sfx.fanfare();
+      } else {
+        sfx.rep();
+      }
+    }
+  }
+  draw(c) {
+    c.drawImage(IMG.title_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.75)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  drawUi() {
+    const g = this.game, c = g.ctx, P = g.portrait, p = this.player, L = this.layout();
+    c.imageSmoothingEnabled = false;
+    if (P) g.rect([0, 0, W, g.H], "rgba(10,6,14,1)");
+    if (this.open) return this.drawOpen();
+    g.text("ИНВЕНТАРЬ", P ? 24 : 12, P ? 20 : 10, P ? 32 : 16, COL.gold);
+    const purse = tf("Пепел {a} · алые {r} · синие {b}", { a: p.souls, r: p.redGems, b: p.blueGems });
+    if (P) g.text(purse, 24, 62, 14, COL.text);
+    else g.text(purse, W - 12, 14, 8, COL.text, "right");
+    const n = chestCount(p);
+    g.button(L.tabs[0], n ? tf("СУНДУКИ ({n})", { n }) : "СУНДУКИ", { selected: this.tab === "chests", size: P ? 18 : 8 });
+    g.button(L.tabs[1], "ВЕЩИ", { selected: this.tab === "items", size: P ? 18 : 8 });
+    if (this.tab === "chests") this.drawChests();
+    else this.drawItems();
+    g.button(L.back, "НАЗАД К КОСТРУ", { size: P ? 22 : 12 });
+    if (this.msgT > 0) {
+      const y = P ? g.H - 150 : GAME_H - 64;
+      g.rect([0, y - 4, W, P ? 30 : 16], "rgba(0,0,0,0.8)");
+      g.text(this.msg, W / 2, y, P ? 14 : 8, "rgb(255,200,140)", "center");
+    }
+  }
+  drawChests() {
+    const g = this.game, c = g.ctx, P = g.portrait, p = this.player, t = g.time, front = locationFor(frontierOf(p));
+    for (const [kind, r] of this.cards()) {
+      const C = CHESTS[kind], [x, y, w, h] = r, n = p.chests[kind] || 0, known = C.loc <= front || n > 0;
+      g.rect(r, n ? "rgba(34,24,26,0.95)" : "rgba(18,14,20,0.92)");
+      c.strokeStyle = n ? COL.gold : "rgb(70,58,60)";
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      const fs = P ? 16 : 8, tw = w - (P ? 16 : 8);
+      this.line(known ? C.name : "???", x + w / 2, y + (P ? 14 : 6), tw, fs, known ? COL.text : COL.dim);
+      // сундук: есть — покачивается и светится
+      const spr = IMG[`chest_${kind}_0`], k = P ? 6 : 3, sx = x + w / 2 - spr.width * k / 2;
+      const sy = y + (P ? 44 : 20) + (n ? Math.round(Math.sin(t * 3 + C.loc) * (P ? 3 : 1)) : 0);
+      if (n) drawGlow(c, x + w / 2, sy + spr.height * k * 0.6, spr.width * k * 0.8, CHEST_GLOW[kind], 0.3 + 0.1 * Math.sin(t * 4));
+      c.save();
+      if (!known) c.filter = "brightness(0.15)";
+      else if (!n) c.globalAlpha = 0.45;
+      c.drawImage(spr, sx, sy, spr.width * k, spr.height * k);
+      c.restore();
+      if (n) {
+        g.rect([x + w - (P ? 70 : 38), sy, P ? 58 : 30, P ? 32 : 16], "rgba(140,30,30,0.95)");
+        g.text(`x${n}`, x + w - (P ? 41 : 23), sy + (P ? 8 : 4), P ? 16 : 8, "rgb(255,240,220)", "center");
+      }
+      let ty = sy + spr.height * k + (P ? 14 : 6);
+      const small = P ? 13 : 8, lh = P ? 22 : 11;
+      if (!known) {
+        this.line(tr(LOCATIONS[C.loc].name), x + w / 2, ty, tw, small, COL.dim);
+        continue;
+      }
+      this.line(tf("{n} × {ex}", { n: C.reps, ex: tr(NAMES[C.ex]).toLowerCase() }), x + w / 2, ty, tw, small, "rgb(150,230,140)");
+      ty += lh;
+      this.line(tr(LOCATIONS[C.loc].name), x + w / 2, ty, tw, small, COL.dim);
+      ty += lh + (P ? 8 : 3);
+      // легендарное оружие сундука: найдено — цветное, нет — силуэт и счётчик гарантии
+      const has = p.owned.includes(C.weapon), ik = P ? 4 : 2;
+      drawGlow(c, x + w / 2, ty + 10 * ik, 14 * ik, [255, 190, 60], has ? 0.35 : 0.12);
+      drawLootIcon(c, { kind: "item", key: C.weapon }, x + w / 2, ty + 10 * ik, ik, !has);
+      ty += 20 * ik + (P ? 6 : 3);
+      this.line(has ? tr(SWORDS[C.weapon].name) : "???", x + w / 2, ty, tw, small, has ? "rgb(255,200,90)" : "rgb(200,150,60)");
+      ty += lh;
+      const left = C.pity - (p.chestPity[kind] || 0);
+      this.line(has ? "найдено!" : tf("гарантия: до {n}", { n: left }), x + w / 2, ty, tw, P ? 12 : 8, has ? "rgb(150,230,140)" : COL.dim);
+      g.button(this.openRect(r), n ? "ОТКРЫТЬ" : "НЕТ СУНДУКОВ", { size: P ? 18 : 8, ...(n ? GO_STYLE : { color: COL.dim }) });
+    }
+  }
+  drawItems() {
+    const g = this.game, c = g.ctx, P = g.portrait, p = this.player;
+    for (const [key, own, r] of this.items()) {
+      const [x, y, w, h] = r, it = item(key), worn = own && (p.sword === key || p.armor === key || p.talisman === key);
+      const legend = !!(SWORDS[key] && SWORDS[key].chest);
+      g.rect(r, own ? "rgba(30,22,28,0.95)" : "rgba(16,12,18,0.9)");
+      c.strokeStyle = worn ? COL.gold : legend ? (own ? "rgb(255,190,60)" : "rgb(110,80,40)") : "rgb(70,58,60)";
+      c.lineWidth = worn ? (P ? 3 : 2) : 1;
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      c.lineWidth = 1;
+      const ik = P ? 4 : 2, cy = y + (P ? 52 : 26);
+      if (legend && own) drawGlow(c, x + w / 2, cy, 12 * ik, [255, 190, 60], 0.3);
+      drawLootIcon(c, { kind: "item", key }, x + w / 2, cy, ik, !own);
+      const name = own ? tr(it.name) : "???", fs = P ? (name.length > 14 ? 10 : 12) : 8;
+      c.font = `${fs}px ${FONT}`;
+      let nm = name;
+      while (nm.length > 3 && c.measureText(nm).width > w - 6) nm = nm.slice(0, -2) + "…";
+      g.text(nm, x + w / 2, y + h - (P ? 46 : 24), fs, own ? (legend ? "rgb(255,200,90)" : COL.text) : COL.dim, "center");
+      g.text(worn ? "НАДЕТО" : own ? "надеть" : "из сундука", x + w / 2, y + h - (P ? 22 : 12), P ? 10 : 8,
+        worn ? COL.gold : own ? COL.dim : "rgb(120,96,60)", "center");
+    }
+  }
+  /** Открытие сундука: упражнения → тряска и вспышка → добыча по одной → легендарное отдельно. */
+  drawOpen() {
+    const g = this.game, c = g.ctx, P = g.portrait, o = this.open, C = CHESTS[o.kind], t = g.time, st = this.stage();
+    const col = CHEST_GLOW[o.kind];
+    g.rect([0, 0, W, st.h], "rgba(6,4,10,0.96)");
+    g.text(tr(C.name).toUpperCase(), W / 2, P ? 24 : 10, P ? 28 : 16, COL.gold, "center");
+    const open = o.phase === "burst" && o.t >= 0.8, spr = IMG[`chest_${o.kind}_${open ? 1 : 0}`], k = st.k;
+    let dx = 0, dy = 0;
+    if (o.phase === "reps") { // каждое повторение — сундук вздрагивает, к концу — сильнее
+      const amp = (o.shake > 0 ? 3 : 0.6) * (0.4 + o.done / o.need) * k / 3;
+      dx = Math.sin(t * 50) * amp;
+    } else if (!open) { // перед вспышкой — бешеная тряска и свечение изнутри
+      const s = o.t / 0.8;
+      dx = Math.sin(t * 70) * s * k * 1.2;
+      dy = -Math.abs(Math.sin(t * 35)) * s * k;
+      drawGlow(c, st.cx, st.by - 12 * k, 30 * k * s, col, 0.6 * s);
+    }
+    if (open) { // за открытым сундуком — лучи и свет
+      const a = Math.min(1, (o.t - 0.8) * 2);
+      drawGlow(c, st.cx, st.by - 16 * k, 46 * k, col, 0.45 * a);
+      drawRays(c, st.cx, st.by - 16 * k, 60 * k, t, col, 0.12 * a);
+    }
+    c.drawImage(spr, Math.round(st.cx - spr.width * k / 2 + dx), Math.round(st.by - spr.height * k + dy), spr.width * k, spr.height * k);
+    for (const s of this.sparks) {
+      c.fillStyle = `rgba(${s.col[0]},${s.col[1]},${s.col[2]},${Math.min(1, s.life * 2)})`;
+      c.fillRect(Math.round(s.x), Math.round(s.y), s.s, s.s);
+    }
+    if (o.phase === "reps") {
+      const ex = tr(NAMES[C.ex]).toLowerCase();
+      g.text(tf("Сделайте {n} × {ex}, чтобы открыть", { n: o.need, ex }), W / 2, P ? 70 : 34, P ? 16 : 8, COL.text, "center");
+      g.text(`${o.done} / ${o.need}`, W / 2, st.by + (P ? 8 : 8), P ? 28 : 16, COL.gold, "center");
+      g.bar(W / 2 - (P ? 200 : 150), st.by + (P ? 46 : 30), P ? 400 : 300, P ? 12 : 8, o.done / o.need, "rgb(230,140,50)");
+      const cancel = P ? [W / 2 - 120, GAME_H - 46, 240, 40] : [W / 2 - 70, GAME_H - 26, 140, 22];
+      g.button(cancel, "ПРЕРВАТЬ", { size: P ? 16 : 8 });
+      if (!P) { g.cameraWidget(); g.manualButtons(); }
+      return;
+    }
+    if (o.t < 0.95 && o.t > 0.8) g.rect([0, 0, W, st.h], `rgba(255,250,235,${(0.95 - o.t) / 0.15 * 0.9})`); // вспышка
+    // добыча: вылетает из сундука на своё место в ряду
+    const n = o.loot.length, slot = P ? 150 : 96, x0 = W / 2 - (n - 1) * slot / 2;
+    for (let i = 0; i < o.shown; i++) {
+      const it = o.loot[i], age = o.t - (OPEN_BURST + i * LOOT_GAP), f = Math.min(1, Math.max(0, age / 0.35));
+      const e = 1 - (1 - f) * (1 - f), tx = x0 + i * slot, ty = st.slotY;
+      const x = st.cx + (tx - st.cx) * e, y = st.by - 14 * k + (ty - (st.by - 14 * k)) * e - Math.sin(f * Math.PI) * (P ? 120 : 50);
+      const rc = RARITY[it.rarity][1], ik = (P ? 6 : 3) * (0.4 + 0.6 * e);
+      if (it.rarity !== "common") { // редкое и выше — свет и луч
+        drawGlow(c, x, y, (P ? 70 : 34) * e, rc, 0.5);
+        if (f >= 1) {
+          c.fillStyle = `rgba(${rc[0]},${rc[1]},${rc[2]},${0.18 + 0.08 * Math.sin(t * 6)})`;
+          c.fillRect(x - (P ? 10 : 5), 0, P ? 20 : 10, y);
+        }
+      }
+      drawLootIcon(c, it, x, y, ik);
+      if (f >= 1) {
+        g.text(lootText(it), x, y + (P ? 34 : 18), P ? 13 : 8, it.rarity === "common" ? COL.text : `rgb(${rc.join(",")})`, "center");
+        if (it.rarity !== "common") g.text(tr(RARITY[it.rarity][0]), x, y + (P ? 54 : 28), P ? 11 : 8, `rgb(${rc.join(",")})`, "center");
+      }
+    }
+    if (o.legend) return this.drawLegend();
+    if (o.t > OPEN_BURST + n * LOOT_GAP + 0.3) {
+      const a = 0.6 + 0.4 * Math.sin(t * 4);
+      g.text("Касание — забрать", W / 2, st.h - (P ? 120 : 30), P ? 18 : 8, `rgba(232,190,92,${a})`, "center");
+      const left = this.player.chests[o.kind] || 0;
+      if (left) g.text(tf("Ещё сундуков: {n}", { n: left }), W / 2, st.h - (P ? 90 : 18), P ? 14 : 8, COL.dim, "center");
+    }
+  }
+  /** Легендарная находка: тьма, золотые лучи, клинок крупно. */
+  drawLegend() {
+    const g = this.game, c = g.ctx, P = g.portrait, L = this.open.legend, t = g.time, h = P ? g.H : GAME_H;
+    const a = Math.min(1, L.t * 2), cx = W / 2, cy = h * 0.42;
+    g.rect([0, 0, W, h], `rgba(4,2,6,${0.97 * a})`);
+    drawGlow(c, cx, cy, (P ? 300 : 150) * a, [255, 190, 60], 0.55);
+    drawRays(c, cx, cy, P ? 420 : 220, t, [255, 210, 110], 0.16 * a, 16);
+    const z = Math.min(1, L.t * 1.6), pulse = 1 + 0.04 * Math.sin(t * 5);
+    drawLootIcon(c, L.it, cx, cy, (P ? 14 : 7) * z * pulse);
+    if (L.t < 0.25) g.rect([0, 0, W, h], `rgba(255,240,200,${(0.25 - L.t) * 3})`);
+    if (L.t > 0.4) {
+      const sw = SWORDS[L.it.key];
+      g.text("ЛЕГЕНДАРНОЕ!", cx, P ? 150 : 30, P ? 40 : 20, "rgb(255,200,70)", "center");
+      g.text(tr(item(L.it.key).name), cx, cy + (P ? 200 : 96), P ? 26 : 14, "rgb(255,236,180)", "center");
+      g.text(tr(item(L.it.key).desc), cx, cy + (P ? 244 : 116), P ? 14 : 8, COL.text, "center");
+      if (sw) g.text("Надеть можно в инвентаре: «Вещи»", cx, cy + (P ? 276 : 130), P ? 12 : 8, COL.dim, "center");
+    }
+    if (L.t > 1.2) g.text("Касание — дальше", cx, h - (P ? 120 : 20), P ? 16 : 8, `rgba(232,190,92,${0.6 + 0.4 * Math.sin(t * 4)})`, "center");
+  }
+}
+
 // ------------------------------------------------------------------ Костёр
-const BONFIRE_BUTTONS = [[[20, 216, 92, 26], "В БОЙ"], [[118, 216, 96, 26], "КУЗНИЦА"], [[220, 216, 90, 26], "МЕНЮ"]];
+const BONFIRE_BUTTONS = [[[20, 216, 66, 26], "В БОЙ"], [[90, 216, 76, 26], "КУЗНИЦА"], [[170, 216, 86, 26], "ИНВЕНТАРЬ"], [[260, 216, 50, 26], "МЕНЮ"]];
 const GO_STYLE = { fill: "rgba(24,70,30,0.92)", border: "rgb(110,220,110)", color: "rgb(150,250,150)" }; // «В БОЙ»
 const RITUAL_TAB_H = 92; // «чёлка» с повторениями поверх окна камеры
 const PUNCHES_TO_FIGHT = 3; // столько ударов (бокс) подряд у костра — и в бой
@@ -1749,6 +2206,17 @@ class BonfireScene extends Scene {
   get camInset() {
     return this.ritual ? RITUAL_TAB_H : 0;
   }
+  /** Сколько закрытых сундуков — красный кружок на кнопке «ИНВЕНТАРЬ». */
+  chestBadge([x, y, w]) {
+    const g = this.game, n = chestCount(g.player);
+    if (!n) return;
+    const P = g.portrait, r = P ? 16 : 7, cx = x + w - r + 2, cy = y - r / 2 + 2, c = g.ctx;
+    c.fillStyle = `rgb(${200 + Math.round(40 * Math.sin(g.time * 5))},40,40)`;
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.fill();
+    g.text(`${n}`, cx, cy - (P ? 7 : 4), P ? 14 : 8, "rgb(255,245,230)", "center");
+  }
   /** В портрете — крупные панели навыков, кнопки переезжают под камеру. */
   statRows() {
     if (this.game.portrait) return Object.keys(STATS).map((st, i) => [st, [16, 66 + i * 98, 400, 90]]);
@@ -1758,7 +2226,10 @@ class BonfireScene extends Scene {
   navButtons() {
     const g = this.game;
     if (!g.portrait) return BONFIRE_BUTTONS;
-    return g.manual.map(([, r], j) => [r, BONFIRE_BUTTONS[j][1]]);
+    // на месте трёх кнопок упражнений — четыре кнопки
+    const rs = g.manual.map(([, r]) => r), x0 = rs[0][0], x1 = rs[rs.length - 1][0] + rs[rs.length - 1][2], gap = 8;
+    const w = (x1 - x0 - gap * 3) / 4, [, y, , h] = rs[0];
+    return BONFIRE_BUTTONS.map(([, label], j) => [[x0 + j * (w + gap), y, w, h], label]);
   }
   cancelRect() {
     const g = this.game;
@@ -1839,7 +2310,7 @@ class BonfireScene extends Scene {
       }
     }
     const rows = this.statRows();
-    const n = rows.length + 3;
+    const n = rows.length + 4;
     if (g.key("ArrowUp")) this.index = (this.index + n - 1) % n;
     if (g.key("ArrowDown")) this.index = (this.index + 1) % n;
     const activate = (i) => {
@@ -1848,6 +2319,7 @@ class BonfireScene extends Scene {
       if (i < rows.length) this.startRitual(rows[i][0]);
       else if (i === rows.length) g.change(new BattleScene(g));
       else if (i === rows.length + 1) g.change(new ShopScene(g));
+      else if (i === rows.length + 2) g.change(new InventoryScene(g));
       else g.change(new TitleScene(g));
     };
     if (g.key("Enter", " ")) return activate(this.index);
@@ -1903,6 +2375,7 @@ class BonfireScene extends Scene {
       g.text(`${NAMES[ex]} x${p.repsNeeded(st)}: ${desc}`, r[0] + 8, r[1] + 21, 8, COL.dim);
     });
     BONFIRE_BUTTONS.forEach(([r, label], j) => g.button(r, label, { selected: this.index === 3 + j, ...(j === 0 ? GO_STYLE : {}) }));
+    this.chestBadge(BONFIRE_BUTTONS[2][0]);
     g.text(`Урон ${p.damage}  Здоровье ${p.maxHp}  Силы ${p.maxStamina}`, 22, 248, 8, COL.dim);
     const tr = p.totalReps;
     g.text(`Всего: отжим ${tr.pushup} присед ${tr.squat} звезда ${tr.jack}`, 22, 260, 8, COL.text);
@@ -1992,7 +2465,8 @@ class BonfireScene extends Scene {
         this.camHint(x + w / 2, y + h - 56, 14);
       }
       this.navButtons().forEach(([r, label], j) =>
-        g.button(r, label, { size: 16, selected: this.index === 3 + j, ...(j === 0 ? GO_STYLE : {}) }));
+        g.button(r, label, { size: label.length * 16 > r[2] - 8 ? 12 : 16, selected: this.index === 3 + j, ...(j === 0 ? GO_STYLE : {}) }));
+      this.chestBadge(this.navButtons()[2][0]);
     }
   }
 }
@@ -2394,6 +2868,13 @@ class BattleScene extends Scene {
       this.game.profile.save();
       this.streakLine = tf(lit.fresh ? "Огонёк дня зажжён! +{n} · в серии {p}" : "Пламя разгорается! +{n} · в серии {p}", { n: lit.add, p: st.points });
     }
+    const drop = rollDrop(en.wave, en.boss); // сундук: с босса — всегда, с обычного врага — иногда
+    this.drop = drop ? { kind: drop, t: 0 } : null;
+    if (drop) {
+      addChest(p, drop);
+      p.save();
+      setTimeout(() => sfx.chestDrop(), 350);
+    }
     this.game.checkAch(battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind,
       hard: this.game.hard, hour: new Date().getHours() }));
     const style = this.game.style("victory");
@@ -2464,6 +2945,7 @@ class BattleScene extends Scene {
     this.auraHitT = Math.max(0, (this.auraHitT || 0) - dt);
     if (this.result) {
       this.resultT += dt;
+      if (this.drop) this.drop.t += dt;
       if (this.victory) this.victory.update(dt);
       return;
     }
@@ -2695,8 +3177,11 @@ class BattleScene extends Scene {
     this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
     this.hitFx.draw(c);
-    if ((p.sword === "ash" || p.sword === "radiator" || p.sword === "seraph") && !skin) { // раскалённый клинок искрит
+    if (this.drop) drawChestDrop(c, this.drop, this.enemy.x + 12, GROUND_ARENA);
+    if (BLADE_FX[p.sword] && !skin) { // особый клинок искрит своим цветом
       [this.bladeEmbers.x, this.bladeEmbers.y] = this.action === "attack" ? [hx + 30, GROUND_ARENA - 20] : [hx + 20, GROUND_ARENA - 10];
+      this.bladeEmbers.colors = BLADE_FX[p.sword];
+      this.bladeEmbers.rate = SWORDS[p.sword].chest ? 26 : 14;
       this.bladeEmbers.draw(c);
     }
 
@@ -2829,6 +3314,7 @@ class BattleScene extends Scene {
         hint: this.autoHint(),
       });
       if (this.streakLine) g.text(this.streakLine, W / 2, 8, 8, "rgb(255,200,110)", "center");
+      if (this.drop && this.drop.t > 0.5) g.text(tf("Выпал сундук: {name}! Откройте в инвентаре у костра", { name: tr(CHESTS[this.drop.kind].name) }), W / 2, 20, 8, "rgb(255,230,150)", "center");
     } else if (this.result) {
       g.rect([0, g.gameH / 2 - 45, W, 90], `rgba(0,0,0,${Math.min(0.8, this.resultT * 1.2)})`);
       if (this.result === "dead") {
@@ -2841,6 +3327,7 @@ class BattleScene extends Scene {
         g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синий` : ""}`, W / 2, g.gameH / 2 + 12, 8, COL.gold, "center");
         g.text(this.autoHint(), W / 2, g.gameH / 2 + 26, 8, COL.text, "center");
         if (this.streakLine) g.text(this.streakLine, W / 2, g.gameH / 2 + 37, 8, "rgb(255,200,110)", "center");
+        if (this.drop && this.drop.t > 0.5) g.text(tf("Выпал сундук: {name}! Откройте в инвентаре у костра", { name: tr(CHESTS[this.drop.kind].name) }), W / 2, g.gameH / 2 - 42, 8, "rgb(255,230,150)", "center");
       }
     }
   }
@@ -3748,7 +4235,8 @@ class ShopScene extends Scene {
       if (!p.canAfford(key)) {
         sfx.deny();
         const [red, blue] = it.price;
-        return this.say(`Не хватает камней: нужно ${blue ? `${blue} синих` : `${red} алых`}`);
+        return this.say(blue ? tf("Не хватает камней: нужно {b} синих и {r} алых (есть {hb} и {hr})", { b: blue, r: red, hb: p.blueGems, hr: p.redGems })
+          : tf("Не хватает камней: нужно {r} алых", { r: red }));
       }
       this.busy = true; // покупку нужно подтвердить: камни тратятся безвозвратно
       const ok = await confirmDialog({ title: "КУПИТЬ?", text: tf("{name} за {price} — {desc}", { name: it.name, price: priceText(key), desc: it.desc }), ok: "КУПИТЬ" });
@@ -3835,7 +4323,9 @@ class ShopScene extends Scene {
       const big = r[3] >= 70, nameFs = big ? 24 : 16;
       g.text(it.name, r[0] + 14, r[1] + r[3] / 2 - nameFs - 2, nameFs, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
       g.text(it.desc, r[0] + 14, r[1] + r[3] / 2 + 4, 12, COL.dim);
-      g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 + 2, 16, scol, "right");
+      const two = status.split(" + ").map((x) => tr(x));
+      if (two.length > 1) two.forEach((part, j) => g.text(j ? `+ ${part}` : part, r[0] + r[2] - 14, r[1] + r[3] / 2 - 16 + j * 20, 16, scol, "right"));
+      else g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 + 2, 16, scol, "right");
     });
     if (this.msgT > 0) {
       const b = this.rect(this.rows.length - 1);
@@ -3858,7 +4348,9 @@ class ShopScene extends Scene {
       g.button(r, "", { selected: sel });
       g.text(it.name, r[0] + 8, r[1] + 3, 8, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
       g.text(it.desc, r[0] + 8, r[1] + 13, 8, COL.dim);
-      g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, scol, "right");
+      const two = status.split(" + ").map((x) => tr(x)); // синие + алые — в две строки, чтобы не наезжать на описание
+      if (two.length > 1) two.forEach((part, j) => g.text(j ? `+ ${part}` : part, r[0] + r[2] - 8, r[1] + 3 + j * 10, 8, scol, "right"));
+      else g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, scol, "right");
     });
     // крупное превью героя; на непокупленной вещи — примерка
     if (this.drawHero(470, 2 * GROUND_ARENA, 4) === "ash") this.previewEmbers.draw(g.ctx);
@@ -4690,4 +5182,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
+export { InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
