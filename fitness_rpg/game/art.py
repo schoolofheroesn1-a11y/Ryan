@@ -1495,73 +1495,145 @@ def make_meditate_frames(look):
     return [out, shifted_breath(out)]
 
 
-# Сундуки земель: (дерево/камень, тень, оковка, блик оковки, свечение внутри, знак)
+# Сундуки земель: (корпус, металл оковки, блик металла, свечение внутри, знак на крышке)
 CHEST_STYLES = {
-    "crypt": ((128, 122, 116), (78, 72, 70), (60, 56, 60), (150, 146, 150), (140, 220, 255), "skull"),   # Костяной сундук
-    "castle": ((140, 88, 46), (90, 54, 30), (212, 160, 48), (255, 228, 130), (255, 220, 120), "lock"),   # Сундук разбойников
-    "grave": ((40, 66, 70), (22, 40, 44), (176, 190, 196), (230, 240, 244), (170, 255, 236), "cross"),  # Гробовой ковчег
-    "abyss": ((40, 24, 30), (22, 12, 16), (150, 40, 34), (255, 120, 40), (255, 150, 60), "eye"),       # Адский ковчег
+    "crypt": ((132, 126, 120), (74, 72, 82), (176, 176, 188), (140, 220, 255), "skull"),   # Костяной сундук: камень и чернёное железо
+    "castle": ((150, 92, 48), (200, 150, 44), (255, 232, 140), (255, 214, 110), "lock"),  # Сундук разбойников: дуб и золото
+    "grave": ((46, 76, 80), (168, 182, 190), (238, 246, 250), (170, 255, 236), "cross"),  # Гробовой ковчег: тёмное дерево и серебро
+    "abyss": ((54, 30, 38), (140, 36, 30), (255, 130, 50), (255, 150, 60), "eye"),        # Адский ковчег: обсидиан и раскалённая медь
 }
-CHEST_SIGNS = {  # 5×5 знаки на крышке/замке
-    "skull": [".www.", "wkwkw", "wwwww", ".w.w.", "....."],
-    "lock": [".yyy.", "y...y", "yyyyy", "yykyy", "yyyyy"],
-    "cross": ["..w..", ".www.", "..w..", "..w..", "....."],
-    "eye": [".rrr.", "rrorr", "royor", "rrorr", ".rrr."],
+CHEST_SIGNS = {  # 5×5 знаки на крышке: w — кость/серебро, y — блик металла, k — контур, r — металл, o — огонь
+    "skull": [".www.", "wkwkw", "wwwww", ".wkw.", "....."],
+    "lock": ["..y..", ".yyy.", "yykyy", ".yyy.", "..y.."],
+    "cross": ["..w..", ".www.", "..w..", "..w..", "..w.."],
+    "eye": [".rrr.", "rooor", "royor", "rooor", ".rrr."],
 }
+
+
+def _shade(c, f):
+    return tuple(max(0, min(255, int(v * f))) for v in c)
 
 
 def make_chest(kind):
-    """Сундук земли: [закрыт, открыт]. Холст 26×30, низ — дно сундука (крышка открытого — над ним)."""
-    wood, dark, band, light, glow, sign = CHEST_STYLES[kind]
-    k = (16, 12, 22)
-    cols = {"w": (236, 230, 214), "k": k, "y": light, "r": band, "o": (255, 160, 60), ".": None}
+    """Объёмный сундук земли: [закрыт, открыт], холст 32×32, низ — дно.
+    Выпуклая крышка (светлее сверху), доски корпуса с тенью к краям и низу, металлические уголки
+    с заклёпками, рант и замок; у открытого — изнанка крышки, свет и золото внутри."""
+    wood, metal, mlight, glow, sign = CHEST_STYLES[kind]
+    K = (14, 10, 18)
+    W, H = 32, 32
     out = []
     for opened in (False, True):
-        surf = pygame.Surface((26, 30), pygame.SRCALPHA)
-        r = lambda x, y, w, h, c: pygame.draw.rect(surf, c, (x, y, w, h))
-        # корпус
-        r(1, 16, 24, 14, k)
-        r(2, 17, 22, 12, wood)
-        for y in (20, 24):
-            r(2, y, 22, 1, dark)  # доски
-        r(2, 27, 22, 2, dark)
-        for x in (4, 20):  # оковка
-            r(x, 16, 2, 14, band)
-            r(x, 17, 1, 12, light)
+        g = [[None] * W for _ in range(H)]
+
+        def put(x, y, c):
+            if 0 <= x < W and 0 <= y < H and c:
+                g[y][x] = c
+
+        def edge(x, x0, x1):  # затенение к бокам: корпус кажется круглее
+            d = min(x - x0, x1 - x)
+            return 0.72 if d == 0 else 0.86 if d == 1 else 1.0
+
+        # ---- корпус: y 18..29
+        for y in range(18, 30):
+            for x in range(3, 29):
+                f = (1.0 - (y - 18) * 0.022) * edge(x, 3, 28)
+                if (y - 18) % 4 == 3:
+                    f *= 0.72  # стык досок
+                if kind == "crypt" and (x * 7 + y * 3) % 11 == 0:
+                    f *= 0.85  # каменные выщерблины
+                put(x, y, _shade(wood, f))
+        for x in range(3, 29):  # тёмное дно и полоса тени под рантом
+            put(x, 29, _shade(wood, 0.5))
+            put(x, 18, _shade(wood, 0.62))
+        # ---- металл: уголки по бокам, рант
+        for y in range(18, 30):
+            for x, f in ((4, 1.25), (5, 0.95), (26, 1.05), (27, 0.8)):
+                put(x, y, _shade(metal, f))
+        for x in range(3, 29):
+            put(x, 17, _shade(metal, 1.15 if x % 2 else 1.0))
+        for x in range(6, 26):  # поясок оковки по корпусу
+            put(x, 23, _shade(metal, 1.0))
+            put(x, 24, _shade(metal, 0.7))
+        for x in (4, 27):
+            for y in (20, 24, 28):
+                put(x, y, mlight)  # заклёпки
+        for x in (8, 23):
+            put(x, 23, mlight)
         if opened:
-            # крышка откинута назад: видна её внутренняя сторона, из сундука бьёт свет
-            r(2, 2, 22, 9, k)
-            r(3, 3, 20, 7, dark)
-            r(3, 3, 20, 1, band)
-            for x in (5, 20):
-                r(x, 3, 1, 7, band)
-            r(2, 11, 22, 5, k)
-            for i, a in enumerate((255, 200, 150, 110)):
-                r(3, 12 + i, 20, 1, tuple(int(c * a / 255 + w * (1 - a / 255) * 0.3) for c, w in zip(glow, wood)))
-            for x in (6, 11, 15, 19):  # блёстки добычи
-                surf.set_at((x, 12), (255, 255, 230))
+            # ---- внутри: тёмная глубина, снизу свет и горка золота
+            for y in range(11, 17):
+                for x in range(4, 28):
+                    k = (y - 11) / 5
+                    put(x, y, tuple(int(_shade(wood, 0.25)[i] * (1 - k) + glow[i] * k * 0.9) for i in range(3)))
+            for x in range(5, 27):  # горка монет: выше посередине
+                top = 16 - max(0, 3 - abs(x - 16) // 3)
+                for y in range(top, 17):
+                    put(x, y, (255, 248, 190) if (x * 3 + y) % 5 == 0 else (255, 214, 80) if (x + y) % 2 else (214, 150, 40))
+            for x, y in ((11, 12), (20, 13), (16, 11)):
+                put(x, y, (255, 255, 240))  # искры над золотом
+            for x in range(4, 28):
+                put(x, 10, _shade(wood, 0.45))  # край задней стенки
+            # ---- откинутая крышка: изнанка, сужается кверху (перспектива)
+            for y in range(0, 10):
+                inset = (10 - y) // 3
+                for x in range(4 + inset, 28 - inset):
+                    f = (0.55 + (y - 1) * 0.03) * edge(x, 4 + inset, 27 - inset)
+                    put(x, y, _shade(wood, f))
+                for x in (6 + inset, 25 - inset):
+                    put(x, y, _shade(metal, 0.9))
+            for x in range(5, 27):
+                put(x, 9, _shade(metal, 1.1))
+            for x in range(8, 24):
+                put(x, 0, _shade(metal, 0.8))
         else:
-            # крышка: полукруглая, с оковкой и знаком земли
-            r(1, 8, 24, 9, k)
-            r(3, 7, 20, 1, k)
-            r(2, 9, 22, 7, wood)
-            r(2, 9, 22, 1, light if kind == "castle" else tuple(min(255, c + 30) for c in wood))
-            r(2, 15, 22, 1, dark)
-            for x in (4, 20):
-                r(x, 8, 2, 9, band)
-                r(x, 9, 1, 7, light)
-            # замок
-            r(11, 14, 4, 5, k)
-            r(12, 15, 2, 3, light)
+            # ---- крышка-бочонок: y 7..16, светлее к вершине
+            for y in range(7, 17):
+                x0 = {7: 7, 8: 5, 9: 4}.get(y, 3)
+                x1 = 31 - x0 - 1 + 1 - 1 if False else W - 1 - x0
+                x1 = min(x1, 28)
+                for x in range(x0, x1 + 1):
+                    t = (y - 7) / 9
+                    f = (1.32 - 0.55 * t) * edge(x, x0, x1)
+                    if y == 11:
+                        f *= 0.85  # перегиб крышки
+                    put(x, y, _shade(wood, f))
+                for x, f in ((4, 1.3), (5, 1.0), (26, 1.1), (27, 0.85)):
+                    if x0 <= x <= x1:
+                        put(x, y, _shade(metal, f * (1.2 - 0.4 * (y - 7) / 9)))
+            for x in range(9, 23, 3):  # блик на макушке
+                put(x, 8, _shade(wood, 1.6))
+            put(10, 9, _shade(wood, 1.5))
+            for x in (4, 27):
+                put(x, 10, mlight)  # заклёпки крышки
+                put(x, 14, mlight)
+            # знак земли на крышке
+            cols = {"w": (236, 230, 214), "k": K, "y": mlight, "r": metal, "o": (255, 170, 60)}
             for yy, row in enumerate(CHEST_SIGNS[sign]):
                 for xx, ch in enumerate(row):
-                    if cols.get(ch):
-                        surf.set_at((10 + xx, 9 + yy), cols[ch])
-        if kind == "abyss":  # лавовые трещины на корпусе
-            for x, y in ((7, 18), (8, 19), (8, 20), (9, 21), (16, 22), (17, 23), (17, 24), (16, 25)):
-                surf.set_at((x, y), (255, 120, 30))
-        if kind == "grave":  # лунный блик
-            r(8, 18, 1, 8, (70, 110, 116))
+                    if ch in cols:
+                        put(13 + xx, 9 + yy, cols[ch])
+        # ---- замок на ранте
+        for y in range(15 if not opened else 17, 22):
+            for x in range(13, 19):
+                put(x, y, _shade(metal, 1.15 if x == 13 or y == 15 else 0.95))
+        put(15, 19, K)
+        put(16, 19, K)
+        put(15, 20, K)
+        put(14, 16 if not opened else 18, mlight)
+        if kind == "abyss":  # трещины лавы на корпусе
+            for x, y in ((8, 20), (9, 21), (9, 22), (10, 23), (21, 22), (22, 23), (22, 24), (23, 25), (11, 26), (12, 26)):
+                put(x, y, (255, 120, 30) if (x + y) % 2 else (255, 210, 110))
+        if kind == "grave":  # лунный отблеск по доскам
+            for y in range(19, 28):
+                put(8, y, _shade(wood, 1.5))
+        # ---- контур
+        surf = pygame.Surface((W, H), pygame.SRCALPHA)
+        for y in range(H):
+            for x in range(W):
+                if g[y][x]:
+                    surf.set_at((x, y), g[y][x])
+                elif any(0 <= x + dx < W and 0 <= y + dy < H and g[y + dy][x + dx] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                    surf.set_at((x, y), K)
         out.append(surf)
     return out
 

@@ -1837,6 +1837,7 @@ class InventoryScene extends Scene {
     this.msgT = 0;
     this.sparks = [];
     chestState(game.player);
+    this.sel = CHEST_ORDER.find((k) => game.player.chests[k] > 0) || "crypt"; // выбранный сундук
   }
   get ownsPanel() {
     return true;
@@ -1865,17 +1866,23 @@ class InventoryScene extends Scene {
     if (P) return { P, tabs: [[16, 96, 296, 60], [328, 96, 296, 60]], top: 176, bottom: g.H - 130, back: [24, g.H - 110, W - 48, 86] };
     return { P, tabs: [[12, 34, 200, 22], [218, 34, 200, 22]], top: 62, bottom: 312, back: [24, GAME_H - 40, 200, 30] };
   }
-  cards() {
+  /** Ячейки сундуков (маленькие квадраты) и панель выбранного. */
+  slots() {
     const L = this.layout();
     if (L.P) {
-      const h = Math.floor((L.bottom - L.top - 16) / 2);
-      return CHEST_ORDER.map((k, i) => [k, [16 + (i % 2) * 312, L.top + Math.floor(i / 2) * (h + 16), 296, h]]);
+      const s = Math.floor((W - 32 - 3 * 12) / 4);
+      return CHEST_ORDER.map((k, i) => [k, [16 + i * (s + 12), L.top, s, s]]);
     }
-    return CHEST_ORDER.map((k, i) => [k, [12 + i * 156, L.top, 148, L.bottom - L.top]]);
+    return CHEST_ORDER.map((k, i) => [k, [12 + (i % 2) * 100, L.top + 4 + Math.floor(i / 2) * 100, 92, 92]]);
   }
-  openRect([x, y, w, h]) {
-    const P = this.game.portrait;
-    return P ? [x + 16, y + h - 76, w - 32, 60] : [x + 10, y + h - 30, w - 20, 24];
+  panelRect() {
+    const L = this.layout();
+    if (L.P) { const top = L.top + this.slots()[0][1][3] + 20; return [16, top, W - 32, L.bottom - top]; }
+    return [216, L.top, W - 228, L.bottom - L.top];
+  }
+  openRect() {
+    const [x, y, w, h] = this.panelRect(), P = this.game.portrait;
+    return P ? [x + 40, y + h - 84, w - 80, 66] : [x + w / 2 - 90, y + h - 34, 180, 26];
   }
   /** Вещи героя: оружие (и неоткрытое оружие сундуков — силуэтом), доспехи, талисманы. */
   items() {
@@ -1894,8 +1901,8 @@ class InventoryScene extends Scene {
     const g = this.game, P = g.portrait, reps = this.open && this.open.phase === "reps";
     const h = P && reps ? GAME_H : P ? g.H : GAME_H;
     const k = P ? (reps ? 4 : 8) : 5;
-    const by = Math.round(h * (reps ? (P ? 0.6 : 0.72) : 0.5));
-    return { cx: W / 2, by, k, h, slotY: by + (P ? 110 : 62) };
+    const by = Math.round(h * (reps ? (P ? 0.6 : 0.72) : P ? 0.5 : 0.6));
+    return { cx: W / 2, by, k, h, slotY: by + (P ? 110 : 44) };
   }
   start(kind) {
     const C = CHESTS[kind];
@@ -1944,10 +1951,10 @@ class InventoryScene extends Scene {
     if (g.key("Escape") || g.tapped(L.back)) { sfx.click(); return g.change(new BonfireScene(g)); }
     ["chests", "items"].forEach((tab, i) => { if (g.tapped(L.tabs[i]) && this.tab !== tab) { sfx.click(); this.tab = tab; } });
     if (this.tab === "chests") {
-      for (const [kind, r] of this.cards()) {
-        if (!g.tapped(this.openRect(r)) && !g.tapped(r)) continue;
-        if (!(p.chests[kind] > 0)) { sfx.deny(); return this.say("Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда"); }
-        return this.start(kind);
+      for (const [kind, r] of this.slots()) if (g.tapped(r) && this.sel !== kind) { sfx.click(); this.sel = kind; }
+      if (g.tapped(this.openRect()) || g.key("Enter", " ")) {
+        if (!(p.chests[this.sel] > 0)) { sfx.deny(); return this.say("Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда"); }
+        return this.start(this.sel);
       }
     } else {
       for (const [key, own, r] of this.items()) {
@@ -2023,47 +2030,77 @@ class InventoryScene extends Scene {
   }
   drawChests() {
     const g = this.game, c = g.ctx, P = g.portrait, p = this.player, t = g.time, front = locationFor(frontierOf(p));
-    for (const [kind, r] of this.cards()) {
-      const C = CHESTS[kind], [x, y, w, h] = r, n = p.chests[kind] || 0, known = C.loc <= front || n > 0;
-      g.rect(r, n ? "rgba(34,24,26,0.95)" : "rgba(18,14,20,0.92)");
-      c.strokeStyle = n ? COL.gold : "rgb(70,58,60)";
+    const known = (kind) => CHESTS[kind].loc <= front || (p.chests[kind] || 0) > 0;
+    // ячейки: маленькие квадраты с сундуком и числом
+    for (const [kind, r] of this.slots()) {
+      const [x, y, w, h] = r, n = p.chests[kind] || 0, sel = this.sel === kind, kn = known(kind);
+      g.rect(r, sel ? "rgba(60,40,30,0.95)" : "rgba(22,16,22,0.95)");
+      if (n) drawGlow(c, x + w / 2, y + h * 0.58, w * 0.5, CHEST_GLOW[kind], 0.22 + 0.08 * Math.sin(t * 4));
+      c.strokeStyle = sel ? COL.gold : n ? "rgb(140,110,80)" : "rgb(64,54,60)";
+      c.lineWidth = sel ? (P ? 4 : 2) : P ? 2 : 1;
       c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-      const fs = P ? 16 : 8, tw = w - (P ? 16 : 8);
-      this.line(known ? C.name : "???", x + w / 2, y + (P ? 14 : 6), tw, fs, known ? COL.text : COL.dim);
-      // сундук: есть — покачивается и светится
-      const spr = IMG[`chest_${kind}_0`], k = P ? 6 : 3, sx = x + w / 2 - spr.width * k / 2;
-      const sy = y + (P ? 44 : 20) + (n ? Math.round(Math.sin(t * 3 + C.loc) * (P ? 3 : 1)) : 0);
-      if (n) drawGlow(c, x + w / 2, sy + spr.height * k * 0.6, spr.width * k * 0.8, CHEST_GLOW[kind], 0.3 + 0.1 * Math.sin(t * 4));
+      c.lineWidth = 1;
+      const spr = IMG[`chest_${kind}_0`], k = P ? 3 : 2;
       c.save();
-      if (!known) c.filter = "brightness(0.15)";
-      else if (!n) c.globalAlpha = 0.45;
-      c.drawImage(spr, sx, sy, spr.width * k, spr.height * k);
+      if (!kn) c.filter = "brightness(0.12)";
+      else if (!n) c.globalAlpha = 0.4;
+      c.drawImage(spr, Math.round(x + (w - spr.width * k) / 2), Math.round(y + (h - spr.height * k) / 2 + (n ? Math.sin(t * 3 + CHESTS[kind].loc) * k / 2 : 0)), spr.width * k, spr.height * k);
       c.restore();
+      if (!kn) g.text("?", x + w / 2, y + h / 2 - (P ? 16 : 8), P ? 32 : 16, COL.dim, "center");
       if (n) {
-        g.rect([x + w - (P ? 70 : 38), sy, P ? 58 : 30, P ? 32 : 16], "rgba(140,30,30,0.95)");
-        g.text(`x${n}`, x + w - (P ? 41 : 23), sy + (P ? 8 : 4), P ? 16 : 8, "rgb(255,240,220)", "center");
+        const bw = P ? 50 : 26, bh = P ? 28 : 14;
+        g.rect([x + w - bw - 3, y + h - bh - 3, bw, bh], "rgba(150,30,30,0.95)");
+        g.text(`x${n}`, x + w - bw / 2 - 3, y + h - bh - 3 + (P ? 7 : 3), P ? 14 : 8, "rgb(255,240,220)", "center");
       }
-      let ty = sy + spr.height * k + (P ? 14 : 6);
-      const small = P ? 13 : 8, lh = P ? 22 : 11;
-      if (!known) {
-        this.line(tr(LOCATIONS[C.loc].name), x + w / 2, ty, tw, small, COL.dim);
-        continue;
-      }
-      this.line(tf("{n} × {ex}", { n: C.reps, ex: tr(NAMES[C.ex]).toLowerCase() }), x + w / 2, ty, tw, small, "rgb(150,230,140)");
-      ty += lh;
-      this.line(tr(LOCATIONS[C.loc].name), x + w / 2, ty, tw, small, COL.dim);
-      ty += lh + (P ? 8 : 3);
-      // легендарное оружие сундука: найдено — цветное, нет — силуэт и счётчик гарантии
-      const has = p.owned.includes(C.weapon), ik = P ? 4 : 2;
-      drawGlow(c, x + w / 2, ty + 10 * ik, 14 * ik, [255, 190, 60], has ? 0.35 : 0.12);
-      drawLootIcon(c, { kind: "item", key: C.weapon }, x + w / 2, ty + 10 * ik, ik, !has);
-      ty += 20 * ik + (P ? 6 : 3);
-      this.line(has ? tr(SWORDS[C.weapon].name) : "???", x + w / 2, ty, tw, small, has ? "rgb(255,200,90)" : "rgb(200,150,60)");
-      ty += lh;
-      const left = C.pity - (p.chestPity[kind] || 0);
-      this.line(has ? "найдено!" : tf("гарантия: до {n}", { n: left }), x + w / 2, ty, tw, P ? 12 : 8, has ? "rgb(150,230,140)" : COL.dim);
-      g.button(this.openRect(r), n ? "ОТКРЫТЬ" : "НЕТ СУНДУКОВ", { size: P ? 18 : 8, ...(n ? GO_STYLE : { color: COL.dim }) });
     }
+    if (!P) {
+      const hy = this.slots()[3][1][1] + 104;
+      g.text("С врагов земли — иногда,", 112, hy, 8, COL.dim, "center");
+      g.text("с босса — всегда", 112, hy + 12, 8, COL.dim, "center");
+    }
+    // панель выбранного сундука
+    const kind = this.sel, C = CHESTS[kind], n = p.chests[kind] || 0, kn = known(kind), [x, y, w, h] = this.panelRect();
+    g.rect([x, y, w, h], "rgba(20,14,20,0.95)");
+    c.strokeStyle = "rgb(110,84,60)";
+    c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    const fs = P ? 20 : 12, small = P ? 14 : 8, lh = P ? 26 : 13, cx = x + (P ? w / 2 : 96);
+    const spr = IMG[`chest_${kind}_0`], k = P ? 6 : 4, sy = y + (P ? 56 : 30);
+    if (n) drawGlow(c, cx, sy + spr.height * k * 0.6, spr.width * k * 0.75, CHEST_GLOW[kind], 0.35 + 0.1 * Math.sin(t * 4));
+    c.save();
+    if (!kn) c.filter = "brightness(0.12)";
+    c.drawImage(spr, Math.round(cx - spr.width * k / 2), Math.round(sy + (n ? Math.sin(t * 3) * 2 : 0)), spr.width * k, spr.height * k);
+    c.restore();
+    g.text(kn ? C.name : "???", P ? x + w / 2 : x + w / 2, y + (P ? 16 : 8), fs, kn ? COL.gold : COL.dim, "center");
+    // сведения: справа от сундука (горизонтально) или под ним (вертикально)
+    const tx = P ? x + w / 2 : x + 190, tw = P ? w - 32 : w - 200, align = P ? "center" : "left";
+    let ty = P ? sy + spr.height * k + 20 : y + 40;
+    const row = (text, col, size = small) => {
+      c.font = `${size}px ${FONT}`;
+      let tt = tr(text);
+      while (tt.length > 3 && c.measureText(tt).width > tw) tt = tt.slice(0, -2) + "…";
+      g.text(tt, tx, ty, size, col, align);
+      ty += lh;
+    };
+    if (!kn) {
+      row(tf("Земля: {land}", { land: tr(LOCATIONS[C.loc].name) }), COL.dim);
+      row("Дойдите до этой земли на карте", COL.dim);
+    } else {
+      row(tf("В инвентаре: {n}", { n }), n ? "rgb(255,230,160)" : COL.dim);
+      row(tf("Открыть: {n} × {ex}", { n: C.reps, ex: tr(NAMES[C.ex]).toLowerCase() }), "rgb(150,230,140)");
+      row(tf("Земля: {land}", { land: tr(LOCATIONS[C.loc].name) }), COL.dim);
+      row("Внутри: пепел и камни,", COL.text);
+      row("иногда — талисман", COL.text);
+      ty += P ? 6 : 3;
+      const has = p.owned.includes(C.weapon), ik = P ? 4 : 2, ix = P ? x + w / 2 : tx + 10 * ik;
+      drawGlow(c, ix, ty + 10 * ik, 14 * ik, [255, 190, 60], has ? 0.4 : 0.15);
+      drawLootIcon(c, { kind: "item", key: C.weapon }, ix, ty + 10 * ik, ik, !has);
+      if (P) ty += 22 * ik;
+      const wtx = P ? tx : tx + 24 * ik;
+      const left = C.pity - (p.chestPity[kind] || 0);
+      g.text(has ? tr(SWORDS[C.weapon].name) : tf("Легенда: {name}", { name: "???" }), wtx, ty + (P ? 0 : 6), P ? 16 : 8, has ? "rgb(255,200,90)" : "rgb(220,160,60)", align);
+      g.text(has ? "найдено!" : tf("гарантия: до {n} сундуков", { n: left }), wtx, ty + (P ? 24 : 20), P ? 12 : 8, has ? "rgb(150,230,140)" : COL.dim, align);
+    }
+    g.button(this.openRect(), n ? "ОТКРЫТЬ" : "НЕТ СУНДУКОВ", { size: P ? 22 : 12, ...(n ? GO_STYLE : { color: COL.dim }) });
   }
   drawItems() {
     const g = this.game, c = g.ctx, P = g.portrait, p = this.player;
