@@ -19,6 +19,7 @@ REWRITES = [
     ("sw.js", '"assets/', '"'),
     ("sw.js", '"fonts/', '"'),
     ("game.js", '"assets/atlas', '"atlas'),
+    ("music.js", '"assets/music/', '"'),
     ("motion.js", '"../vendor/tasks-vision/"', '"./"'),
     ("motion.js", '"../vendor/pose_landmarker_lite.task"', '"./pose_landmarker_lite.task"'),
     ("motion.js", 'LOCAL_BASE + "wasm"', 'LOCAL_BASE.replace(/\\/$/, "")'),

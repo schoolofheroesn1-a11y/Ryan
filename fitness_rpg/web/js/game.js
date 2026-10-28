@@ -9,6 +9,7 @@ import {
 } from "./gear.js";
 import { ARMORS, Player, STATS, TALISMANS, setSaveSlot } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
+import { playMusic } from "./music.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
 import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
@@ -237,6 +238,13 @@ function drawAchIcon(c, cat, x, y, k, on = true) {
 /** Название титула (переведённое) по id достижения или "". */
 const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
 
+/** Тема сцены: в бою — музыка земли, в остальном (меню, костёр, карта, кузница) — тема костра. */
+const LOCATION_MUSIC = { 1: "crypt", 2: "castle", 3: "grave", 4: "abyss" };
+function sceneMusic(scene) {
+  if (scene instanceof BattleScene) return LOCATION_MUSIC[scene.location] || "crypt";
+  return "bonfire";
+}
+
 /** Передовая героя (самый дальний открытый раунд). Старые сохранения (и старый player.js) её не знают —
  *  тогда она не меньше текущего раунда. */
 const frontierOf = (p) => Math.max(Number(p.frontier) || 1, Number(p.wave) || 1);
@@ -313,7 +321,7 @@ class Game {
     this.store.init().then(() => this.syncPaid()); // RevenueCat в iOS-приложении; иначе — тестовый режим
     this.syncPaid();
     this.leaderboard = new Leaderboard();
-    this.settings = { volume: 0.8, alert: 1, vibrate: true, ...loadJSON(SETTINGS_KEY, {}) };
+    this.settings = { volume: 0.8, alert: 1, vibrate: true, music: 0.55, ...loadJSON(SETTINGS_KEY, {}) };
     setAudio(this.settings);
     this.leaderboard.flush(); // результат, накопленный без сети, уходит при запуске
     this.online = new Online(); // мультиплеер: аккаунт, рейтинг, вызовы, дуэли, коды
@@ -830,6 +838,7 @@ class Game {
 
   change(scene) {
     this.scene = scene;
+    playMusic(sceneMusic(scene)); // у каждой земли своя тема, у костра и меню — своя
   }
 
   frame(dt) {
@@ -4994,21 +5003,21 @@ const TELEGRAM_URL = "https://t.me/ashe_and_iron";
 /** Раскладка настроек: альбомная (640×360) или вертикальная во весь экран телефона. */
 function settingsLayout(g) {
   if (!g.portrait) {
-    const row = (y) => ({ label: [40, y + 12], minus: [300, y, 44, 36], plus: [556, y, 44, 36], bar: [352, y + 8, 196, 20] });
+    const row = (y) => ({ label: [40, y + 12], minus: [300, y, 44, 34], plus: [556, y, 44, 34], bar: [352, y + 7, 196, 20] });
     return {
-      title: 16, fs: { title: 24, label: 12, btn: 12, sign: 16 },
-      volume: row(60), alert: row(108), vibLabel: [40, 168], vib: [300, 156, 140, 36], diff: [448, 156, 152, 36],
-      test: [40, 204, 170, 34], code: [218, 204, 180, 34], tg: [406, 204, 194, 34], camera: [40, 256, 270, 36], support: [330, 256, 270, 36],
-      lang: [330, 308, 270, 34], back: [40, 308, 270, 34],
+      title: 12, fs: { title: 24, label: 12, btn: 12, sign: 16 },
+      volume: row(48), music: row(90), alert: row(132), vibLabel: [40, 190], vib: [300, 178, 140, 34], diff: [448, 178, 152, 34],
+      test: [40, 222, 170, 34], code: [218, 222, 180, 34], tg: [406, 222, 194, 34], camera: [40, 266, 270, 34], support: [330, 266, 270, 34],
+      lang: [330, 312, 270, 34], back: [40, 312, 270, 34],
     };
   }
-  const row = (y) => ({ label: [24, y], minus: [24, y + 36, 88, 72], plus: [W - 112, y + 36, 88, 72], bar: [128, y + 52, W - 256, 40] });
-  const btn = (i) => [24, 572 + i * 88, W - 48, 74];
+  const row = (y) => ({ label: [24, y], minus: [24, y + 34, 88, 68], plus: [W - 112, y + 34, 88, 68], bar: [128, y + 48, W - 256, 40] });
+  const btn = (i) => [24, 612 + i * 80, W - 48, 68];
   return {
-    title: 36, fs: { title: 32, label: 24, btn: 24, sign: 32 },
-    volume: row(110), alert: row(250), vibLabel: [24, 392], vib: [24, 428, W - 48, 74],
+    title: 30, fs: { title: 32, label: 24, btn: 24, sign: 32 },
+    volume: row(96), music: row(226), alert: row(356), vibLabel: [24, 490], vib: [24, 524, W - 48, 68],
     test: btn(0), tg: btn(1), camera: btn(2), support: btn(3), lang: btn(4), code: btn(5), diff: btn(6),
-    back: [W / 2 - 160, Math.max(btn(7)[1] + 16, g.H - 100), 320, 74],
+    back: [W / 2 - 160, Math.max(btn(7)[1] + 12, g.H - 92), 320, 70],
   };
 }
 
@@ -5028,6 +5037,9 @@ class SettingsScene extends Scene {
     const ai = Math.max(0, ALERT_LEVELS.findIndex(([v]) => v === st.alert));
     if (g.tapped(L.volume.minus)) { this.set("volume", Math.max(0, Math.round(st.volume * 10 - 1) / 10)); sfx.click(); }
     if (g.tapped(L.volume.plus)) { this.set("volume", Math.min(1, Math.round(st.volume * 10 + 1) / 10)); sfx.click(); }
+    const mv = st.music ?? 0.55;
+    if (g.tapped(L.music.minus)) { this.set("music", Math.max(0, Math.round(mv * 10 - 1) / 10)); sfx.click(); }
+    if (g.tapped(L.music.plus)) { this.set("music", Math.min(1, Math.round(mv * 10 + 1) / 10)); sfx.click(); }
     if (g.tapped(L.alert.minus)) { this.set("alert", step(ai, -1)); sfx.alert(); }
     if (g.tapped(L.alert.plus)) { this.set("alert", step(ai, 1)); sfx.alert(); }
     if (g.tapped(L.vib)) { this.set("vibrate", !st.vibrate); sfx.click(); }
@@ -5074,6 +5086,8 @@ class SettingsScene extends Scene {
     const g = this.game, st = g.settings, L = settingsLayout(g), fs = L.fs;
     g.text("НАСТРОЙКИ", W / 2, L.title, fs.title, COL.gold, "center");
     this.slider(L.volume, fs, "Громкость", st.volume, `${Math.round(st.volume * 100)}%`);
+    const mv = st.music ?? 0.55;
+    this.slider(L.music, fs, "Музыка", mv, mv > 0 ? `${Math.round(mv * 100)}%` : "выкл");
     const al = ALERT_LEVELS.find(([v]) => v === st.alert) || ALERT_LEVELS[2];
     this.slider(L.alert, fs, "Сигнал «приседай»", st.alert / 1.5, al[1]);
     g.text(isNative() ? "Вибрация" : "Вибрация (Android)", L.vibLabel[0], L.vibLabel[1], fs.label);

@@ -1,11 +1,12 @@
 // Ретро-звуки, синтезированные WebAudio: файлы не нужны, работает офлайн.
 // Браузеры разрешают звук только после касания — контекст создаётся при старте игры.
 import { vibrate } from "./platform.js";
+import { attachMusic, duckMusic, setMusicVolume } from "./music.js";
 
 let ctx = null;
 let master = null; // общая громкость
 let alertGain = null; // отдельная громкость сигнала «приседай»
-const levels = { volume: 0.8, alert: 1, vibrate: true };
+const levels = { volume: 0.8, alert: 1, vibrate: true, music: 0.55 };
 
 export function initAudio() {
   try {
@@ -21,6 +22,7 @@ export function initAudio() {
       alertGain = ctx.createGain();
       alertGain.connect(master);
       applyLevels();
+      attachMusic(ctx, master); // музыка идёт через общую громкость
     }
   } catch (e) {
     ctx = null;
@@ -33,8 +35,12 @@ function applyLevels() {
   if (alertGain) alertGain.gain.value = levels.alert;
 }
 
-/** Настройки звука: volume 0..1, alert 0..1.5 (сигнал замаха), vibrate. */
-export function setAudio({ volume, alert, vibrate } = {}) {
+/** Настройки звука: volume 0..1, alert 0..1.5 (сигнал замаха), vibrate, music 0..1. */
+export function setAudio({ volume, alert, vibrate, music } = {}) {
+  if (music != null) {
+    levels.music = music;
+    setMusicVolume(music);
+  }
   if (volume != null) levels.volume = volume;
   if (alert != null) levels.alert = alert;
   if (vibrate != null) levels.vibrate = vibrate;
@@ -92,6 +98,7 @@ export const sfx = {
       tone(f * 2, len * 0.7, { type: "triangle", delay: d, vol: 0.12, out: alertGain });
     });
     if (levels.vibrate) vibrate([120, 40, 120]); // Android — браузер, iOS — нативно
+    duckMusic(); // музыка уступает сигналу
   },
   // запрет («нельзя»: не хватает пепла, кончились силы) — громкий низкий «бзз-бзз», слышно с 2–3 м.
   // Идёт через ту же громкость, что и «приседай», но звучит иначе: гудок вниз, а не звон вверх

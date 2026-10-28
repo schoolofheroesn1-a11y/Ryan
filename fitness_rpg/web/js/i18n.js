@@ -419,6 +419,8 @@ const EN = {
   "пламя гаснет!": "flame is fading!",
   "СЕРИЯ ОГОНЬКОВ": "FLAME STREAK",
   "ДОСТИЖЕНИЕ!": "ACHIEVEMENT!",
+  "Музыка": "Music",
+  "выкл": "off",
   "С врагов земли — иногда,": "From the land's enemies: sometimes,",
   "с босса — всегда": "from the boss: always",
   "Земля: {land}": "Land: {land}",

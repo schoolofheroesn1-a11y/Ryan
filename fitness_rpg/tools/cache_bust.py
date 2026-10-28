@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 IMP = re.compile(r'((?:from|import)\s*\(?\s*")(\./([\w-]+\.m?js))(")')
-ASSET = re.compile(r'"(atlas\.(?:json|png))"')
+ASSET = re.compile(r'"(atlas\.(?:json|png)|[\w-]+\.(?:m4a|ogg)|music\.json)"')
 
 
 def digest(data):
@@ -21,7 +21,8 @@ def digest(data):
 def main(site, previous=None):
     site = Path(site)
     texts = {f.name: f.read_text(encoding="utf-8") for f in list(site.glob("*.js")) + [site / "index.html"] if f.name != "sw.js"}
-    assets = {n: digest((site / n).read_bytes()) for n in ("atlas.json", "atlas.png") if (site / n).exists()}
+    assets = {f.name: digest(f.read_bytes()) for f in site.iterdir()
+              if f.name in ("atlas.json", "atlas.png", "music.json") or f.suffix in (".m4a", ".ogg")}
     done, busy = {}, set()
 
     def final(name):
