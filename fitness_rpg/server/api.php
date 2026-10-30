@@ -315,11 +315,29 @@ const PAY_ITEMS = [
 ];
 const ROBOKASSA_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
 
+/** Что не так с настройками Robokassa (для страницы проверки) или null — всё в порядке. Паролей не показывает. */
+function robokassa_problem() {
+    $f = __DIR__ . '/robokassa_config.php';
+    if (!is_file($f)) {
+        $near = array_values(array_filter(scandir(__DIR__), function ($n) { return stripos($n, 'robokassa') !== false; }));
+        return 'нет файла robokassa_config.php рядом с api.php' . ($near ? '. Найдены похожие: ' . implode(', ', $near) . ' — переименуйте в robokassa_config.php' : '');
+    }
+    $c = include $f;
+    if (!is_array($c)) return 'файл robokassa_config.php испорчен: проверьте кавычки и запятые (сравните с robokassa_config.example.php)';
+    if (empty($c['login'])) return "не указан 'login' (идентификатор магазина)";
+    $test = !empty($c['test']);
+    $k1 = $test ? 'test_pass1' : 'pass1';
+    $k2 = $test ? 'test_pass2' : 'pass2';
+    if (empty($c[$k1]) || empty($c[$k2])) return ($test ? 'тестовый режим: ' : 'боевой режим: ') . "не вписаны '$k1' и/или '$k2'";
+    return null;
+}
+
 /** Настройки Robokassa или null (файла нет или не вписаны пароли нужного режима). */
 function robokassa() {
     $f = __DIR__ . '/robokassa_config.php';
     if (!is_file($f)) return null;
-    $c = require $f;
+    $c = include $f;
+    if (!is_array($c)) return null;
     $test = !empty($c['test']);
     $p1 = $test ? $c['test_pass1'] : $c['pass1'];
     $p2 = $test ? $c['test_pass2'] : $c['pass2'];
@@ -333,6 +351,15 @@ function rk_sign($rk, $parts, $shp) {
     ksort($shp);
     foreach ($shp as $k => $v) $parts[] = "$k=$v";
     return hash($rk['algo'], implode(':', $parts));
+}
+
+// Страница проверки настроек (открыть в браузере): https://ash-a-iron.com/api.php?action=pay_check
+if (isset($_GET['action']) && $_GET['action'] === 'pay_check') {
+    header('Content-Type: text/plain; charset=utf-8');
+    $problem = robokassa_problem();
+    if ($problem) exit("Robokassa НЕ подключена: $problem.");
+    $rk = robokassa();
+    exit('Robokassa подключена: магазин ' . $rk['login'] . ', ' . ($rk['test'] ? 'ТЕСТОВЫЙ режим (деньги не списываются)' : 'БОЕВОЙ режим') . ', подпись ' . strtoupper($rk['algo']) . '.');
 }
 
 // Уведомление об оплате (Result URL): Robokassa присылает OutSum, InvId, SignatureValue, Shp_item

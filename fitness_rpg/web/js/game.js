@@ -336,7 +336,7 @@ class Game {
     if (this.online.configured && !isNative()) {
       this.online.payInfo().then((r) => {
         this.pay = r;
-        if (r && r.enabled) this.store.rub = r.prices; // цены — в рублях
+        if (r && r.prices) this.store.rub = r.prices; // цены — в рублях, как в каталоге сервера
       }).catch(() => {});
     }
     this.paidReturn(); // вернулись со страницы оплаты

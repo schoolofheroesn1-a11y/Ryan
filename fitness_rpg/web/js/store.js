@@ -55,7 +55,8 @@ export class Store {
     this.lastError = "";
     this.owned = new Set(loadJSON(OWNED_KEY, []));
     this.tips = loadJSON(TIPS_KEY, 0); // сколько раз игрок поддержал проект
-    this.rub = null; // цены в рублях, когда на сайте включена оплата Robokassa
+    this.rub = null; // цены в рублях с сервера (pay_info)
+    this.web = !globalThis.Capacitor; // сайт (не приложение): цены в рублях, оплата — Robokassa
   }
 
   /** Подключение RevenueCat в iOS-приложении. На сайте и без ключа ничего не делает. */
@@ -110,14 +111,14 @@ export class Store {
 
   /** Цена: из магазина, если он подключён; иначе 1 $ (в App Store ближайшая — 0,99 $), гриф — 10 $. */
   price(id) {
-    if (this.rub && !this.viaRevenueCat) return `${this.rub[id] || RUB[id] || 99} ₽`;
+    if (this.web && !this.viaRevenueCat) return `${(this.rub && this.rub[id]) || RUB[id] || 99} ₽`; // на сайте — всегда рубли
     const p = this.products[id];
     const own = COSMETICS.find((c) => c.id === id); // у легендарных обликов своя цена
     return p && p.priceString ? p.priceString : PAID_ITEMS[id] || (own && own.price) || "1 $";
   }
 
   tipPrice(tip) {
-    if (this.rub && !this.viaRevenueCat) return `${this.rub[tip.id] || RUB[tip.id] || 99} ₽`;
+    if (this.web && !this.viaRevenueCat) return `${(this.rub && this.rub[tip.id]) || RUB[tip.id] || 99} ₽`;
     const p = this.products[tip.id];
     return p && p.priceString ? p.priceString : tip.price;
   }
