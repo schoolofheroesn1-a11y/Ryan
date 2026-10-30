@@ -37,8 +37,8 @@
    и `'test' => true`. Файл с паролями закрыт `.htaccess`, в git его не кладите.
 2. В «Технических настройках» магазина:
    - **Result URL:** `https://ash-a-iron.com/api.php?action=robokassa_result`, метод **POST**;
-   - **Success URL:** `https://ash-a-iron.com/?paid=1`, метод **GET**;
-   - **Fail URL:** `https://ash-a-iron.com/?paid=0`, метод **GET**;
+   - **Success URL:** `https://ash-a-iron.com/pay_success.html`, метод **GET** (Robokassa не принимает GET-адреса с параметрами);
+   - **Fail URL:** `https://ash-a-iron.com/pay_fail.html`, метод **GET**;
    - алгоритм хеша — тот же, что в `robokassa_config.php` (`md5`).
 3. Тест: купите облик в игре — откроется страница Robokassa с пометкой теста, оплата не списывается;
    после неё облик появится в игре.
