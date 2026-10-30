@@ -160,6 +160,10 @@ export class Online {
   challengeStart(opponent) { return this.call("challenge_start", { opponent }); }
   challengeEnd(fight, won) { return this.call("challenge_end", { fight, won }); }
   redeem(code) { return this.call("redeem", { code }); }
+  /** Оплата через Robokassa: включена ли, тестовый ли режим и цены в рублях. */
+  payInfo() { return this.call("pay_info"); }
+  /** Счёт на товар: ссылка на страницу оплаты Robokassa (покупка придёт в аккаунт после оплаты). */
+  payCreate(item) { return this.call("pay_create", { item }); }
   saveGet() { return this.call("save_get"); }
   savePut(save, at) { return this.call("save_put", { save, at }); }
   duelCreate(best, hero) { return this.call("duel_create", { best, hero }); }

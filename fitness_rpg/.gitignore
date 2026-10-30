@@ -4,3 +4,4 @@ models/
 save.json
 server/lb_config.php
 deploy/seller.json
+server/robokassa_config.php

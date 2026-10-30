@@ -8,6 +8,8 @@
 //   arena / challenge_start / challenge_end — «Бросить вызов»: лестница игроков и ботов
 //   redeem                        — коды активации платного контента (server/codes.php)
 //   duel_create / duel_join / duel_sync / duel_leave — дуэль в реальном времени (комната по коду)
+//   pay_info / pay_create          — оплата через Robokassa (настройки — robokassa_config.php, не в git);
+//   ?action=robokassa_result       — уведомление Robokassa об оплате (Result URL): проверка подписи и выдача покупки
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -87,6 +89,9 @@ try {
         host_seen INT NOT NULL, guest_seen INT NOT NULL DEFAULT 0, created INT NOT NULL)$cs");
     $db->exec("CREATE TABLE IF NOT EXISTS mp_events (room CHAR(4) NOT NULL, side INT NOT NULL, seq INT NOT NULL, payload TEXT NOT NULL, t INT NOT NULL,
         PRIMARY KEY (room, side, seq))$cs");
+    // платежи Robokassa: счёт создаётся до оплаты, покупка выдаётся по уведомлению Result URL
+    $db->exec("CREATE TABLE IF NOT EXISTS mp_payments (inv_id BIGINT PRIMARY KEY, account_id CHAR(16) NOT NULL, item VARCHAR(32) NOT NULL,
+        out_sum VARCHAR(16) NOT NULL, status VARCHAR(8) NOT NULL, test INT NOT NULL DEFAULT 0, created INT NOT NULL, paid INT NULL)$cs");
     try {
         $db->query('SELECT done FROM mp_rooms LIMIT 0');
     } catch (Exception $e) {
@@ -297,6 +302,67 @@ function reload($id) {
     return $q->fetch();
 }
 
+// ---------------------------------------------------------------- оплата: Robokassa
+// Каталог платных товаров с ценами в рублях — цену считает сервер, клиенту её подделать нельзя.
+const PAY_ITEMS = [
+    'sword_void' => [99, 'Облик меча «Клинок Бездны»'], 'sword_sun' => [99, 'Облик меча «Клинок Рассвета»'],
+    'sword_frost' => [99, 'Облик меча «Ледяной Клык»'], 'sword_phoenix' => [299, 'Облик меча «Клинок Феникса»'],
+    'armor_samurai' => [99, 'Облик доспеха «Доспех самурая»'], 'hit_storm' => [99, 'Эффект удара «Гнев грозы»'],
+    'hit_souls' => [99, 'Эффект удара «Призраки павших»'], 'win_crown' => [99, 'Оформление победы «Королевский триумф»'],
+    'win_pyre' => [99, 'Оформление победы «Синее пламя»'], 'weapon_barbell' => [999, 'Оружие «Гриф от штанги»'],
+    'support_ale' => [99, 'Поддержка проекта «Кружка эля»'], 'support_torch' => [299, 'Поддержка проекта «Факел для костра»'],
+    'support_forge' => [499, 'Поддержка проекта «Меч в кузню»'],
+];
+const ROBOKASSA_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
+
+/** Настройки Robokassa или null (файла нет или не вписаны пароли нужного режима). */
+function robokassa() {
+    $f = __DIR__ . '/robokassa_config.php';
+    if (!is_file($f)) return null;
+    $c = require $f;
+    $test = !empty($c['test']);
+    $p1 = $test ? $c['test_pass1'] : $c['pass1'];
+    $p2 = $test ? $c['test_pass2'] : $c['pass2'];
+    if (empty($c['login']) || !$p1 || !$p2) return null;
+    $algo = isset($c['hash']) && in_array($c['hash'], ['md5', 'sha256'], true) ? $c['hash'] : 'md5';
+    return ['login' => $c['login'], 'pass1' => $p1, 'pass2' => $p2, 'test' => $test, 'algo' => $algo];
+}
+
+/** Подпись Robokassa: части через «:», дополнительные Shp_-параметры — по алфавиту в конце. */
+function rk_sign($rk, $parts, $shp) {
+    ksort($shp);
+    foreach ($shp as $k => $v) $parts[] = "$k=$v";
+    return hash($rk['algo'], implode(':', $parts));
+}
+
+// Уведомление об оплате (Result URL): Robokassa присылает OutSum, InvId, SignatureValue, Shp_item
+if (isset($_GET['action']) && $_GET['action'] === 'robokassa_result') {
+    header('Content-Type: text/plain; charset=utf-8');
+    $rk = robokassa();
+    if (!$rk) { http_response_code(503); exit('payments off'); }
+    $out = isset($_REQUEST['OutSum']) ? (string)$_REQUEST['OutSum'] : '';
+    $inv = isset($_REQUEST['InvId']) ? (string)$_REQUEST['InvId'] : '';
+    $sig = isset($_REQUEST['SignatureValue']) ? strtolower((string)$_REQUEST['SignatureValue']) : '';
+    $shp = [];
+    foreach ($_REQUEST as $k => $v) if (strpos($k, 'Shp_') === 0) $shp[$k] = (string)$v;
+    if (!preg_match('/^\d{1,18}$/', $inv) || !hash_equals(rk_sign($rk, [$out, $inv, $rk['pass2']], $shp), $sig)) {
+        http_response_code(400);
+        exit('bad sign');
+    }
+    $q = $db->prepare('SELECT * FROM mp_payments WHERE inv_id = ?');
+    $q->execute([$inv]);
+    $p = $q->fetch();
+    if (!$p || (float)$p['out_sum'] !== (float)$out || (isset($shp['Shp_item']) && $shp['Shp_item'] !== $p['item'])) {
+        http_response_code(400);
+        exit('bad invoice');
+    }
+    if ($p['status'] !== 'paid') { // повторное уведомление — покупка уже выдана
+        $db->prepare("UPDATE mp_payments SET status = 'paid', paid = ? WHERE inv_id = ?")->execute([$now, $inv]);
+        if (strpos($p['item'], 'support_') !== 0) grant_unlock($p['account_id'], $p['item']);
+    }
+    exit('OK' . $inv);
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('method', 405);
 $in = json_decode(file_get_contents('php://input', false, null, 0, 16384), true);
 if (!is_array($in)) fail('bad json');
@@ -488,6 +554,42 @@ if ($action === 'challenge_end') {
         }
     }
     reply(['won' => $won, 'moved' => $moved, 'account' => public_account(reload($a['id']))]);
+}
+
+// ---------------------------------------------------------------- оплата: счёт и ссылка на Robokassa
+if ($action === 'pay_info') {
+    $rk = robokassa();
+    $prices = [];
+    foreach (PAY_ITEMS as $k => $v) $prices[$k] = $v[0];
+    reply(['enabled' => (bool)$rk, 'test' => $rk ? $rk['test'] : false, 'prices' => $prices]);
+}
+
+if ($action === 'pay_create') {
+    $a = need_account($in);
+    limit('pay', 20, 600);
+    $rk = robokassa();
+    if (!$rk) fail('payments off', 503);
+    $item = isset($in['item']) ? (string)$in['item'] : '';
+    if (!array_key_exists($item, PAY_ITEMS)) fail('item');
+    $owned = json_decode($a['unlocks'] ?: '[]', true) ?: [];
+    if (strpos($item, 'support_') !== 0 && in_array($item, $owned, true)) fail('owned', 409);
+    [$rub, $desc] = PAY_ITEMS[$item];
+    $out = number_format($rub, 2, '.', '');
+    for ($i = 0; $i < 5; $i++) { // номер счёта — случайный, уникальный
+        $inv = (string)random_int(100000, 2000000000);
+        try {
+            $db->prepare("INSERT INTO mp_payments (inv_id, account_id, item, out_sum, status, test, created) VALUES (?, ?, ?, ?, 'new', ?, ?)")
+                ->execute([$inv, $a['id'], $item, $out, $rk['test'] ? 1 : 0, $now]);
+            break;
+        } catch (Exception $e) {
+            if ($i === 4) fail('server', 500);
+        }
+    }
+    $shp = ['Shp_item' => $item];
+    $params = ['MerchantLogin' => $rk['login'], 'OutSum' => $out, 'InvId' => $inv, 'Description' => $desc,
+        'SignatureValue' => rk_sign($rk, [$rk['login'], $out, $inv, $rk['pass1']], $shp), 'Culture' => 'ru', 'Encoding' => 'utf-8'] + $shp;
+    if ($rk['test']) $params['IsTest'] = 1;
+    reply(['url' => ROBOKASSA_URL . '?' . http_build_query($params), 'inv' => $inv, 'test' => $rk['test'], 'sum' => $rub]);
 }
 
 // ---------------------------------------------------------------- коды активации

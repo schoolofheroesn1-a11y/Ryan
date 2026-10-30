@@ -26,7 +26,7 @@ python3 tools/fill_seller.py "$OUT" deploy/seller.json
 H=dist/ash-a-iron-hosting
 rm -rf "$H" dist/ash-a-iron-hosting.zip && cp -r "$OUT" "$H"
 rm -f "$H/README_DEPLOY.md" "$H/supabase.sql" "$H/.nojekyll"
-cp deploy/hosting/.htaccess server/api.php server/codes.php server/lb_config.example.php "$H/"
+cp deploy/hosting/.htaccess server/api.php server/codes.php server/lb_config.example.php server/robokassa_config.example.php "$H/"
 # какие файлы изменились с прошлой сборки — только их и нужно загрузить на хостинг
 [ -d dist/hosting-prev ] && python3 tools/cache_bust.py "$H" dist/hosting-prev | tail -1 || true
 rm -rf dist/hosting-prev && cp -r "$H" dist/hosting-prev

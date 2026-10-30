@@ -332,6 +332,14 @@ class Game {
       this.cloudSync();
       this.accountSync();
     }
+    this.pay = null; // оплата Robokassa на сайте: { enabled, test, prices }
+    if (this.online.configured && !isNative()) {
+      this.online.payInfo().then((r) => {
+        this.pay = r;
+        if (r && r.enabled) this.store.rub = r.prices; // цены — в рублях
+      }).catch(() => {});
+    }
+    this.paidReturn(); // вернулись со страницы оплаты
     this.motion = new Motion();
     this.applyBank(); // банк упражнений (с камерой — свой выбор, без камеры — кнопки по умолчанию)
     this.useCamera = useCamera;
@@ -729,6 +737,38 @@ class Game {
     this.checkAch(); // медали дуэлей
   }
 
+  /** Возврат со страницы Robokassa (?paid=1 / ?paid=0): покупка приходит в аккаунт уведомлением — ждём её. */
+  paidReturn() {
+    const q = new URLSearchParams(location.search), paid = q.get("paid");
+    if (paid === null) return;
+    history.replaceState(null, "", location.pathname); // при обновлении страницы не повторять
+    if (paid !== "1") return this.say("Оплата не завершена. Деньги не списаны", 5);
+    this.say("Спасибо за поддержку! Покупка появится через несколько секунд", 6);
+    if (!this.online.loggedIn) return;
+    let n = 0;
+    const poll = () => this.online.me().then((r) => this.onAccount(r.account)).catch(() => {}).finally(() => { if (++n < 10) setTimeout(poll, 3000); });
+    setTimeout(poll, 1500);
+  }
+
+  /** Покупка через Robokassa: счёт на сервере → страница оплаты. Без аккаунта покупку некуда выдать. */
+  async payRobokassa(it) {
+    if (!this.online.loggedIn) {
+      const go = await choiceDialog({
+        title: "НУЖЕН АККАУНТ",
+        text: "Покупка сохраняется в аккаунте и будет на любом устройстве. Войдите или зарегистрируйтесь в «Мультиплеере».",
+        buttons: [[null, "ОТМЕНА"], ["login", "ВОЙТИ", true]],
+      });
+      if (go === "login") this.change(new MultiplayerScene(this)); // там сразу откроется окно входа
+      return;
+    }
+    try {
+      const r = await this.online.payCreate(it.id);
+      location.href = r.url; // страница оплаты Robokassa; после неё — обратно в игру (?paid=1)
+    } catch (e) {
+      this.say(e && e.message === "owned" ? tf("Уже есть: {name}", { name: it.name }) : errorText(e), 4);
+    }
+  }
+
   /** Платный контент, открытый кодом: облики, эффекты и гриф. Возвращает названия новых вещей. */
   applyUnlocks(ids) {
     const fresh = [];
@@ -743,6 +783,19 @@ class Game {
 
   /** Платные вещи открываются уникальным кодом: где его получить — в Telegram. */
   async offerCode(it, kind) {
+    if (this.pay && this.pay.enabled) { // на сайте — оплата картой или СБП через Robokassa
+      const price = kind === "tip" ? this.store.tipPrice(it) : this.store.price(it.id);
+      const go = await choiceDialog({
+        title: kind === "tip" ? "ПОДДЕРЖАТЬ ПРОЕКТ" : "КУПИТЬ",
+        text: tf("«{name}» за {price}", { name: it.name, price }),
+        note: this.pay.test ? "ТЕСТОВЫЙ РЕЖИМ Robokassa: деньги не списываются." : "Оплата картой или через СБП (Robokassa). Покупка придёт в ваш аккаунт.",
+        buttons: kind === "tip" ? [[null, "ОТМЕНА"], ["pay", tf("ОПЛАТИТЬ {price}", { price }), true]]
+          : [[null, "ОТМЕНА"], ["code", "ВВЕСТИ КОД"], ["pay", tf("ОПЛАТИТЬ {price}", { price }), true]],
+      });
+      if (go === "pay") await this.payRobokassa(it);
+      if (go === "code") await this.redeemCode();
+      return;
+    }
     if (kind === "tip") {
       const go = await choiceDialog({
         title: "ПОДДЕРЖАТЬ ПРОЕКТ",
@@ -5365,6 +5418,11 @@ export async function boot() {
     return;
   }
   gateStatus.textContent = "";
+  const paid = new URLSearchParams(location.search).get("paid"); // вернулись со страницы оплаты Robokassa
+  if (paid !== null) {
+    gateStatus.textContent = tr(paid === "1" ? "Оплата прошла! Нажмите «Играть» — покупка появится в вашем аккаунте." : "Оплата не завершена, деньги не списаны.");
+    gateStatus.style.color = paid === "1" ? "#9fe39a" : "#ff8a6a";
+  }
   for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.textContent.trim().replace(/\s+/g, " "));
   gate.classList.add("ready");
 

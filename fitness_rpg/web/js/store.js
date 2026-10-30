@@ -25,6 +25,12 @@ export const PAID_ITEMS = { weapon_barbell: "10 $" };
 
 export const productId = (id) => `${STORE.bundleId}.${id}`;
 
+/** Цены на сайте в рублях (оплата через Robokassa). Сервер присылает свои (pay_info) — они главные. */
+export const RUB = {
+  sword_void: 99, sword_sun: 99, sword_frost: 99, sword_phoenix: 299, armor_samurai: 99, hit_storm: 99, hit_souls: 99,
+  win_crown: 99, win_pyre: 99, weapon_barbell: 999, support_ale: 99, support_torch: 299, support_forge: 499,
+};
+
 /** Какой режим допустим для ключа (без ключа или для запрещённого ключа — тестовый режим игры). */
 export function modeForKey(key, allowRealPayments = REVENUECAT.allowRealPayments) {
   if (!key) return "test";
@@ -49,6 +55,7 @@ export class Store {
     this.lastError = "";
     this.owned = new Set(loadJSON(OWNED_KEY, []));
     this.tips = loadJSON(TIPS_KEY, 0); // сколько раз игрок поддержал проект
+    this.rub = null; // цены в рублях, когда на сайте включена оплата Robokassa
   }
 
   /** Подключение RevenueCat в iOS-приложении. На сайте и без ключа ничего не делает. */
@@ -103,12 +110,14 @@ export class Store {
 
   /** Цена: из магазина, если он подключён; иначе 1 $ (в App Store ближайшая — 0,99 $), гриф — 10 $. */
   price(id) {
+    if (this.rub && !this.viaRevenueCat) return `${this.rub[id] || RUB[id] || 99} ₽`;
     const p = this.products[id];
     const own = COSMETICS.find((c) => c.id === id); // у легендарных обликов своя цена
     return p && p.priceString ? p.priceString : PAID_ITEMS[id] || (own && own.price) || "1 $";
   }
 
   tipPrice(tip) {
+    if (this.rub && !this.viaRevenueCat) return `${this.rub[tip.id] || RUB[tip.id] || 99} ₽`;
     const p = this.products[tip.id];
     return p && p.priceString ? p.priceString : tip.price;
   }

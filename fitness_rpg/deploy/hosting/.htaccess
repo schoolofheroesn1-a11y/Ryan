@@ -26,9 +26,9 @@ AddType font/woff2 .woff2
   </FilesMatch>
 </IfModule>
 
-# пароль базы и список кодов не отдаются наружу
+# пароль базы, список кодов и пароли Robokassa не отдаются наружу
 <IfModule mod_authz_host.c>
-  <FilesMatch "^(lb_config|codes)\.php$">
+  <FilesMatch "^(lb_config|codes|robokassa_config)\.php$">
     Order allow,deny
     Deny from all
   </FilesMatch>
