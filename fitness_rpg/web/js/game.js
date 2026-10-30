@@ -1,7 +1,7 @@
 // «Ash & Iron» — мобильная (браузерная) версия. Порт game/core.py + game/scenes.py.
 // Мир рисуется в 320×180 и масштабируется ×2; интерфейс — в логических координатах 640×H.
 // В портретной ориентации под игрой появляется большая панель камеры.
-import { NAMES } from "./exercises.js";
+import { BANK, DEFAULT_BANK, EX_NAMES, EX_SHORT, EX_TIPS, NAMES, cleanBank, mapBank, setBank } from "./exercises.js";
 import { Motion } from "./motion.js";
 import {
   ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
@@ -333,6 +333,7 @@ class Game {
       this.accountSync();
     }
     this.motion = new Motion();
+    this.applyBank(); // банк упражнений (с камерой — свой выбор, без камеры — кнопки по умолчанию)
     this.useCamera = useCamera;
     this.wideMode = !useCamera; // без камеры — всегда горизонтально, по бокам картинки крупные кнопки
     this.touch = !!(globalThis.matchMedia && matchMedia("(pointer: coarse)").matches); // телефон или планшет
@@ -348,6 +349,9 @@ class Game {
     this.codes = []; // физические клавиши (e.code) — J/K/L работают на любой раскладке
     this.toast = "";
     this.toastT = 0;
+    this.releases = []; // касания, засчитанные при отпускании (на прокручиваемых экранах)
+    this.dragDY = 0; // протягивание пальцем / колёсико за кадр
+    this.press = null;
     this.achQueue = []; // открытые достижения — показываются по одному плашкой сверху
     this.achT = 0;
     addEventListener("keydown", (e) => {
@@ -357,15 +361,33 @@ class Game {
       this.keys.push({ KeyW: "ArrowUp", KeyS: "ArrowDown" }[e.code] || e.key);
       this.codes.push(e.code);
     });
-    canvas.addEventListener("pointerdown", (e) => {
+    const point = (e) => { // точка экрана → координаты картинки
       const r = canvas.getBoundingClientRect(), cw = W + 2 * this.side;
       if (this.rotated) { // холст повёрнут на 90° по часовой: его верх — у правого края экрана
-        this.taps.push({ x: ((e.clientY - r.top) / r.height) * cw - this.side, y: ((r.right - e.clientX) / r.width) * this.H });
-      } else {
-        this.taps.push({ x: ((e.clientX - r.left) / r.width) * cw - this.side, y: ((e.clientY - r.top) / r.height) * this.H });
+        return { x: ((e.clientY - r.top) / r.height) * cw - this.side, y: ((r.right - e.clientX) / r.width) * this.H };
       }
+      return { x: ((e.clientX - r.left) / r.width) * cw - this.side, y: ((e.clientY - r.top) / r.height) * this.H };
+    };
+    canvas.addEventListener("pointerdown", (e) => {
+      const pt = point(e);
+      this.taps.push(pt);
+      this.press = { ...pt, lastY: pt.y, moved: false }; // для прокрутки пальцем
       e.preventDefault();
     });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!this.press) return;
+      const pt = point(e);
+      this.dragDY += pt.y - this.press.lastY;
+      this.press.lastY = pt.y;
+      if (Math.abs(pt.y - this.press.y) > 14) this.press.moved = true;
+    });
+    const release = () => {
+      if (this.press && !this.press.moved) this.releases.push({ x: this.press.x, y: this.press.y }); // касание без протягивания
+      this.press = null;
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", () => (this.press = null));
+    canvas.addEventListener("wheel", (e) => { this.dragDY -= e.deltaY * 0.6; e.preventDefault(); }, { passive: false });
   }
 
   /** Аура: с камерой каждая секунда в планке у костра (медитация) копится навсегда; в бою аура работает сама.
@@ -554,6 +576,13 @@ class Game {
   say(text, t = 2.5) {
     this.toast = text;
     this.toastT = t;
+  }
+
+  /** Банк упражнений: какие упражнения дают удар, уворот и зелье. Названия во всей игре — через NAMES. */
+  applyBank() {
+    this.bank = this.mode === "cam" ? cleanBank(this.settings.bank) : { ...DEFAULT_BANK };
+    setBank(this.bank);
+    if (this.motion && this.motion.detector) this.motion.detector.bank = this.bank;
   }
 
   /** Проверить достижения (events — подвиги последней победы). Новые — плашкой, звуком и в профиль. */
@@ -799,7 +828,8 @@ class Game {
       }
       if (big && !inset) {
         const c = d.counts;
-        this.text(`Отжим ${c.pushup}  Присед ${c.squat}  Звезда ${c.jack}`, x + 4, y + 4, 8, COL.text);
+        const b = this.bank;
+        this.text(`${tr(EX_SHORT[b.attack])} ${c[b.attack]}  ${tr(EX_SHORT[b.dodge])} ${c[b.dodge]}  ${tr(EX_SHORT[b.heal])} ${c[b.heal]}`, x + 4, y + 4, 8, COL.text);
       }
     } else {
       this.text("КАМЕРА", x + w / 2, y + inset + 8, big ? 16 : 8, COL.dim, "center");
@@ -844,7 +874,7 @@ class Game {
 
   frame(dt) {
     if (this.portrait && (this.usesPanel !== this.panelOn || this.zoomed !== this.zoomedNow || this.noBtns !== this.noBtnsNow)) this.resize();
-    let moves = this.motion.poll();
+    let moves = mapBank(this.motion.poll(), this.bank); // подтягивания, брусья… — в удар, уворот и зелье
     // клавиатура (браузер на ПК) и экранные кнопки
     const pushup = ["pushup"], squat = ["squat_down", "squat"], jack = ["jack"];
     const keyMap = {
@@ -907,6 +937,8 @@ class Game {
     this.keys.length = 0;
     this.codes.length = 0;
     this.taps.length = 0;
+    this.releases.length = 0;
+    this.dragDY = 0;
   }
 }
 
@@ -1631,9 +1663,9 @@ class ProfileScene extends Scene {
         ["Аура", cam ? tf("+{pct}% ({m} мин в планке)", { pct: (p.aura * 100).toFixed(1), m: Math.floor(p.plankSeconds / 60) }) : tr("только с камерой"), "rgb(255,230,160)"],
       ]],
       ["ТРЕНИРОВКИ", "reps", cam ? [
-        ["Отжимания", `${r.pushup}`, Gr],
-        ["Приседания", `${r.squat}`, Gr],
-        ["Звёздочки", `${r.jack}`, Gr],
+        [NAMES.pushup, `${r.pushup}`, Gr], // по банку упражнений: удар, уворот, зелье
+        [NAMES.squat, `${r.squat}`, Gr],
+        [NAMES.jack, `${r.jack}`, Gr],
         ["Всего упражнений", `${sum}`, A],
       ] : [["Упражнения считаются", tr("только с камерой"), COL.dim]]],
       ["АРЕНА И ОГОНЬКИ", "arena", [
@@ -1969,11 +2001,15 @@ class InventoryScene extends Scene {
     } else {
       for (const [key, own, r] of this.items()) {
         if (!g.tapped(r)) continue;
-        if (!own) { sfx.deny(); return this.say(tf("Не найдено. Выпадает из сундука: {chest}", { chest: tr(CHESTS[SWORDS[key].chest].name) })); }
+        const it = item(key);
+        if (!own) {
+          sfx.deny();
+          return this.say(tf("{name}: {desc}. Выпадает из сундука «{chest}»", { name: tr(it.name), desc: tr(it.desc), chest: tr(CHESTS[it.chest].name) }));
+        }
         p.equip(key);
         p.save();
         sfx.click();
-        this.say(tf("Надет: {name}", { name: tr(item(key).name) }));
+        this.say(tf("Надето: {name} — {desc}", { name: tr(it.name), desc: tr(it.desc) }));
       }
     }
   }
@@ -2032,10 +2068,11 @@ class InventoryScene extends Scene {
     if (this.tab === "chests") this.drawChests();
     else this.drawItems();
     g.button(L.back, "НАЗАД К КОСТРУ", { size: P ? 22 : 12 });
-    if (this.msgT > 0) {
-      const y = P ? g.H - 150 : GAME_H - 64;
-      g.rect([0, y - 4, W, P ? 30 : 16], "rgba(0,0,0,0.8)");
-      g.text(this.msg, W / 2, y, P ? 14 : 8, "rgb(255,200,140)", "center");
+    if (this.msgT > 0) { // подсказка: название и характеристики — до трёх строк
+      const fs = P ? 14 : 8, lines = g.wrap(this.msg, P ? 40 : 76).slice(0, 3), lh = fs + 6;
+      const y = (P ? g.H - 140 : GAME_H - 52) - (lines.length - 1) * lh;
+      g.rect([0, y - 6, W, lines.length * lh + 8], "rgba(0,0,0,0.88)");
+      lines.forEach((l, i) => g.text(l, W / 2, y + i * lh, fs, "rgb(255,200,140)", "center"));
     }
   }
   drawChests() {
@@ -2663,6 +2700,8 @@ class Skeleton {
 }
 
 const DRINK_TIME = 2.5; // сколько глава разбойников пьёт зелье
+const DODGE_CALL = { squat: "ПРИСЕДАЙ!", lunge: "ВЫПАД!" }; // сигнал «уворачивайся» — по банку упражнений
+const ATTACK_CALL = { pushup: "ОТЖИМАЙСЯ!", pullup: "ПОДТЯГИВАЙСЯ!", dip: "ЖМИ НА БРУСЬЯХ!" };
 const AUTO_BONFIRE = 3; // через сколько секунд после победы бой сам уходит к костру
 const SERAPH_AURA = 0.03; // аура Алого Серафима: 3% здоровья героя в секунду
 const TRANSFORM_TIME = 2.2; // перерождение Серафима во вторую стадию (неуязвим)
@@ -3330,12 +3369,12 @@ class BattleScene extends Scene {
     } else if (en.state === "windup" && !this.result) {
       const k = Math.max(0, Math.min(1, en.timer / (en.windupNow || en.windupTime)));
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
-      g.text(plank ? "ОПУСТИСЬ!" : "ПРИСЕДАЙ!", W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
+      g.text(plank && g.bank.attack === "pushup" ? "ОПУСТИСЬ!" : DODGE_CALL[g.bank.dodge], W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
       const top = GROUND_ARENA - (HEAD_Y[en.kind] || 44);
       g.text("!", g.wx(Math.round(en.x + (HIT_X[en.kind] || 12))), g.wy(top), 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
-      g.text("Окно для удара: ОТЖИМАЙСЯ!", W / 2, 70, 8, COL.gold, "center");
+      g.text(tf("Окно для удара: {call}", { call: tr(ATTACK_CALL[g.bank.attack]) }), W / 2, 70, 8, COL.gold, "center");
     } else if (en.state === "drink" && !this.result) {
       g.text(`ВЫБЕЙ ЗЕЛЬЕ! ${en.drinkHits}/${DRINK_HITS}`, W / 2, 60, 16, "rgb(255,120,90)", "center");
       g.bar(W / 2 - 80, 86, 160, 5, en.timer / DRINK_TIME, "rgb(120,220,120)");
@@ -3347,7 +3386,7 @@ class BattleScene extends Scene {
 
   /** Подсказка после победы: звёздочка — следующий бой, иначе через пару секунд — к костру. */
   autoHint() {
-    return tf("Звёздочка: следующий бой. К костру через {n}", { n: Math.max(1, Math.ceil(AUTO_BONFIRE - this.resultT)) });
+    return tf("{ex}: следующий бой. К костру через {n}", { ex: tr(NAMES.jack), n: Math.max(1, Math.ceil(AUTO_BONFIRE - this.resultT)) });
   }
 
   /** Экран победы или гибели. */
@@ -4201,11 +4240,11 @@ class MultiplayerScene extends Scene {
 
 // ------------------------------------------------------------------ Кузница
 // Вкладки кузницы: оружие, броня, талисманы. n — число вещей во вкладке (последняя строка — «назад»).
-const shopTabRect = (j) => [18 + j * 130, 40, 124, 24];
+const shopTabRect = (j) => [18 + j * 97, 40, 91, 24];
 const shopRect = (i, n) => [18, 70 + i * 29, 384, i === n ? 22 : 27];
 /** Телефон вертикально: вкладки и список во весь экран под «чёлкой» с героем. */
 function shopTabRectTall(g, j) {
-  const w = (W - 32 - 16) / 3;
+  const w = (W - 32 - 24) / 4;
   return [16 + j * (w + 8), GAME_H + 12, w, 64];
 }
 function shopRectTall(g, i, n) {
@@ -4247,7 +4286,8 @@ class ShopScene extends Scene {
   }
   drawTabs() {
     const g = this.game;
-    SHOP_TABS.forEach(([, label], j) => g.button(this.tabRect(j), label, { selected: j === this.tab, size: g.portrait ? 16 : 8 }));
+    SHOP_TABS.forEach(([, label], j) => g.button(this.tabRect(j), label,
+      { selected: j === this.tab, size: g.portrait ? (tr(label).length * 16 > this.tabRect(j)[2] - 8 ? 12 : 16) : 8, color: j === 3 ? "rgb(255,200,90)" : undefined }));
   }
   say(msg, t = 3) {
     this.message = msg;
@@ -4271,6 +4311,10 @@ class ShopScene extends Scene {
     if (key === "back") return g.change(new BonfireScene(g));
     if (this.busy) return;
     if (it.paid && !p.owned.includes(key)) return this.buyPaid(key);
+    if (it.chest && !p.owned.includes(key)) { // легенду не купить: где искать
+      sfx.deny();
+      return this.say(tf("Не продаётся. Выпадает из сундука «{chest}» (земля: {land})", { chest: tr(CHESTS[it.chest].name), land: tr(LOCATIONS[CHESTS[it.chest].loc].name) }));
+    }
     if (p.owned.includes(key)) {
       if (SWORDS[key] || ARMORS.includes(key) || TALISMANS.includes(key)) {
         p.equip(key); // доспех и талисман, как и меч, надеваются по одному: прежний снимается
@@ -4327,6 +4371,7 @@ class ShopScene extends Scene {
   /** Статус вещи в кузнице: [текст, цвет]. */
   status(key) {
     const p = this.game.player, it = item(key);
+    if (it.chest && !p.owned.includes(key)) return ["В СУНДУКЕ", "rgb(200,150,60)"]; // только выпадает
     if (p.owned.includes(key)) {
       if (p.sword === key || p.armor === key || p.talisman === key) return ["НАДЕТ", COL.gold];
       return SWORDS[key] ? ["ВЗЯТЬ", COL.text] : ["НАДЕТЬ", COL.text];
@@ -4350,13 +4395,31 @@ class ShopScene extends Scene {
     }
     return sword;
   }
+  /** Описание, обрезанное по ширине (не наезжает на цену справа). */
+  fitDesc(desc, width, fs) {
+    const c = this.game.ctx;
+    let t = tr(desc);
+    c.font = `${fs}px ${FONT}`;
+    while (t.length > 3 && c.measureText(t).width > width) t = t.slice(0, -2) + "…";
+    return t;
+  }
+  /** Выбранный в списке меч (для примерки и характеристик) или надетый. */
+  shownWeapon() {
+    const key = this.rows[this.index];
+    return SWORDS[key] ? key : this.game.player.sword;
+  }
+  /** Урон героя с этим мечом: как Player.damage, но для любого клинка. */
+  damageWith(key) {
+    const p = this.game.player;
+    return Math.round((10 + 3 * p.strength + SWORDS[key].dmg) * (1 + p.aura));
+  }
   drawTall() {
-    const g = this.game, p = g.player, w = p.weapon;
+    const g = this.game, p = g.player, wk = this.shownWeapon(), w = SWORDS[wk], trying = wk !== p.sword;
     // «чёлка»: заголовок, оружие и крупный герой у горна
     g.text("КУЗНИЦА", 18, 16, 24, COL.gold);
     g.gems(W - 18, 18, p, "right");
-    g.text(w.name, 18, 52, 16, COL.text);
-    g.text(`урон ${p.damage}  крит x${w.crit}  удар ${w.cost} сил`, 18, 76, 12, COL.dim);
+    g.text(trying ? `${tr(w.name)} · ${tr("примерка")}` : w.name, 18, 52, w.name.length > 20 ? 12 : 16, w.chest ? "rgb(255,200,90)" : COL.text);
+    g.text(`урон ${this.damageWith(wk)}  крит x${w.crit}  удар ${w.cost} сил`, 18, 76, 12, COL.dim);
     const relics = Object.keys(RELICS).filter((k) => p.worn.includes(k)).map((k) => RELICS[k].name);
     relics.forEach((name, i) => g.text(name, 18, 96 + i * 16, 12, "rgb(150,190,255)"));
     Object.assign(this.previewEmbers, { x: W / 2 + 157, y: 2 * GROUND_ARENA - 42, spread: 9 });
@@ -4369,7 +4432,7 @@ class ShopScene extends Scene {
       g.button(r, "", { selected: sel });
       const big = r[3] >= 70, nameFs = big ? 24 : 16;
       g.text(it.name, r[0] + 14, r[1] + r[3] / 2 - nameFs - 2, nameFs, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
-      g.text(it.desc, r[0] + 14, r[1] + r[3] / 2 + 4, 12, COL.dim);
+      g.text(this.fitDesc(it.desc, r[2] - 36 - tr(status.split(" + ")[0]).length * 16, 12), r[0] + 14, r[1] + r[3] / 2 + 4, 12, COL.dim);
       const two = status.split(" + ").map((x) => tr(x));
       if (two.length > 1) two.forEach((part, j) => g.text(j ? `+ ${part}` : part, r[0] + r[2] - 14, r[1] + r[3] / 2 - 16 + j * 20, 16, scol, "right"));
       else g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 + 2, 16, scol, "right");
@@ -4394,16 +4457,16 @@ class ShopScene extends Scene {
       const it = item(key), [status, scol] = this.status(key);
       g.button(r, "", { selected: sel });
       g.text(it.name, r[0] + 8, r[1] + 3, 8, it.paid ? "rgb(255,150,150)" : it.unique ? "rgb(150,190,255)" : sel ? COL.gold : COL.text);
-      g.text(it.desc, r[0] + 8, r[1] + 13, 8, COL.dim);
+      g.text(this.fitDesc(it.desc, r[2] - 24 - tr(status.split(" + ")[0]).length * 8, 8), r[0] + 8, r[1] + 13, 8, COL.dim);
       const two = status.split(" + ").map((x) => tr(x)); // синие + алые — в две строки, чтобы не наезжать на описание
       if (two.length > 1) two.forEach((part, j) => g.text(j ? `+ ${part}` : part, r[0] + r[2] - 8, r[1] + 3 + j * 10, 8, scol, "right"));
       else g.text(status, r[0] + r[2] - 8, r[1] + 8, 8, scol, "right");
     });
     // крупное превью героя; на непокупленной вещи — примерка
     if (this.drawHero(470, 2 * GROUND_ARENA, 4) === "ash") this.previewEmbers.draw(g.ctx);
-    const w = p.weapon;
-    g.text(w.name, W - 12, 20, 8, COL.text, "right");
-    g.text(`урон ${p.damage} крит x${w.crit}`, W - 12, 34, 8, COL.dim, "right");
+    const wk = this.shownWeapon(), w = SWORDS[wk]; // характеристики выбранного меча (у легенд — тоже)
+    g.text(w.name, W - 12, 20, 8, w.chest ? "rgb(255,200,90)" : COL.text, "right");
+    g.text(`урон ${this.damageWith(wk)} крит x${w.crit}`, W - 12, 34, 8, COL.dim, "right");
     g.text(`удар ${w.cost} сил`, W - 12, 46, 8, COL.dim, "right");
     const relics = Object.keys(RELICS).filter((k) => p.worn.includes(k)).map((k) => RELICS[k].name);
     relics.forEach((name, i) => g.text(name, W - 12, 62 + i * 12, 8, "rgb(150,190,255)", "right"));
@@ -5009,7 +5072,7 @@ function settingsLayout(g) {
       title: 12, fs: { title: 24, label: 12, btn: 12, sign: 16 },
       volume: row(48), music: row(90), alert: row(132), vibLabel: [40, 190], vib: [300, 178, 140, 34], diff: [448, 178, 152, 34],
       test: [40, 222, 120, 34], count: [166, 222, 152, 34], code: [324, 222, 132, 34], tg: [462, 222, 138, 34],
-      camera: [40, 266, 270, 34], support: [330, 266, 270, 34],
+      camera: [40, 266, 180, 34], bank: [226, 266, 188, 34], support: [420, 266, 180, 34],
       lang: [330, 312, 270, 34], back: [40, 312, 270, 34],
     };
   }
@@ -5018,14 +5081,25 @@ function settingsLayout(g) {
   return {
     title: 30, fs: { title: 32, label: 24, btn: 24, sign: 32 },
     volume: row(96), music: row(226), alert: row(356), vibLabel: [24, 490], vib: [24, 524, W - 48, 68],
-    test: btn(0), count: btn(1), tg: btn(2), camera: btn(3), support: btn(4), lang: btn(5), code: btn(6), diff: btn(7),
-    back: [W / 2 - 160, Math.max(btn(8)[1] + 12, g.H - 92), 320, 70],
+    test: btn(0), count: btn(1), bank: btn(2), tg: btn(3), camera: btn(4), support: btn(5), lang: btn(6), code: btn(7), diff: btn(8),
+    back: [W / 2 - 160, Math.max(btn(9)[1] + 12, g.H - 92), 320, 70],
   };
 }
 
 class SettingsScene extends Scene {
+  constructor(game) {
+    super(game);
+    this.scroll = 0; // прокрутка в портрете, если всё не помещается на экран (кнопка «НАЗАД» — внизу)
+  }
   get ownsPanel() {
     return this.game.portrait;
+  }
+  /** Насколько можно прокрутить: низ кнопки «НАЗАД» должен быть виден. */
+  get maxScroll() {
+    const g = this.game;
+    if (!g.portrait) return 0;
+    const b = settingsLayout(g).back;
+    return Math.max(0, b[1] + b[3] + 24 - g.H);
   }
   set(key, value) {
     const g = this.game;
@@ -5034,6 +5108,19 @@ class SettingsScene extends Scene {
     setAudio(g.settings);
   }
   handle() {
+    const g = this.game, max = this.maxScroll;
+    this.scroll = Math.max(0, Math.min(max, this.scroll - g.dragDY));
+    if (!max) return this.handleTaps();
+    // экран прокручивается: касание — при отпускании без протягивания, со сдвигом на прокрутку
+    const taps = g.taps;
+    g.taps = g.releases.map((p) => ({ x: p.x, y: p.y + this.scroll }));
+    try {
+      this.handleTaps();
+    } finally {
+      g.taps = taps;
+    }
+  }
+  handleTaps() {
     const g = this.game, st = g.settings, L = settingsLayout(g);
     const step = (i, d) => ALERT_LEVELS[Math.max(0, Math.min(ALERT_LEVELS.length - 1, i + d))][0];
     const ai = Math.max(0, ALERT_LEVELS.findIndex(([v]) => v === st.alert));
@@ -5061,6 +5148,11 @@ class SettingsScene extends Scene {
       sfx.click();
     }
     if (g.tapped(L.code)) { sfx.click(); return g.redeemCode(); }
+    if (g.tapped(L.bank)) { // банк упражнений — для игры с камерой (без камеры кнопки и так любые)
+      if (g.mode !== "cam") { sfx.deny(); return g.say("Банк упражнений — для игры с камерой", 3); }
+      sfx.click();
+      return g.change(new BankScene(g));
+    }
     if (g.tapped(L.camera)) return g.change(new CameraScene(g));
     if (g.tapped(L.support)) return g.change(new SupportScene(g));
     if (g.key("Escape") || g.tapped(L.back)) g.change(new TitleScene(g));
@@ -5086,6 +5178,19 @@ class SettingsScene extends Scene {
     g.text(value, x0 + w / 2, y + (h - fs.label) / 2, fs.label, COL.gold, "center");
   }
   drawUi() {
+    const g = this.game, c = g.ctx, max = this.maxScroll;
+    if (g.portrait) g.rect([0, 0, W, g.H], "rgba(10,6,14,0.92)");
+    c.save();
+    c.translate(0, -this.scroll);
+    this.drawContent();
+    c.restore();
+    if (max && this.scroll < max - 4) { // подсказка: ниже есть ещё
+      const a = 0.6 + 0.4 * Math.sin(g.time * 4);
+      g.rect([0, g.H - 46, W, 46], "rgba(10,6,14,0.9)");
+      g.text("листайте вниз  v", W / 2, g.H - 34, 16, `rgba(232,190,92,${a})`, "center");
+    }
+  }
+  drawContent() {
     const g = this.game, st = g.settings, L = settingsLayout(g), fs = L.fs;
     g.text("НАСТРОЙКИ", W / 2, L.title, fs.title, COL.gold, "center");
     this.slider(L.volume, fs, "Громкость", st.volume, `${Math.round(st.volume * 100)}%`);
@@ -5103,10 +5208,67 @@ class SettingsScene extends Scene {
     const fit = (r, label) => (tr(label).length * fs.btn > r[2] - 8 ? Math.max(8, fs.btn - 4) : fs.btn); // длинная надпись — мельче
     g.button(L.code, "ВВЕСТИ КОД", { size: fit(L.code, "ВВЕСТИ КОД"), color: COL.gold });
     g.button(L.tg, "Наш Telegram", { size: fit(L.tg, "Наш Telegram"), color: "rgb(120,200,255)", border: "rgb(70,140,200)" });
-    g.button(L.camera, "Камера и советы", { size: fs.btn });
-    g.button(L.support, "Поддержать проект", { size: fs.btn, color: "rgb(255,150,150)" });
+    g.button(L.camera, "Камера и советы", { size: fit(L.camera, "Камера и советы") });
+    g.button(L.bank, "БАНК УПРАЖНЕНИЙ", { size: fit(L.bank, "БАНК УПРАЖНЕНИЙ"), color: g.mode === "cam" ? "rgb(150,230,140)" : COL.dim });
+    g.button(L.support, "Поддержать проект", { size: fit(L.support, "Поддержать проект"), color: "rgb(255,150,150)" });
     g.button(L.lang, `${tr("Язык")}: ${LANGS[getLang()]}`, { size: fs.btn, color: "rgb(150,220,150)" });
     g.button(L.back, "НАЗАД", { size: fs.btn });
+  }
+}
+
+// ------------------------------------------------------------------ Банк упражнений (режим с камерой)
+const BANK_SLOTS = [["attack", "УДАР", "и прокачка Силы"], ["dodge", "УВОРОТ", "и прокачка Живучести"], ["heal", "ЗЕЛЬЕ", "и прокачка Выносливости"]];
+
+/** Какие упражнения дают удар, уворот и зелье: вместо отжиманий — подтягивания или брусья и т. д. */
+class BankScene extends Scene {
+  get ownsPanel() {
+    return true;
+  }
+  layout() {
+    const g = this.game, P = g.portrait;
+    const top = P ? 150 : 34, step = P ? Math.min(300, Math.floor((g.H - top - 140) / 3)) : 92;
+    const rows = BANK_SLOTS.map(([slot], i) => {
+      const y = top + i * step, opts = BANK[slot], gap = P ? 12 : 8, bw = (W - (P ? 48 : 48) - gap * 2) / 3;
+      return { slot, y, opts: opts.map((ex, j) => [ex, [(P ? 24 : 24) + j * (bw + gap), y + (P ? 40 : 18), bw, P ? 84 : 30]]) };
+    });
+    return { P, rows, back: P ? [W / 2 - 160, g.H - 108, 320, 76] : [W / 2 - 90, GAME_H - 38, 180, 30] };
+  }
+  handle() {
+    const g = this.game, L = this.layout();
+    if (g.key("Escape") || g.tapped(L.back)) { sfx.click(); return g.change(new SettingsScene(g)); }
+    for (const row of L.rows) {
+      for (const [ex, r] of row.opts) {
+        if (!g.tapped(r)) continue;
+        g.settings.bank = { ...g.bank, [row.slot]: ex };
+        saveJSON(SETTINGS_KEY, g.settings);
+        g.applyBank();
+        sfx.click();
+        g.say(tf("{slot}: {ex}", { slot: tr(BANK_SLOTS.find(([s]) => s === row.slot)[1]), ex: tr(EX_NAMES[ex]) }), 2);
+      }
+    }
+  }
+  draw(c) {
+    c.drawImage(IMG.arena_bg, 0, 0);
+    c.fillStyle = "rgba(0,0,0,0.75)";
+    c.fillRect(0, 0, CW, CH);
+  }
+  drawUi() {
+    const g = this.game, L = this.layout(), P = L.P;
+    if (P) g.rect([0, 0, W, g.H], "rgba(10,6,14,0.94)");
+    g.text("БАНК УПРАЖНЕНИЙ", W / 2, P ? 30 : 8, P ? 32 : 16, COL.gold, "center");
+    g.text("Выберите, чем бить, уворачиваться и лечиться", W / 2, P ? 82 : 26, P ? 14 : 8, COL.dim, "center");
+    L.rows.forEach(({ slot, y, opts }) => {
+      const [, name, note] = BANK_SLOTS.find(([s]) => s === slot), cur = g.bank[slot];
+      g.text(name, 24, y, P ? 22 : 12, COL.gold);
+      g.text(note, P ? 24 + tr(name).length * 22 + 16 : 24 + tr(name).length * 12 + 10, y + (P ? 6 : 3), P ? 14 : 8, COL.dim);
+      for (const [ex, r] of opts) {
+        const label = tr(EX_NAMES[ex]).toUpperCase(), fs = P ? (label.length * 16 > r[2] - 10 ? 12 : 16) : 8;
+        g.button(r, label, { size: fs, selected: ex === cur, color: ex === cur ? COL.gold : COL.text });
+      }
+      const tip = tr(EX_TIPS[cur]);
+      g.wrap(tip, P ? 44 : 76).slice(0, 2).forEach((l, i) => g.text(l, 24, y + (P ? 136 : 54) + i * (P ? 22 : 11), P ? 14 : 8, "rgb(150,220,150)"));
+    });
+    g.button(L.back, "НАЗАД", { size: P ? 24 : 12 });
   }
 }
 
@@ -5239,4 +5401,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
+export { BankScene, InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
