@@ -322,7 +322,11 @@ function robokassa_problem() {
         $near = array_values(array_filter(scandir(__DIR__), function ($n) { return stripos($n, 'robokassa') !== false; }));
         return 'нет файла robokassa_config.php рядом с api.php' . ($near ? '. Найдены похожие: ' . implode(', ', $near) . ' — переименуйте в robokassa_config.php' : '');
     }
-    $c = include $f;
+    try {
+        $c = include $f;
+    } catch (Throwable $e) { // ошибка в файле (пропала кавычка или запятая): номер строки, без текста — там мог быть пароль
+        return 'файл robokassa_config.php испорчен в строке ' . $e->getLine() . ': проверьте кавычки и запятые (сравните с robokassa_config.example.php)';
+    }
     if (!is_array($c)) return 'файл robokassa_config.php испорчен: проверьте кавычки и запятые (сравните с robokassa_config.example.php)';
     if (empty($c['login'])) return "не указан 'login' (идентификатор магазина)";
     $test = !empty($c['test']);
@@ -336,7 +340,11 @@ function robokassa_problem() {
 function robokassa() {
     $f = __DIR__ . '/robokassa_config.php';
     if (!is_file($f)) return null;
-    $c = include $f;
+    try {
+        $c = include $f;
+    } catch (Throwable $e) {
+        return null; // испорченный файл не роняет сервер (что не так — на странице pay_check)
+    }
     if (!is_array($c)) return null;
     $test = !empty($c['test']);
     $p1 = $test ? $c['test_pass1'] : $c['pass1'];
