@@ -2108,6 +2108,8 @@ class Art:
         self.spire_bg = samhain.make_spire_background()
         self.fluff = samhain.make_fluff_frames()
         self.eyequeen = samhain.make_eyequeen_frames()
+        self.vampire = samhain.make_vampire_frames()
+        self.pumpkin = samhain.make_pumpkin_frames()
 
     def hero_for(self, sword, owned):
         """Кадры героя с этим мечом и обликом по реликвиям из owned."""

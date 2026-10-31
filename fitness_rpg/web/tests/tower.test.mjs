@@ -7,7 +7,10 @@ test("Королева — каждый 13-й этаж, элита — кажд�
   assert.equal(floorPlan(26).queen, true);
   assert.deepEqual([5, 10, 15].map((f) => floorPlan(f).kind), ["knight", "chief", "wraith"]);
   assert.equal(floorPlan(20).kind, "knight");
-  for (let f = 1; f < 13; f++) if (f % 5) assert.equal(floorPlan(f, 7).boss, false);
+  for (let f = 1; f < 13; f++) if (f % 5 && f !== 8) assert.equal(floorPlan(f, 7).boss, false);
+  assert.equal(floorPlan(8).kind, "vampire");
+  assert.equal(floorPlan(21).kind, "vampire");
+  assert.equal(floorChest(8), "castle");
 });
 
 test("этаж с одним сидом — тот же враг; Пухоглот встречается часто", () => {
@@ -17,7 +20,10 @@ test("этаж с одним сидом — тот же враг; Пухогло
     n++;
     if (floorPlan(f, seed).kind === "fluff") fluff++;
   }
-  assert.ok(fluff / n > 0.25 && fluff / n < 0.55, `доля Пухоглотов ${fluff / n}`);
+  assert.ok(fluff / n > 0.2 && fluff / n < 0.5, `доля Пухоглотов ${fluff / n}`);
+  let pk = 0;
+  for (let seed = 1; seed < 60; seed++) if (floorPlan(3, seed).kind === "pumpkin") pk++;
+  assert.ok(pk > 3, "тыквоголовы встречаются");
   for (let seed = 1; seed < 40; seed++) assert.ok(!["imp", "hound", "husk"].includes(floorPlan(2, seed).kind)); // демоны — выше 6-го
 });
 

@@ -16,6 +16,7 @@ import { Profile } from "./profile.js";
 import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
 import { CHESTS, CHEST_ORDER, RARITY, addChest, chestCount, chestState, openChest, rollDrop } from "./chests.js";
 import { FLUFF_DRAIN, GAZE_REFLECT, GAZE_TIME, GIFT, START_ESTUS, applyGift, emptyMods, floorChest, floorPlan, floorReward, floorWave, gazeEvery, offerGifts } from "./tower.js";
+import { BTN_GUARD, MOVES, buttonsScale, extraHits, pickMove, windFor } from "./moves.js";
 import { ACH, ACHIEVEMENTS, ACH_CATS, achContext, achProgress, battleEvents, checkAchievements } from "./achievements.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
@@ -2618,9 +2619,9 @@ class Skeleton {
     skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников",
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
     imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
-    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока",
+    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Тыквенной Крови", pumpkin: "Тыквоголов",
   };
-  static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen"];
+  static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen", "vampire"];
   static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
 
   constructor(wave, kind = null) {
@@ -2729,7 +2730,20 @@ class Skeleton {
       this.maxCombo = 2;
       this.gazeT = gazeEvery(false) - 3; // первый взгляд — пораньше, чтобы его увидеть
       this.homeX = 176;
+    } else if (this.kind === "vampire") { // Граф Тыквенной Крови: когти, укус, стая мышей, туман
+      this.maxHp = Math.floor(baseHp * 2);
+      this.damage = Math.floor(baseDmg * 1.1);
+      this.maxPoise = 5;
+      this.comboChance = 0.2;
+      this.homeX = 172;
+    } else if (this.kind === "pumpkin") { // Тыквоголов: серп и тыквенные бомбы (поджигают героя)
+      this.maxHp = Math.floor(baseHp * 1.1);
+      this.damage = Math.floor(baseDmg * 1.05);
+      this.comboChance = 0.2;
     }
+    this.move = "strike"; // текущий приём (moves.js)
+    this.feinted = false;
+    this.btn = false; // игра без камеры (makeButtons)
     this.hp = this.maxHp;
     this.poise = this.maxPoise;
     this.state = "idle";
@@ -2745,7 +2759,7 @@ class Skeleton {
     this.timer = timer;
   }
   recoverTime() {
-    return RECOVER_TIME * (this.enraged ? 0.8 : 1) * (this.hard && this.boss ? 0.8 : 1);
+    return RECOVER_TIME * (this.enraged ? 0.8 : 1) * (this.hard && this.boss ? 0.8 : 1) * (this.btn ? 0.8 : 1);
   }
   /**
    * Хардкор: боссы бьют сильнее и чаще, серии длиннее, замах каждый раз разной длины;
@@ -2761,6 +2775,30 @@ class Skeleton {
     this.jitter = boss ? 0.3 : 0.2;
     this.idleRange = boss ? [0.7, 1.6] : [1.1, 2.4];
     return this;
+  }
+  /**
+   * Игра без камеры: кнопку нажать проще, чем присесть, поэтому враги крепче и сильнее с каждым раундом
+   * (без прокачки не пройти), замахи короче, паузы меньше, серии длиннее, ударами труднее сбить замах.
+   * Плюс приёмы moves.js: быстрые и тяжёлые удары, серии, финты.
+   */
+  makeButtons() {
+    const k = buttonsScale(this.wave);
+    this.btn = true;
+    this.maxHp = Math.floor(this.maxHp * k.hp);
+    this.hp = this.maxHp;
+    this.damage = Math.floor(this.damage * k.dmg);
+    this.windupTime = Math.min(this.windupTime, k.wind + (this.boss ? 0.1 : 0));
+    this.idleRange = this.boss ? [0.4, 1.0] : [0.6, 1.4];
+    this.comboChance = Math.min(0.8, this.comboChance + 0.25);
+    this.maxCombo += 1;
+    this.maxPoise += 2;
+    this.poise = this.maxPoise;
+    this.timer = Math.min(this.timer, 1.2);
+    return this;
+  }
+  /** Есть ли у врага свои приёмы (вампир, тыквоголов) или режим без камеры. */
+  get hasMoves() {
+    return this.btn || this.kind === "vampire" || this.kind === "pumpkin";
   }
   /** Длина очередного замаха: в хардкоре — то короче, то длиннее (не подстроиться под ритм). */
   nextWindup(base = this.windupTime) {
@@ -2779,11 +2817,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 30, pumpkin: 14 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 68, pumpkin: 48 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 34 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -2799,6 +2837,7 @@ class BattleScene extends Scene {
     this.HERO_X = 86;
     this.enemy = new Skeleton(p.wave);
     if (game.hard) this.enemy.makeHard(); // хардкор (без камеры — всегда)
+    if (game.mode === "btn") this.enemy.makeButtons(); // без камеры — враги злее и хитрее
     this.location = locationFor(p.wave);
     this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave) && p.wave === frontierOf(p); // первый бой на новой земле
     this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
@@ -2815,6 +2854,14 @@ class BattleScene extends Scene {
     this.invuln = 0;
     this.guardHint = false; // защита приседа кончилась, а игрок ещё внизу — подсказать встать
     this.guardCap = Infinity; // присед во время замаха защищает до самого удара (в дуэли — не дольше секунды)
+    this.dodgeGuard = DODGE_GUARD;
+    if (game.mode === "btn") { // без камеры присед кнопкой защищает недолго: нужно поймать момент удара
+      this.guardCap = BTN_GUARD;
+      this.dodgeGuard = BTN_GUARD;
+    }
+    this.heroBurn = 0; // горение от тыквенной бомбы (секунды)
+    this.heroBurnT = 0;
+    this.bats = []; // стая мышей вампира
     this.regenPause = 0;
     this.hurtT = 0;
     this.texts = [];
@@ -2874,6 +2921,7 @@ class BattleScene extends Scene {
     if (move === "pushup") {
       if (en.state === "revive" || en.state === "transform") return this.float("НЕУЯЗВИМ", en.x + 12, 90, "rgb(120,255,230)", 8);
       if (en.state === "gaze") return this.reflect();
+      if (en.state === "mist") return this.float("СКВОЗЬ ТУМАН", en.x + 20, 90, "rgb(190,160,230)", 8);
       if (this.stamina < p.attackCost) {
         this.exhaustedSound();
         return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
@@ -2912,7 +2960,10 @@ class BattleScene extends Scene {
         this.hp = Math.min(p.maxHp, this.hp + heal);
         this.float(`+${heal}`, this.HERO_X + 4, 96, "rgb(220,60,90)", 8);
       }
-      if (en.state === "windup") {
+      if (en.state === "windup" && MOVES[en.move].armor) {
+        if (!en.armorNoted) this.float("НЕ ПРЕРВАТЬ!", en.x + 12, 74, "rgb(255,140,60)", 8);
+        en.armorNoted = true; // тяжёлый удар не сбить: только уворот
+      } else if (en.state === "windup") {
         en.poise -= 1;
         if (en.poise <= 0) {
           en.comboLeft = 0;
@@ -2965,7 +3016,7 @@ class BattleScene extends Scene {
         this.regenPause = Math.max(this.regenPause, 0.3);
       }
       const untilStrike = en.state === "windup" ? Math.min(en.timer + 0.25, this.guardCap) : 0;
-      this.invuln = Math.max(this.invuln, DODGE_GUARD, untilStrike);
+      this.invuln = Math.max(this.invuln, this.dodgeGuard, untilStrike);
       this.action = "dodge";
       this.actionT = this.invuln;
       this.guardHint = true;
@@ -2978,6 +3029,7 @@ class BattleScene extends Scene {
       const heal = Math.floor(p.maxHp * 0.45);
       this.hp = Math.min(p.maxHp, this.hp + heal);
       this.stamina = p.maxStamina; // зелье восстанавливает и выносливость
+      this.heroBurn = 0; // и тушит горение
       this.float("+СИЛЫ", this.HERO_X + 10, 74, COL.green, 8);
       this.action = "heal";
       this.actionT = 0.8;
@@ -3174,7 +3226,7 @@ class BattleScene extends Scene {
     // Радиатор: жар обжигает врага каждую секунду; Крыло Серафима — аура, доля здоровья врага (не во время возрождения)
     const pct = p.weapon.aura || 0;
     const burn = (p.weapon.burn || 0) + (pct ? Math.max(1, Math.ceil(en.maxHp * pct)) : 0);
-    if (burn && en.state !== "revive" && en.state !== "transform" && en.state !== "dead") {
+    if (burn && en.state !== "revive" && en.state !== "transform" && en.state !== "mist" && en.state !== "dead") {
       this.burnT += dt;
       if (this.burnT >= BURN_EVERY) {
         this.burnT -= BURN_EVERY;
@@ -3199,6 +3251,29 @@ class BattleScene extends Scene {
           return this.die();
         }
       }
+    }
+    // горение от тыквенной бомбы: 3% здоровья в секунду (зелье тушит)
+    if (this.heroBurn > 0 && en.state !== "dead") {
+      this.heroBurn -= dt;
+      this.heroBurnT += dt;
+      if (this.heroBurnT >= 1) {
+        this.heroBurnT -= 1;
+        const dmg = Math.max(1, Math.ceil(p.maxHp * 0.03));
+        this.hp -= dmg;
+        this.auraHitT = 0.2;
+        this.float(`-${dmg}`, this.HERO_X + 4, 100, "rgb(255,140,40)", 8);
+        if (this.hp <= 0) {
+          this.hp = 0;
+          return this.die();
+        }
+      }
+    }
+    // вампир в ярости: с половины здоровья кусает чаще и быстрее
+    if (en.kind === "vampire" && !en.enraged && en.hp > 0 && en.hp <= en.maxHp / 2) {
+      en.enraged = true;
+      en.windupTime *= 0.85;
+      this.float("КРОВАВАЯ ЖАЖДА!", en.x + 24, 50, "rgb(255,40,60)");
+      sfx.thunder();
     }
     // Серафим на половине здоровья перерождается: второе крыло, рога, раскалённые метки — и злее
     if (en.transforms && !en.stage2 && en.state !== "transform" && en.hp > 0 && en.hp <= en.maxHp / 2) {
@@ -3229,17 +3304,38 @@ class BattleScene extends Scene {
     } else if (en.state === "idle" && en.timer <= 0) {
       en.poise = en.maxPoise;
       en.comboLeft = 0;
-      for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
-      en.set("windup", en.nextWindup());
-      sfx.alert();
+      en.armorNoted = false;
+      en.feinted = false;
+      en.move = en.hasMoves ? pickMove(en.kind, en.wave, en.btn, en.boss, en.enraged) : "strike";
+      const mv = MOVES[en.move];
+      if (mv.hits) en.comboLeft = extraHits(en.move);
+      else if (!mv.armor) for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
+      if (mv.mist) { // вампир растворяется в тумане и бьёт из него
+        en.set("mist", mv.mist);
+        this.float("ТУМАН!", en.x + 24, 60, "rgb(190,160,230)", 8);
+        sfx.souls();
+      } else {
+        this.startWindup(en);
+      }
+    } else if (en.state === "mist" && en.timer <= 0) {
+      this.startWindup(en);
     } else if (en.state === "windup" && en.timer <= 0) {
-      en.set("attack", 0.35);
-      this.resolveHit();
+      if (MOVES[en.move].feint && !en.feinted) { // финт: ложный замах — и сразу быстрый удар
+        en.feinted = true;
+        en.move = "quick";
+        en.set("windup", en.nextWindup(windFor("quick", en.windupTime, en.btn)));
+        this.float("ФИНТ!", en.x + 12, 66, "rgb(255,200,80)");
+        sfx.alert();
+      } else {
+        en.set("attack", 0.35);
+        this.resolveHit();
+      }
     } else if (en.state === "attack" && en.timer <= 0) {
       if (en.comboLeft > 0) {
         en.comboLeft -= 1; // следующий, более быстрый замах сразу после удара
-        en.set("windup", en.nextWindup(en.windupTime * 0.85));
-        this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
+        const mv = MOVES[en.move];
+        en.set("windup", en.nextWindup(mv.hits ? windFor(en.move, en.windupTime, en.btn) : Math.max(en.btn ? 0.45 : 1, en.windupTime * (en.btn ? 0.6 : 0.85))));
+        if (!mv.hits) this.float("ЕЩЁ УДАР!", en.x + 12, 70, "rgb(255,120,60)", 8);
         sfx.alert();
       } else {
         en.set("recover", en.recoverTime());
@@ -3276,6 +3372,13 @@ class BattleScene extends Scene {
     en.x += (target - en.x) * Math.min(1, dt * (en.state === "attack" ? 18 : 5));
   }
 
+  /** Замах текущего приёма: длина по приёму (название приёма выводит drawUi под полоской замаха). */
+  startWindup(en) {
+    en.set("windup", en.move === "strike" ? en.nextWindup() : en.nextWindup(windFor(en.move, en.windupTime, en.btn)));
+    if (en.move === "swarm") this.bats = Array.from({ length: 9 }, (_, i) => ({ k: i / 9, y: rand(-30, 6), s: rand(0.8, 1.3) }));
+    sfx.alert();
+  }
+
   /** Призрачное бирюзовое пламя вокруг Короля-Призрака. */
   updateGhosts(dt) {
     const en = this.enemy;
@@ -3298,8 +3401,19 @@ class BattleScene extends Scene {
       sfx.dodge();
       return this.float("УВОРОТ!", this.HERO_X + 10, 80, "rgb(140,200,255)");
     }
-    const dmg = Math.round(en.damage * this.game.player.damageTakenMult);
+    const mv = MOVES[en.move] || MOVES.strike;
+    const dmg = Math.max(1, Math.round(en.damage * mv.dmg * this.game.player.damageTakenMult));
     this.hp -= dmg;
+    if (mv.drain && en.hp < en.maxHp) { // укус вампира: пьёт кровь и лечится
+      const heal = Math.min(en.maxHp - en.hp, Math.round(dmg * mv.drain));
+      en.hp += heal;
+      this.float(`+${heal} КРОВЬ`, en.x + 24, 70, "rgb(220,40,60)", 8);
+    }
+    if (mv.burn) { // тыквенная бомба поджигает героя
+      this.heroBurn = mv.burn;
+      this.heroBurnT = 0;
+      this.float("ГОРИШЬ!", this.HERO_X + 10, 64, "rgb(255,140,40)", 8);
+    }
     if (this.feat) this.feat.tookDamage = true;
     this.hurtT = 0.3;
     this.game.shake = en.boss ? 0.4 : 0.3;
@@ -3344,9 +3458,13 @@ class BattleScene extends Scene {
     else if (en.state === "revive") spr = anim("wraith_revive", t, 4, 2);
     else if (en.state === "transform") spr = anim("seraph_transform", t, 5, 2);
     else if (en.state === "gaze") spr = anim("eyequeen_gaze", t, 3, 2);
+    else if (en.state === "mist") spr = anim(`${kind}_mist`, t, 5, 2);
     else if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
     else if (en.flash > 0) spr = IMG[`${kind}_hurt_0`];
-    else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
+    else if ((en.state === "windup" || en.state === "attack") && MOVES[en.move].pose && IMG[`${kind}_${MOVES[en.move].pose}_0`]) {
+      const pose = `${kind}_${MOVES[en.move].pose}`; // особый кадр приёма: укус, стая мышей
+      spr = anim(pose, t, 6, IMG[`${pose}_1`] ? 2 : 1);
+    } else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
     else if (en.state === "attack") spr = IMG[`${kind}_attack_0`];
     else if (en.boss && en.enraged) spr = anim(`${kind}_enraged`, t, 1.5, 2);
     else if (en.kind === "seraph") spr = anim(`${kind}_idle`, t, 4, 4); // медленные взмахи крыла
@@ -3364,6 +3482,7 @@ class BattleScene extends Scene {
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
     else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
     if (en.state === "gaze") this.drawGaze(c, en, t);
+    if (en.move === "swarm" && (en.state === "windup" || en.state === "attack")) this.drawBats(c, en, t);
     if (en.kind === "wraith" || en.kind === "seraph") {
       const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"] : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
       for (const gp of this.ghosts) {
@@ -3390,6 +3509,13 @@ class BattleScene extends Scene {
     c.drawImage(spr, hx, GROUND_ARENA - spr.height);
     const [, hy, pose] = this.heroPose();
     this.aura.draw(c, skin, pose, hx, hy, t);
+    if (this.heroBurn > 0) { // герой горит после тыквенной бомбы
+      for (let i = 0; i < 6; i++) {
+        const fx = hx + 8 + ((i * 5 + Math.floor(t * 20)) % 16), fy = GROUND_ARENA - 6 - ((t * 30 + i * 7) % 22);
+        c.fillStyle = i % 2 ? "rgb(255,200,80)" : "rgb(255,110,30)";
+        c.fillRect(Math.round(fx), Math.round(fy), 2, 2);
+      }
+    }
     this.outfitFx.draw(c);
     if (this.slashT > 0) drawSlash(c, hx + 34, GROUND_ARENA - 19, p.sword, 1 - this.slashT / SLASH_TIME, skin); // след удара
     this.hitFx.draw(c);
@@ -3406,6 +3532,24 @@ class BattleScene extends Scene {
       c.strokeStyle = `rgba(200,20,20,${(40 + 80 * k) / 255})`;
       c.lineWidth = 6;
       c.strokeRect(3, 3, CW - 6, CH - 6);
+    }
+  }
+
+  /** Стая летучих мышей вампира: летит от Графа к герою и долетает к удару. */
+  drawBats(c, en, t) {
+    const k = en.state === "attack" ? 1 : Math.max(0, Math.min(1, 1 - en.timer / (en.windupNow || 1)));
+    const x0 = Math.round(en.x) + 24, x1 = this.HERO_X + 14;
+    for (const b of this.bats) {
+      const q = Math.min(1, k * b.s);
+      const x = Math.round(x0 + (x1 - x0) * q + Math.sin(t * 7 + b.k * 9) * 4);
+      const y = Math.round(GROUND_ARENA - 40 + b.y * (1 - q * 0.5) + Math.cos(t * 9 + b.k * 7) * 3);
+      const up = Math.floor(t * 14 + b.k * 5) % 2;
+      c.fillStyle = "rgb(16,8,14)";
+      c.fillRect(x, y, 3, 2);
+      c.fillRect(x - 2, y - (up ? 1 : -1), 2, 1);
+      c.fillRect(x + 3, y - (up ? 1 : -1), 2, 1);
+      c.fillStyle = "rgb(255,40,40)";
+      c.fillRect(x, y, 1, 1);
     }
   }
 
@@ -3509,24 +3653,37 @@ class BattleScene extends Scene {
         hound: "Короткий бросок и тяжёлый укус",
         husk: "Живучий, бьёт когтями",
         fluff: "Кусает парами и высасывает силы: береги выносливость",
+        vampire: "Когти, укус (пьёт кровь), стая мышей и удар из тумана",
+        pumpkin: "Серп и тыквенные бомбы: горение тушит зелье",
         eyequeen: "Когда Око на груди открыто — НЕ БЕЙ: взгляд отразит удар",
         rival: "Соперник бьётся снаряжением и силой своего героя",
       };
       if (this.newLand) g.text(`${tr("НОВАЯ ЗЕМЛЯ")}: ${tr(LOCATIONS[this.location].name).toUpperCase()}`, W / 2, 44, 8, "rgb(150,200,140)", "center");
       if (en.boss) g.text(`${tr("БОСС")}: ${tr(en.name).toUpperCase()}`, W / 2, 34, 16, "rgb(255,90,60)", "center");
       if (tips[en.kind]) g.text(tips[en.kind], W / 2, 140, 8, COL.dim, "center");
+      if (this.dodgeGuard < DODGE_GUARD) g.text("Без камеры присед спасает лишь в момент удара: жди сигнала", W / 2, 152, 8, "rgb(120,220,255)", "center");
       g.text("ПРИГОТОВЬТЕСЬ", W / 2, 60, 16, COL.gold, "center");
       g.text(`${Math.ceil(this.ready)}`, W / 2, 84, 32, COL.text, "center");
       g.text(g.useCamera ? "Отойдите, чтобы тело было в кадре" : "Бой начинается", W / 2, 124, 8, COL.dim, "center");
     } else if (en.state === "windup" && !this.result) {
-      const k = Math.max(0, Math.min(1, en.timer / (en.windupNow || en.windupTime)));
+      const total = en.windupNow || en.windupTime, k = Math.max(0, Math.min(1, en.timer / total));
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 14);
-      g.text(plank && g.bank.attack === "pushup" ? "ОПУСТИСЬ!" : DODGE_CALL[g.bank.dodge], W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
+      const early = this.dodgeGuard < DODGE_GUARD && en.timer > this.dodgeGuard + 0.05; // без камеры: присед защищает недолго
+      if (early) g.text("ЖДИ...", W / 2, 56, 32, "rgb(255,220,120)", "center");
+      else g.text(plank && g.bank.attack === "pushup" ? "ОПУСТИСЬ!" : DODGE_CALL[g.bank.dodge], W / 2, 56, 32, `rgb(255,${Math.floor(60 + 120 * pulse)},40)`, "center");
       g.bar(W / 2 - 80, 96, 160, 5, k, "rgb(255,90,50)");
+      if (this.dodgeGuard < DODGE_GUARD) { // зона, где присед спасает
+        const zw = Math.min(160, Math.round((160 * this.dodgeGuard) / total));
+        g.rect([W / 2 - 80, 102, zw, 2], "rgb(120,220,255)");
+      }
+      const mv = MOVES[en.move];
+      if (mv.label) g.text(mv.label + (en.comboLeft > 0 ? ` x${en.comboLeft + 1}` : ""), W / 2, 108, 8, mv.armor ? "rgb(255,140,60)" : "rgb(255,210,120)", "center");
       const top = GROUND_ARENA - (HEAD_Y[en.kind] || 44);
       g.text("!", g.wx(Math.round(en.x + (HIT_X[en.kind] || 12))), g.wy(top), 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text(tf("Окно для удара: {call}", { call: tr(ATTACK_CALL[g.bank.attack]) }), W / 2, 70, 8, COL.gold, "center");
+    } else if (en.state === "mist" && !this.result) {
+      g.text("ГРАФ В ТУМАНЕ — ЖДИ УДАРА", W / 2, 56, 16, "rgb(200,170,240)", "center");
     } else if (en.state === "gaze" && !this.result) {
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 10);
       g.text("ОКО ОТКРЫТО — НЕ БЕЙ!", W / 2, 56, 16, `rgb(255,${Math.floor(180 + 60 * pulse)},90)`, "center");
@@ -3627,6 +3784,8 @@ class ChallengeScene extends BattleScene {
     this.estus = p.estusMax;
     this.backLabel = "< СДАТЬСЯ";
     this.outcome = null;
+    this.guardCap = Infinity; // вызов — бой с соперником, правила как с камерой
+    this.dodgeGuard = DODGE_GUARD;
   }
   report(won) {
     this.game.online.challengeEnd(this.fight, won)
@@ -3703,6 +3862,7 @@ class TowerScene extends BattleScene {
     this.enemy = new Skeleton(floorWave(run.floor), this.plan.kind);
     if (this.plan.queen) this.enemy.homeX = this.enemy.x = 176;
     if (game.hard) this.enemy.makeHard();
+    if (game.mode === "btn") this.enemy.makeButtons();
     this.foeNo = run.floor;
     this.bg = "spire_bg";
     this.music = "samhain";
@@ -3746,6 +3906,7 @@ class TowerScene extends BattleScene {
     g.profile.save();
     const ev = battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind, hard: g.hard, hour: new Date().getHours() });
     if (en.kind === "eyequeen") ev.push("eyequeen");
+    if (en.kind === "vampire") ev.push("vampire");
     g.checkAch(ev);
     sfx.win();
     vibrate([40, 30, 40]);
@@ -3945,8 +4106,9 @@ class SpireHallScene extends Scene {
         "Поднимайтесь по этажам башни без отдыха у костра.",
         "Здоровье и зелья не восстанавливаются между боями.",
         "После каждой победы выберите один из трёх тыквенных даров.",
-        "Каждый 5-й этаж — элитный страж, каждый 13-й —",
-        "Королева Тринадцатого Ока: не бейте, пока Око открыто!",
+        "Каждый 5-й этаж — элитный страж, 8-й — вампир",
+        "Граф Тыквенной Крови, 13-й — Королева Тринадцатого Ока:",
+        "не бейте её, пока Око на груди открыто!",
         "Награды за этажи остаются, даже если вы падёте.",
       ];
       for (const ln of rules.flatMap((r) => (P ? g.wrap(r, 46) : [r]))) { // в портрете — переносим по словам
@@ -3986,6 +4148,7 @@ class DuelScene extends BattleScene {
     this.estus = DUEL_ESTUS;
     this.estusCap = DUEL_ESTUS;
     this.guardCap = DODGE_GUARD + 0.25; // замах соперника короткий: ранний присед не спасает от следующего
+    this.dodgeGuard = DODGE_GUARD; // дуэль одинакова для обоих режимов
     this.backLabel = "< СДАТЬСЯ";
     this.outbox = [];
     this.sent = 0; // номер последнего своего события (повтор после сбоя связи не применится дважды)

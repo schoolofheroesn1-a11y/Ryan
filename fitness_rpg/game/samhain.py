@@ -306,3 +306,167 @@ def make_spire_background(w=320, h=180, seed=1031):
     pygame.draw.circle(surf, (14, 10, 18), (92, 24), 2)
     surf.set_at((91, 24), (255, 120, 40))
     return surf
+
+
+# ---------------------------------------------------------------- Граф Тыквенной Крови (вампир)
+# Лысый бледный вампир с острыми ушами и красными глазами, клыки, высокий воротник из серого меха,
+# чёрный плащ с багровой подкладкой. Атак несколько: когти, укус (пьёт кровь), стая мышей, туман.
+VAMP_W, VAMP_H = 56, 66
+VSKIN, VSKIN2, VSKIN3 = (196, 204, 196), (150, 160, 154), (104, 112, 110)
+FUR, FUR_D = (120, 116, 122), (70, 66, 74)
+CAPE, CAPE2 = (16, 12, 18), (36, 26, 38)
+LINING, LINING2 = (120, 14, 30), (180, 30, 44)
+VEYE = (255, 40, 40)
+
+
+def vampire(pose="idle", sway=0, fury=False):
+    s = pygame.Surface((VAMP_W, VAMP_H), pygame.SRCALPHA)
+    lining = LINING2 if fury else LINING
+    eye = (255, 140, 120) if fury else VEYE
+    lean = {"bite": -6, "slash": -3}.get(pose, 0)  # наклон вперёд (влево)
+    hx, hy = 24 + lean, 8 + (4 if pose == "bite" else 0)  # голова: левый верх черепа
+    # плащ: в «стае» распахнут крыльями, иначе ниспадает до земли
+    if pose == "swarm":
+        _poly(s, CAPE, [(30, 22), (2, 10), (6, 30), (0, 46), (12, 40), (16, 60), (30, 50), (44, 60), (48, 40), (55, 46), (52, 30), (55, 10)])
+        _poly(s, lining, [(30, 24), (8, 16), (10, 32), (16, 52), (30, 44), (44, 52), (48, 32), (50, 16)])
+        for a, b in (((8, 16), (16, 52)), ((50, 16), (44, 52))):
+            _line(s, CAPE2, a, b)
+    else:
+        _poly(s, CAPE, [(22 + lean // 2, 20), (40, 20), (50, 65), (44, 62 + sway), (38, 65), (30, 62), (24, 65), (16, 63 - sway), (14, 65)])
+        _poly(s, lining, [(40, 22), (48, 62), (44, 60 + sway), (42, 40)])
+        _line(s, CAPE2, (30, 24), (28, 62))
+    # тело: тёмный камзол с серебряными застёжками
+    _poly(s, (30, 24, 34), [(24 + lean // 2, 22), (38, 22), (37, 50), (25, 50)])
+    for yy in (28, 34, 40):
+        s.set_at((31, yy), (190, 190, 200))
+    # руки: длинные пальцы-когти
+    if pose == "raised":
+        _line(s, CAPE2, (26, 24), (18, 6), 3)
+        _line(s, VSKIN2, (18, 6), (14, 1), 2)
+        for k in (-2, 0, 2):
+            _line(s, (230, 230, 220), (14, 1), (11 + k, -1 + abs(k)))
+    elif pose == "slash":
+        _line(s, CAPE2, (24, 26), (8, 34), 3)
+        _line(s, VSKIN2, (8, 34), (3, 36), 2)
+        for k in (-2, 0, 2):
+            _line(s, (240, 236, 226), (3, 36 + k), (0, 37 + k * 2))
+    elif pose == "swarm":
+        _line(s, VSKIN2, (6, 14), (2, 10), 2)
+        _line(s, VSKIN2, (52, 14), (55, 10), 2)
+    else:
+        _line(s, CAPE2, (25, 25), (20, 40), 3)
+        _line(s, VSKIN2, (20, 40), (18, 46), 2)
+        for k in (-1, 1):
+            _line(s, (230, 230, 220), (18, 46), (17 + k, 49))
+    # высокий воротник из серого меха — шипами вокруг головы
+    collar = [(hx - 6, hy + 18), (hx - 8, hy + 6), (hx - 4, hy + 10), (hx - 2, hy + 2), (hx + 2, hy + 12)]
+    _poly(s, FUR_D, [(hx - 7, hy + 20), (hx + 18, hy + 20), (hx + 22, hy + 6), (hx + 18, hy + 12), (hx + 16, hy + 2), (hx + 12, hy + 14)] + list(reversed(collar)))
+    for k in range(6):
+        x0 = hx - 6 + k * 5
+        _line(s, FUR, (x0, hy + 20), (x0 + (2 if k > 2 else -2), hy + 12 + (k % 2) * 3))
+    # голова: крупный лысый череп, острые уши, впалые щёки, тяжёлая бровь
+    pygame.draw.ellipse(s, VSKIN, (hx - 2, hy - 3, 18, 21))
+    pygame.draw.ellipse(s, VSKIN2, (hx + 8, hy - 1, 8, 18))
+    _poly(s, VSKIN, [(hx + 12, hy + 5), (hx + 24, hy - 6), (hx + 15, hy + 11)])  # дальнее ухо назад
+    _line(s, VSKIN3, (hx + 14, hy + 5), (hx + 22, hy - 4))
+    _poly(s, VSKIN2, [(hx - 1, hy + 4), (hx - 6, hy - 3), (hx + 1, hy + 1)])  # ближнее ухо
+    pygame.draw.rect(s, VSKIN3, (hx, hy + 3, 9, 2))  # нависшая бровь
+    pygame.draw.rect(s, (40, 10, 14), (hx + 1, hy + 5, 3, 2))  # глубокие глазницы
+    pygame.draw.rect(s, (40, 10, 14), (hx + 6, hy + 5, 3, 2))
+    s.set_at((hx + 2, hy + 5), eye)
+    s.set_at((hx + 3, hy + 5), eye)
+    s.set_at((hx + 7, hy + 5), eye)
+    _poly(s, VSKIN, [(hx + 1, hy + 7), (hx - 3, hy + 11), (hx + 2, hy + 11)])  # нос крючком
+    _line(s, VSKIN3, (hx + 8, hy + 8), (hx + 7, hy + 13))  # впалая щека
+    if pose == "bite":  # пасть распахнута
+        pygame.draw.ellipse(s, (70, 8, 18), (hx, hy + 11, 9, 6))
+        _poly(s, (250, 250, 240), [(hx + 1, hy + 11), (hx + 3, hy + 11), (hx + 2, hy + 15)])
+        _poly(s, (250, 250, 240), [(hx + 6, hy + 11), (hx + 8, hy + 11), (hx + 7, hy + 15)])
+    else:
+        _line(s, (60, 20, 26), (hx + 1, hy + 13), (hx + 8, hy + 13))
+        _poly(s, (250, 250, 240), [(hx + 2, hy + 13), (hx + 3, hy + 13), (hx + 2, hy + 15)])
+        _poly(s, (250, 250, 240), [(hx + 6, hy + 13), (hx + 7, hy + 13), (hx + 7, hy + 15)])
+    return outlined(s, (6, 2, 8))
+
+
+def make_vampire_frames():
+    idle, idle2 = vampire("idle", 0), vampire("idle", 1)
+    raised = vampire("raised")
+    blood = (255, 40, 50)
+    frames = {
+        "idle": [idle, idle2],
+        "windup": [tinted(raised, blood, 0.25), raised],
+        "attack": [vampire("slash")],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "dead": [crouched(tinted(idle, (40, 30, 40), 0.55))],
+        "enraged": [vampire("idle", 0, True), vampire("idle", 1, True)],
+        "bite": [vampire("bite")],
+        "swarm": [vampire("swarm"), tinted(vampire("swarm"), blood, 0.2)],
+    }
+    mist = []
+    for src, a in ((idle, 150), (idle2, 100)):  # туман: полупрозрачный лиловый силуэт
+        t = tinted(src, (150, 110, 190), 0.75)
+        m = pygame.Surface(t.get_size(), pygame.SRCALPHA)
+        for y in range(t.get_height()):
+            for x in range(t.get_width()):
+                c = t.get_at((x, y))
+                if c.a:
+                    m.set_at((x, y), (c.r, c.g, c.b, a))
+        mist.append(m)
+    frames["mist"] = mist
+    return frames
+
+
+# ---------------------------------------------------------------- Тыквоголов
+# Пугало с тыквой-фонарём вместо головы: рваный чёрный кафтан, солома из рукавов, серп.
+PUMP, PUMP2, PUMP3 = (236, 120, 30), (196, 88, 20), (140, 56, 12)
+GLOW = (255, 220, 90)
+
+
+def pumpkinhead(pose="idle", flick=0):
+    s = pygame.Surface((30, 44), pygame.SRCALPHA)
+    # ноги-палки и сапоги
+    _line(s, (70, 50, 34), (13, 30), (11, 42), 2)
+    _line(s, (70, 50, 34), (18, 30), (19, 42), 2)
+    pygame.draw.rect(s, (24, 18, 20), (9, 41, 5, 3))
+    pygame.draw.rect(s, (24, 18, 20), (18, 41, 5, 3))
+    # рваный кафтан
+    _poly(s, (30, 22, 30), [(10, 15), (22, 15), (24, 33), (21, 31), (19, 34), (16, 31), (13, 34), (10, 31), (8, 33)])
+    _line(s, (56, 42, 52), (21, 16), (23, 31))
+    _line(s, (90, 60, 40), (14, 16), (16, 28))  # верёвка-пояс наискось
+    # рука с серпом
+    if pose == "raised":
+        hand, blade = (8, 4), [(8, 4), (5, 0), (1, 1), (0, 5), (3, 3)]
+    elif pose == "swing":
+        hand, blade = (3, 26), [(3, 26), (0, 30), (1, 35), (5, 37), (3, 32)]
+    else:
+        hand, blade = (7, 26), [(7, 26), (5, 20), (1, 18), (0, 22), (3, 21)]
+    _line(s, (30, 22, 30), (11, 17), hand, 2)
+    _line(s, (220, 200, 120), (hand[0] + 1, hand[1] + 1), (hand[0] + 3, hand[1] + 2))  # солома
+    _line(s, (90, 64, 40), hand, blade[1])
+    _poly(s, (200, 204, 210), blade[1:])
+    # тыква-голова
+    pygame.draw.ellipse(s, PUMP3, (5, 1, 20, 16))
+    pygame.draw.ellipse(s, PUMP, (6, 1, 18, 15))
+    pygame.draw.ellipse(s, PUMP2, (12, 1, 6, 15))
+    pygame.draw.rect(s, (60, 90, 30), (14, 0, 3, 2))
+    lit = GLOW if not flick else (255, 170, 60)
+    _poly(s, lit, [(8, 7), (11, 5), (12, 8)])  # глаза треугольниками
+    _poly(s, lit, [(15, 7), (18, 5), (18, 8)])
+    if pose == "swing":
+        pygame.draw.ellipse(s, lit, (8, 10, 10, 4))
+    else:
+        _poly(s, lit, [(8, 11), (18, 11), (17, 13), (15, 12), (13, 14), (11, 12), (9, 13)])
+    return outlined(s, (14, 8, 6))
+
+
+def make_pumpkin_frames():
+    idle, idle2 = pumpkinhead("idle", 0), pumpkinhead("idle", 1)
+    raised = pumpkinhead("raised")
+    return {
+        "idle": [idle, idle2],
+        "windup": [tinted(raised, (255, 160, 60), 0.3), raised],
+        "attack": [pumpkinhead("swing")],
+        "hurt": [tinted(idle, (255, 255, 255), 0.8)],
+        "dead": [crouched(tinted(idle, (70, 50, 30), 0.5))],
+    }

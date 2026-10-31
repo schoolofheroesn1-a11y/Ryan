@@ -6,6 +6,7 @@
 
 export const QUEEN_EVERY = 13;
 export const ELITE_EVERY = 5;
+export const VAMPIRE_AT = 8; // Граф Тыквенной Крови — на 8-м этаже каждого круга из 13
 export const ELITES = ["knight", "chief", "wraith"];
 const EARLY = ["skeleton", "bandit", "zombie", "bat"];
 const DEEP = ["imp", "hound", "husk"];
@@ -28,9 +29,12 @@ export const floorWave = (floor) => Math.max(1, Math.round(1.6 * floor - 1));
 /** Кто ждёт на этаже: { kind, boss, elite, queen }. */
 export function floorPlan(floor, seed = 0) {
   if (floor % QUEEN_EVERY === 0) return { kind: "eyequeen", boss: true, elite: false, queen: true };
+  if (floor % QUEEN_EVERY === VAMPIRE_AT) return { kind: "vampire", boss: true, elite: false, queen: false, vampire: true };
   const r = rng(seed * 977 + floor * 131);
   if (floor % ELITE_EVERY === 0) return { kind: ELITES[Math.floor(floor / ELITE_EVERY - 1) % ELITES.length], boss: true, elite: true, queen: false };
-  if (r() < 0.4) return { kind: "fluff", boss: false, elite: false, queen: false };
+  const roll = r();
+  if (roll < 0.35) return { kind: "fluff", boss: false, elite: false, queen: false };
+  if (roll < 0.55) return { kind: "pumpkin", boss: false, elite: false, queen: false };
   const pool = floor > 6 ? [...EARLY, ...DEEP] : EARLY;
   return { kind: pool[Math.floor(r() * pool.length)], boss: false, elite: false, queen: false };
 }
@@ -91,7 +95,7 @@ export function floorReward(floor) {
   const plan = floorPlan(floor);
   const ash = 60 + 30 * floor;
   if (plan.queen) return [ash * 3, 6 + Math.floor(floor / QUEEN_EVERY) * 2, 2];
-  if (plan.elite) return [ash * 2, 3 + Math.floor(floor / ELITE_EVERY), 1];
+  if (plan.elite || plan.vampire) return [ash * 2, 3 + Math.floor(floor / ELITE_EVERY), 1];
   return [ash, 1 + Math.floor(floor / 4), 0];
 }
 
@@ -99,6 +103,7 @@ export function floorReward(floor) {
 export function floorChest(floor) {
   const plan = floorPlan(floor);
   if (plan.queen) return floor >= 26 ? "abyss" : "grave";
+  if (plan.vampire) return floor >= 20 ? "abyss" : "castle";
   if (plan.elite) return floor >= 20 ? "grave" : floor >= 10 ? "castle" : "crypt";
   return null;
 }
