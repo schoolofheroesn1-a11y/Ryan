@@ -282,28 +282,27 @@ def vampire(pose="idle", frame=0, fury=False):
     if pose != "swarm":
         fur(s, frame)
     chest(s, fury)
-    eyes = face(s, cx, top, skin, bite)
-    crown(s, cx, top, fury)
-    # ближняя рука — длинная, до земли
+    # ближняя рука — длинная, до земли; рисуется ДО головы и обходит лицо сбоку или снизу
     if pose == "raised":
-        limb(s, [(28, 42), (20, 26), (14, 10)])
-        claws(s, (14, 8), -math.pi / 2 - 0.3, 14, skin)
+        limb(s, [(26, 46), (14, 32), (10, 12)])
+        claws(s, (10, 10), -math.pi / 2 - 0.3, 14, skin)
     elif pose == "slash":
-        limb(s, [(28, 42), (14, 48), (4, 52)])
-        claws(s, (3, 52), math.pi + 0.1, 14, skin)
-    elif bite:
-        limb(s, [(28, 44), (16, 56), (8, 62)])
-        claws(s, (7, 63), math.pi * 0.75, 13, skin)
+        limb(s, [(26, 50), (14, 54), (4, 56)])
+        claws(s, (3, 56), math.pi + 0.1, 14, skin)
+    elif bite:  # голова брошена вперёд — рука ниже челюсти
+        limb(s, [(32, 60), (18, 68), (6, 70)])
+        claws(s, (5, 71), math.pi * 0.85, 13, skin)
     elif pose == "swarm":
-        limb(s, [(32, 40), (16, 24), (8, 10)])
+        limb(s, [(26, 46), (14, 28), (8, 10)])
         claws(s, (7, 9), -math.pi / 2 - 0.5, 10, skin)
     else:
-        limb(s, [(28, 42), (20, 62), (16, 80 + frame)])
+        limb(s, [(26, 48), (20, 64), (16, 80 + frame)])
         claws(s, (15, 82 + frame), math.pi / 2 + 0.2, 13, skin)
     if pose == "swarm":
         fur(s, frame)
-        eyes = face(s, cx, top, skin)
-        crown(s, cx, top, fury)
+    # голова и корона — поверх всего: лицо никогда не закрыто рукой
+    eyes = face(s, cx, top, skin, bite)
+    crown(s, cx, top, fury)
     out = outlined(s, (6, 4, 12))
     mist_hem(out, 84, 1 + frame)  # туман — после контура, чтобы подол таял вместе с ним
     eyes_glow(out, eyes, fury)
