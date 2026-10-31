@@ -2735,7 +2735,7 @@ class Skeleton {
       this.damage = Math.floor(baseDmg * 1.1);
       this.maxPoise = 5;
       this.comboChance = 0.2;
-      this.homeX = 172;
+      this.homeX = 158; // широкий плащ не заходит под окошко камеры справа
     } else if (this.kind === "pumpkin") { // Тыквоголов: серп и тыквенные бомбы (поджигают героя)
       this.maxHp = Math.floor(baseHp * 1.1);
       this.damage = Math.floor(baseDmg * 1.05);
@@ -2817,11 +2817,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 30, pumpkin: 14 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 68, pumpkin: 48 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 40, pumpkin: 14 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 98, pumpkin: 48 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 34 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 50 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -3482,6 +3482,7 @@ class BattleScene extends Scene {
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
     else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
     if (en.state === "gaze") this.drawGaze(c, en, t);
+    if (en.kind === "vampire" && en.state !== "dead") this.drawBloodMist(c, en, t);
     if (en.move === "swarm" && (en.state === "windup" || en.state === "attack")) this.drawBats(c, en, t);
     if (en.kind === "wraith" || en.kind === "seraph") {
       const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"] : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
@@ -3535,14 +3536,30 @@ class BattleScene extends Scene {
     }
   }
 
+  /** Кровавый туман у ног Графа: стелется и пульсирует, в жажде — гуще и ярче. */
+  drawBloodMist(c, en, t) {
+    const cx = Math.round(en.x) + 46, k = en.enraged ? 1.4 : 1;
+    for (let i = 0; i < 5; i++) {
+      const ph = t * 0.8 + i * 1.3, x = cx + Math.sin(ph) * 24 - 10 + i * 6;
+      c.fillStyle = `rgba(${en.enraged ? 170 : 110},10,24,${(0.1 + 0.05 * Math.sin(ph * 2)) * k})`;
+      c.beginPath();
+      c.ellipse(x, GROUND_ARENA - 2, 20 + 6 * Math.sin(ph), 5, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    if (Math.floor(t * 3) % 4 === 0) { // капля крови падает с когтей
+      c.fillStyle = "rgb(190,16,30)";
+      c.fillRect(Math.round(en.x) + 26, GROUND_ARENA - 30 + Math.floor((t * 60) % 28), 1, 2);
+    }
+  }
+
   /** Стая летучих мышей вампира: летит от Графа к герою и долетает к удару. */
   drawBats(c, en, t) {
     const k = en.state === "attack" ? 1 : Math.max(0, Math.min(1, 1 - en.timer / (en.windupNow || 1)));
-    const x0 = Math.round(en.x) + 24, x1 = this.HERO_X + 14;
+    const x0 = Math.round(en.x) + 40, x1 = this.HERO_X + 14;
     for (const b of this.bats) {
       const q = Math.min(1, k * b.s);
       const x = Math.round(x0 + (x1 - x0) * q + Math.sin(t * 7 + b.k * 9) * 4);
-      const y = Math.round(GROUND_ARENA - 40 + b.y * (1 - q * 0.5) + Math.cos(t * 9 + b.k * 7) * 3);
+      const y = Math.round(GROUND_ARENA - 30 - (1 - q) * 30 + b.y * (1 - q * 0.5) + Math.cos(t * 9 + b.k * 7) * 3);
       const up = Math.floor(t * 14 + b.k * 5) % 2;
       c.fillStyle = "rgb(16,8,14)";
       c.fillRect(x, y, 3, 2);
