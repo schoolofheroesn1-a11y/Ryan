@@ -213,85 +213,88 @@ def arm(s, shoulder, elbow, hand, front=True):
     s.set_at((hand[0] - 1, hand[1] - 1), SKIN[2])
 
 
-def collar(s, hx, hy):
-    """Высокий стоячий воротник из серого меха: шипы обрамляют голову сзади, мех лежит на плечах."""
-    spikes = [(hx - 10, hy + 36), (hx - 15, hy + 18), (hx - 6, hy + 27), (hx - 9, hy + 6), (hx + 1, hy + 26),
-              (hx + 18, hy + 27), (hx + 27, hy + 9), (hx + 26, hy + 24), (hx + 37, hy + 12), (hx + 32, hy + 28),
-              (hx + 42, hy + 24), (hx + 38, hy + 38)]
-    m = part(s, FUR, poly(spikes + [(hx + 30, hy + 42), (hx + 4, hy + 42)]), rim=True)
-    for (x0, y0), (x1, y1) in zip(spikes[1::2], spikes[2::2]):  # пряди вдоль шипов
-        line(s, FUR[3], (x0 + 1, y0 + 3), ((x0 + x1) // 2, (y0 + y1) // 2 + 2))
-        line(s, FUR[0], (x0 + 3, y0 + 6), ((x0 + x1) // 2 + 2, (y0 + y1) // 2 + 6))
+def collar(s, cx, hy):
+    """Высокий стоячий воротник из серого меха, симметричный по оси тела cx: шипы обрамляют голову
+    сзади, мех лежит на плечах."""
+    half = [(-26, 38), (-31, 20), (-21, 28), (-24, 6), (-14, 25), (-11, 27)]
+    spikes = [(cx + dx, hy + dy) for dx, dy in half] + [(cx - dx, hy + dy) for dx, dy in reversed(half)]
+    m = part(s, FUR, poly(spikes + [(cx + 16, hy + 43), (cx - 16, hy + 43)]), rim=True)
+    for sd in (-1, 1):  # пряди вдоль шипов
+        for (dx0, dy0), (dx1, dy1) in zip(half[1::2], half[2::2]):
+            x0 = cx + (dx0 if sd < 0 else -dx0)
+            x1 = cx + (dx1 if sd < 0 else -dx1)
+            line(s, FUR[3] if sd < 0 else FUR[2], (x0 - sd, hy + dy0 + 3), ((x0 + x1) // 2, (hy + dy0 + hy + dy1) // 2 + 2))
+            line(s, FUR[0], (x0 - sd * 3, hy + dy0 + 6), ((x0 + x1) // 2 - sd * 2, (hy + dy0 + hy + dy1) // 2 + 6))
     rnd = random.Random(7)  # фактура меха: короткие пряди вниз по всей мантии
-    for _ in range(70):
-        x, y = rnd.randrange(hx - 8, hx + 38), rnd.randrange(hy + 26, hy + 42)
+    for _ in range(80):
+        x, y = rnd.randrange(cx - 24, cx + 25), rnd.randrange(hy + 26, hy + 43)
         if m.get_at((x, y)) and m.get_at((x, min(H - 1, y + 2))):
             line(s, rnd.choice((FUR[0], FUR[2], FUR[3], FUR[0])), (x, y), (x + rnd.choice((-1, 0, 1)), y + 2))
-    for x in (hx + 2, hx + 9, hx + 17, hx + 25):  # мех на плечах: неровные клочья
-        line(s, FUR[2], (x, hy + 34), (x - 1, hy + 39))
-        line(s, FUR[0], (x + 2, hy + 35), (x + 3, hy + 40))
 
 
 def head(s, hx, hy, pose, fury):
-    """Голова: вытянутый лысый череп, уши-крылья назад, глазницы, нос крючком, пасть с клыками."""
+    """Голова анфас, симметричная: вытянутый лысый череп, уши-крылья в стороны, глазницы, нос крючком,
+    пасть с клыками. hx — левый край черепа (ширина 20), hy — макушка."""
     skin = SKIN_F if fury else SKIN
     bite = pose == "bite"
-    # дальнее ухо (за черепом) и ближнее
-    part(s, skin, poly([(hx + 14, hy + 6), (hx + 34, hy - 4), (hx + 28, hy + 4), (hx + 30, hy + 8), (hx + 20, hy + 14)]))
-    line(s, (120, 70, 80), (hx + 18, hy + 8), (hx + 31, hy - 2))  # прожилки уха
-    # череп: высокий купол и челюсть клином вниз
+    c = hx + 10  # ось симметрии лица
     jaw_drop = 6 if bite else 0
-    skull = many(ell((hx, hy - 3, 19, 24)), poly([(hx + 1, hy + 10), (hx + 18, hy + 12), (hx + 14, hy + 26 + jaw_drop),
-                                               (hx + 6, hy + 28 + jaw_drop), (hx + 1, hy + 22 + jaw_drop)]))
+    inner = (110, 64, 74) if not fury else (150, 40, 50)
+    # уши: огромные, острые, в стороны и вверх (за черепом)
+    for sd in (-1, 1):
+        ear = [(c + sd * 7, hy + 6), (c + sd * 22, hy - 8), (c + sd * 17, hy + 2), (c + sd * 19, hy + 7), (c + sd * 9, hy + 15)]
+        part(s, skin, poly(ear))
+        pygame.draw.polygon(s, inner, [(c + sd * 9, hy + 7), (c + sd * 19, hy - 4), (c + sd * 11, hy + 12)])
+        line(s, skin[3] if sd < 0 else skin[0], (c + sd * 8, hy + 5), (c + sd * 21, hy - 7))
+    # череп: высокий купол и симметричная челюсть клином вниз
+    skull = many(ell((hx, hy - 3, 21, 24)), poly([(hx + 1, hy + 12), (hx + 20, hy + 12), (c + 6, hy + 26 + jaw_drop),
+                                               (c, hy + 29 + jaw_drop), (c - 6, hy + 26 + jaw_drop)]))
     part(s, skin, skull)
     # вены на черепе
-    for pts in (((hx + 8, hy + 2), (hx + 11, hy + 5), (hx + 10, hy + 9)), ((hx + 14, hy + 3), (hx + 16, hy + 7)),
-                ((hx + 4, hy + 4), (hx + 5, hy + 7))):
-        pygame.draw.lines(s, (90, 70, 110) if not fury else (180, 30, 40), False, pts)
-    # ближнее ухо: огромное, острое, назад-вверх
-    ear = [(hx + 11, hy + 9), (hx + 14, hy + 3), (hx + 30, hy - 9), (hx + 25, hy + 1), (hx + 28, hy + 5), (hx + 20, hy + 10), (hx + 17, hy + 16)]
-    part(s, skin, poly(ear))
-    pygame.draw.polygon(s, (110, 64, 74) if not fury else (150, 40, 50), [(hx + 15, hy + 7), (hx + 26, hy - 4), (hx + 19, hy + 9)])  # внутренняя сторона уха
-    line(s, skin[3], (hx + 14, hy + 3), (hx + 29, hy - 8))
-    line(s, skin[0], (hx + 20, hy + 10), (hx + 17, hy + 15))
-    # нависшая бровь и глубокие глазницы
-    line(s, skin[0], (hx + 1, hy + 9), (hx + 11, hy + 10), 2)
-    line(s, skin[3], (hx + 1, hy + 8), (hx + 10, hy + 8))
-    for ex in (hx + 2, hx + 8):
+    vein = (90, 70, 110) if not fury else (180, 30, 40)
+    for pts in (((c - 1, hy - 1), (c - 3, hy + 3), (c - 2, hy + 7)), ((c + 3, hy), (c + 5, hy + 4)), ((c - 6, hy + 2), (c - 7, hy + 5))):
+        pygame.draw.lines(s, vein, False, pts)
+    # нависшая бровь — «галочкой» к переносице (злой взгляд), глубокие глазницы
+    for sd in (-1, 1):
+        line(s, skin[0], (c + sd * 9, hy + 8), (c + sd * 1, hy + 11), 2)
+        line(s, skin[3], (c + sd * 9, hy + 7), (c + sd * 2, hy + 9))
+    for ex in (c - 7, c + 3):
         pygame.draw.ellipse(s, skin[0], (ex - 1, hy + 10, 6, 5))  # тень глазницы
         pygame.draw.rect(s, (20, 6, 10), (ex, hy + 11, 4, 3))
         s.set_at((ex + 1, hy + 12), EYE)
         s.set_at((ex + 2, hy + 12), EYE_CORE if fury else EYE)
         s.set_at((ex + 1, hy + 11), (120, 10, 14))
-    # морщины лба, впалые щёки, скулы
-    line(s, skin[0], (hx + 3, hy + 5), (hx + 8, hy + 6))
-    line(s, skin[0], (hx + 12, hy + 14), (hx + 11, hy + 21 + jaw_drop // 2))
-    line(s, skin[3], (hx + 8, hy + 15), (hx + 12, hy + 16))  # скула
-    line(s, skin[0], (hx + 6, hy + 17), (hx + 9, hy + 20))  # провал щеки
-    # нос крючком
-    pygame.draw.polygon(s, skin[1], [(hx + 1, hy + 13), (hx - 3, hy + 18), (hx + 1, hy + 19), (hx + 3, hy + 16)])
-    line(s, skin[3], (hx, hy + 14), (hx - 2, hy + 17))
-    s.set_at((hx, hy + 18), skin[0])
+        s.set_at((ex + 2, hy + 11), (120, 10, 14))
+    # морщины лба, скулы, впалые щёки — с обеих сторон
+    line(s, skin[0], (c - 4, hy + 4), (c + 4, hy + 4))
+    for sd in (-1, 1):
+        line(s, skin[3], (c + sd * 5, hy + 16), (c + sd * 9, hy + 15))  # скула
+        line(s, skin[0], (c + sd * 6, hy + 18), (c + sd * 5, hy + 23 + jaw_drop // 2))  # провал щеки
+    # нос крючком — по центру
+    pygame.draw.polygon(s, skin[1], [(c - 1, hy + 12), (c + 1, hy + 12), (c + 2, hy + 18), (c, hy + 19), (c - 2, hy + 18)])
+    line(s, skin[3], (c - 1, hy + 13), (c - 1, hy + 17))
+    s.set_at((c - 1, hy + 18), skin[0])
+    s.set_at((c + 1, hy + 18), skin[0])
     # пасть
     my = hy + 21
     if bite:  # раскрыта: ряды игл и язык
-        pygame.draw.polygon(s, MAW, [(hx - 1, my - 1), (hx + 11, my - 1), (hx + 10, my + 8), (hx + 1, my + 9)])
-        pygame.draw.ellipse(s, (150, 30, 50), (hx + 2, my + 5, 6, 3))
-        for x in range(hx, hx + 11, 2):  # верхние клыки
-            ln = 4 if x in (hx, hx + 8) else 2
+        pygame.draw.polygon(s, MAW, [(c - 6, my - 1), (c + 6, my - 1), (c + 5, my + 8), (c - 5, my + 8)])
+        pygame.draw.ellipse(s, (150, 30, 50), (c - 3, my + 5, 7, 3))
+        for x in range(c - 5, c + 6, 2):  # верхние клыки
+            ln = 4 if x in (c - 3, c + 3) else 2
             line(s, BONE[3], (x, my - 1), (x, my - 1 + ln))
-        for x in range(hx + 1, hx + 10, 2):  # нижние
-            line(s, BONE[2], (x, my + 8), (x, my + 6))
+        for x in range(c - 4, c + 5, 2):  # нижние
+            line(s, BONE[2], (x, my + 7), (x, my + 5))
     else:
-        line(s, MAW, (hx - 1, my), (hx + 10, my + 1))
-        line(s, skin[0], (hx + 1, my + 2), (hx + 9, my + 3))
-        for x, ln in ((hx, 4), (hx + 3, 2), (hx + 6, 2), (hx + 8, 4)):  # клыки поверх губы
+        line(s, MAW, (c - 6, my), (c + 6, my))
+        line(s, skin[0], (c - 5, my + 2), (c + 5, my + 2))
+        for x, ln in ((c - 4, 4), (c - 1, 2), (c + 1, 2), (c + 4, 4)):  # клыки поверх губы
             line(s, BONE[3], (x, my), (x, my + ln))
             s.set_at((x, my + ln), BONE[1])
     if fury or bite:  # кровь стекает по подбородку
-        for x, ln in ((hx + 1, 5), (hx + 7, 3)):
-            line(s, (170, 10, 24), (x, my + 3 + jaw_drop), (x, my + 3 + jaw_drop + ln))
-            s.set_at((x, my + 4 + jaw_drop + ln), (230, 40, 50))
+        for x, ln in ((c - 4, 5), (c + 4, 3)):
+            line(s, (170, 10, 24), (x, my + 4 + jaw_drop), (x, my + 4 + jaw_drop + ln))
+            s.set_at((x, my + 5 + jaw_drop + ln), (230, 40, 50))
 
 
 def glow(s, pts, col=(255, 40, 40), a=90):
@@ -310,7 +313,7 @@ def vampire(pose="idle", sway=0, fury=False):
     s = pygame.Surface((W, H), pygame.SRCALPHA)
     lean = {"bite": -10, "slash": -5}.get(pose, 0)
     breath = sway if pose == "idle" else 0
-    hx, hy = 30 + lean, 3 + breath + (8 if pose == "bite" else 0)
+    hx, hy = 37 + lean, 3 + breath + (8 if pose == "bite" else 0)  # ось лица — над центром камзола
     cape_back(s, pose, sway)
     boots(s, lean)
     # дальняя рука держит край плаща
@@ -318,7 +321,7 @@ def vampire(pose="idle", sway=0, fury=False):
         arm(s, (58, 36), (64, 50), (66, 60), front=False)
         claws(s, (66, 61), math.pi / 2, 0.7, 8)
     coat(s, lean, fury)
-    collar(s, hx, hy)
+    collar(s, hx + 10, hy)  # воротник — по оси лица, голова сидит в нём ровно
     head(s, hx, hy, pose, fury)
     # ближняя рука
     sh = (38 + lean, 38 + breath)
@@ -338,7 +341,7 @@ def vampire(pose="idle", sway=0, fury=False):
         arm(s, sh, (30, 50), (26, 62 + breath))
         claws(s, (26, 63 + breath), math.pi / 2 + 0.25, 1.0, 12)
     out = outlined(s, (4, 2, 6))
-    eyes = [(hx + 3, hy + 12), (hx + 9, hy + 12)]  # (голова поднята — глаза там же относительно черепа)
+    eyes = [(hx + 4, hy + 12), (hx + 14, hy + 12)]
     glow(out, eyes, (255, 60, 40) if fury else (255, 30, 30), 130 if fury else 90)
     if pose == "slash":  # след когтей: три алые дуги
         for k in range(3):
