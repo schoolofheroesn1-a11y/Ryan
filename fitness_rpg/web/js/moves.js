@@ -15,7 +15,7 @@ export const MOVES = {
   heavy: { dmg: 1.7, wind: 1.45, armor: true, label: "ТЯЖЁЛЫЙ!" },
   flurry: { dmg: 0.55, wind: 0.4, hits: [3, 4], label: "СЕРИЯ!" },
   feint: { dmg: 1, wind: 0.7, feint: true },
-  // Граф Тыквенной Крови
+  // Граф Пепельной Крови
   claw: { dmg: 1, wind: 1, label: "КОГТИ" },
   bite: { dmg: 1.2, wind: 0.8, drain: 1, pose: "bite", label: "УКУС!" },
   swarm: { dmg: 0.35, wind: 0.55, hits: [3, 4], pose: "swarm", label: "СТАЯ МЫШЕЙ!" },

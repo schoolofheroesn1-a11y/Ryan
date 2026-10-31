@@ -308,7 +308,7 @@ def make_spire_background(w=320, h=180, seed=1031):
     return surf
 
 
-# Граф Тыквенной Крови — детальный спрайт в game/vampire.py
+# Граф Пепельной Крови — детальный спрайт в game/vampire.py
 from game.vampire import make_vampire_frames  # noqa: E402,F401
 
 

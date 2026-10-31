@@ -6,7 +6,7 @@
 
 export const QUEEN_EVERY = 13;
 export const ELITE_EVERY = 5;
-export const VAMPIRE_AT = 8; // Граф Тыквенной Крови — на 8-м этаже каждого круга из 13
+export const VAMPIRE_AT = 8; // Граф Пепельной Крови — на 8-м этаже каждого круга из 13
 export const ELITES = ["knight", "chief", "wraith"];
 const EARLY = ["skeleton", "bandit", "zombie", "bat"];
 const DEEP = ["imp", "hound", "husk"];

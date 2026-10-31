@@ -925,7 +925,7 @@ const EN = {
   "Здоровье и зелья не восстанавливаются между боями.": "Health and potions don't refill between fights.",
   "После каждой победы выберите один из трёх тыквенных даров.": "After each win, pick one of three pumpkin gifts.",
   "Каждый {#}-й этаж — элитный страж, {#}-й — вампир": "Every 5th floor holds an elite guard, the 8th — the vampire",
-  "Граф Тыквенной Крови, {#}-й — Королева Тринадцатого Ока:": "Count of Pumpkin Blood, the 13th — the Queen of the Thirteenth Eye:",
+  "Граф Пепельной Крови, {#}-й — Королева Тринадцатого Ока:": "Count of Ashen Blood, the 13th — the Queen of the Thirteenth Eye:",
   "не бейте её, пока Око на груди открыто!": "don't strike her while the Eye on her chest is open!",
   "Награды за этажи остаются, даже если вы падёте.": "Floor rewards stay with you even if you fall.",
   "Рекорд: {n} эт. · Забегов: {r} · Королев повержено: {q}": "Record: {n} fl. · Runs: {r} · Queens slain: {q}",
@@ -941,7 +941,7 @@ const EN = {
   "Повелитель Самайна": "Lord of Samhain",
   "Пройти {#} этажей Шпиля": "Clear {#} Spire floors",
 
-  "Граф Тыквенной Крови": "Count of Pumpkin Blood",
+  "Граф Пепельной Крови": "Count of Ashen Blood",
   "Тыквоголов": "Pumpkinhead",
   "Когти, укус (пьёт кровь), стая мышей и удар из тумана": "Claws, a blood-drinking bite, a bat swarm and a strike from the mist",
   "Серп и тыквенные бомбы: горение тушит зелье": "Sickle and pumpkin bombs: a potion puts out the fire",
@@ -971,7 +971,7 @@ const EN = {
   "ГОРИШЬ!": "BURNING!",
   "КРОВАВАЯ ЖАЖДА!": "BLOODLUST!",
   "Осиновый кол": "Aspen Stake",
-  "Победить Графа Тыквенной Крови": "Defeat the Count of Pumpkin Blood",
+  "Победить Графа Пепельной Крови": "Defeat the Count of Ashen Blood",
   "Охотник на Вампиров": "Vampire Hunter",
   // --- тестовые клавиши
   "Тест: +10 алых, +1 синий, +300 пепла": "Test: +10 red, +1 blue, +300 ash",

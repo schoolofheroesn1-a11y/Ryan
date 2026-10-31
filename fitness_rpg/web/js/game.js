@@ -2619,7 +2619,7 @@ class Skeleton {
     skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников",
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
     imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
-    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Тыквенной Крови", pumpkin: "Тыквоголов",
+    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Пепельной Крови", pumpkin: "Тыквоголов",
   };
   static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen", "vampire"];
   static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
@@ -2730,7 +2730,7 @@ class Skeleton {
       this.maxCombo = 2;
       this.gazeT = gazeEvery(false) - 3; // первый взгляд — пораньше, чтобы его увидеть
       this.homeX = 176;
-    } else if (this.kind === "vampire") { // Граф Тыквенной Крови: когти, укус, стая мышей, туман
+    } else if (this.kind === "vampire") { // Граф Пепельной Крови: когти, укус, стая мышей, туман
       this.maxHp = Math.floor(baseHp * 2);
       this.damage = Math.floor(baseDmg * 1.1);
       this.maxPoise = 5;
@@ -2817,11 +2817,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 40, pumpkin: 14 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 98, pumpkin: 48 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 34, pumpkin: 14 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 92, pumpkin: 48 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 50 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 46 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -3536,19 +3536,24 @@ class BattleScene extends Scene {
     }
   }
 
-  /** Кровавый туман у ног Графа: стелется и пульсирует, в жажде — гуще и ярче. */
+  /** Лиловый туман у ног Графа и огоньки-души, что поднимаются вокруг; в жажде — гуще и ярче. */
   drawBloodMist(c, en, t) {
-    const cx = Math.round(en.x) + 46, k = en.enraged ? 1.4 : 1;
+    const cx = Math.round(en.x) + 46, k = en.enraged ? 1.5 : 1;
     for (let i = 0; i < 5; i++) {
       const ph = t * 0.8 + i * 1.3, x = cx + Math.sin(ph) * 24 - 10 + i * 6;
-      c.fillStyle = `rgba(${en.enraged ? 170 : 110},10,24,${(0.1 + 0.05 * Math.sin(ph * 2)) * k})`;
+      c.fillStyle = `rgba(150,110,220,${(0.09 + 0.05 * Math.sin(ph * 2)) * k})`;
       c.beginPath();
-      c.ellipse(x, GROUND_ARENA - 2, 20 + 6 * Math.sin(ph), 5, 0, 0, Math.PI * 2);
+      c.ellipse(x, GROUND_ARENA - 2, 22 + 6 * Math.sin(ph), 5, 0, 0, Math.PI * 2);
       c.fill();
     }
-    if (Math.floor(t * 3) % 4 === 0) { // капля крови падает с когтей
-      c.fillStyle = "rgb(190,16,30)";
-      c.fillRect(Math.round(en.x) + 26, GROUND_ARENA - 30 + Math.floor((t * 60) % 28), 1, 2);
+    for (let i = 0; i < (en.enraged ? 9 : 6); i++) { // огоньки-души: всплывают, мерцают и тают
+      const life = (t * 0.35 + i * 0.37) % 1;
+      const x = Math.round(en.x + 10 + ((i * 29) % 70) + Math.sin(t * 2 + i) * 3), y = Math.round(GROUND_ARENA - 4 - life * 70);
+      const a = Math.sin(life * Math.PI) * (en.enraged ? 0.95 : 0.75);
+      c.fillStyle = `rgba(200,160,255,${a * 0.35})`;
+      c.fillRect(x - 1, y - 1, 3, 3);
+      c.fillStyle = `rgba(250,240,255,${a})`;
+      c.fillRect(x, y, 1, 1);
     }
   }
 
@@ -3565,7 +3570,7 @@ class BattleScene extends Scene {
       c.fillRect(x, y, 3, 2);
       c.fillRect(x - 2, y - (up ? 1 : -1), 2, 1);
       c.fillRect(x + 3, y - (up ? 1 : -1), 2, 1);
-      c.fillStyle = "rgb(255,40,40)";
+      c.fillStyle = "rgb(220,170,255)";
       c.fillRect(x, y, 1, 1);
     }
   }
@@ -4124,7 +4129,7 @@ class SpireHallScene extends Scene {
         "Здоровье и зелья не восстанавливаются между боями.",
         "После каждой победы выберите один из трёх тыквенных даров.",
         "Каждый 5-й этаж — элитный страж, 8-й — вампир",
-        "Граф Тыквенной Крови, 13-й — Королева Тринадцатого Ока:",
+        "Граф Пепельной Крови, 13-й — Королева Тринадцатого Ока:",
         "не бейте её, пока Око на груди открыто!",
         "Награды за этажи остаются, даже если вы падёте.",
       ];
