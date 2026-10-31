@@ -64,6 +64,8 @@ export class Player {
     this.chests = {}; // сундуки в инвентаре: id земли → сколько
     this.chestPity = {}; // сколько сундуков земли открыто подряд без её оружия
     this.chestsOpened = 0;
+    // дары забега по Шпилю Самайна (урон, здоровье, силы, крит): не сохраняются и сгорают с забегом
+    Object.defineProperty(this, "mods", { value: null, writable: true, enumerable: false });
     for (const k of Object.keys(data)) if (k in this) this[k] = data[k];
     // старые или испорченные сохранения
     this.frontier = Math.max(Number(this.frontier) || 1, this.wave);
@@ -83,13 +85,13 @@ export class Player {
   get level() { return this.strength + this.vigor + this.endurance - 2; }
   /** Прирост ауры (доля): к урону, здоровью и запасу сил. */
   get aura() { return auraBonus(this.plankSeconds); }
-  get maxHp() { return Math.round((80 + 12 * this.vigor) * (1 + this.aura)); }
+  get maxHp() { return Math.round((80 + 12 * this.vigor) * (1 + this.aura) * (1 + (this.mods ? this.mods.hp : 0))); }
   get maxStamina() { return Math.round((60 + 8 * this.endurance) * (1 + this.aura)); }
-  get staminaRegen() { return (10 + 2 * this.endurance) * (this.talisman === "windcharm" ? WIND_REGEN : 1); }
+  get staminaRegen() { return (10 + 2 * this.endurance) * (this.talisman === "windcharm" ? WIND_REGEN : 1) * (1 + (this.mods ? this.mods.regen : 0)); }
   get weapon() { return SWORDS[this.sword]; }
-  get damage() { return Math.round((10 + 3 * this.strength + this.weapon.dmg) * (1 + this.aura)); }
+  get damage() { return Math.round((10 + 3 * this.strength + this.weapon.dmg) * (1 + this.aura) * (1 + (this.mods ? this.mods.dmg : 0))); }
   get attackCost() { return this.weapon.cost; }
-  get critMult() { return this.weapon.crit; }
+  get critMult() { return this.weapon.crit + (this.mods ? this.mods.crit : 0); }
   get lifesteal() { return this.weapon.lifesteal; }
   get damageTakenMult() { return ARMOR_TAKEN[this.armor] || 1; }
   /** Что на герое: купленное, кроме доспехов, которые сейчас не надеты (облик и защита — по надетому). */

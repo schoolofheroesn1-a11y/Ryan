@@ -37,6 +37,9 @@ const LIST = [
   ["crypt", "path", "Склеп пройден", "Пройти Склеп", "Расхититель Склепа", 16, (c) => c.frontier],
   ["wraith", "path", "Король-Призрак", "Пройти Кладбище", "Цареубийца", 46, (c) => c.frontier],
   ["seraph", "path", "Падение Серафима", "Победить Алого Серафима", "Губитель Серафима"],
+  ["spire5", "path", "Тыквенный страж", "Пройти 5 этажей Шпиля Самайна", "Тыквенный Страж", 5, (c) => c.tower],
+  ["eyequeen", "path", "Око закрыто", "Победить Королеву Тринадцатого Ока", "Ослепивший Око"],
+  ["spire26", "path", "Повелитель Самайна", "Пройти 26 этажей Шпиля", "Повелитель Самайна", 26, (c) => c.tower],
   ["bosses25", "path", "Охота на боссов", "Победить 25 боссов", "Охотник на Боссов", 25, (c) => c.bosses],
   ["level25", "path", "Ветеран", "Достичь 25 уровня", "Ветеран", 25, (c) => c.level],
   ["level60", "path", "Легенда", "Достичь 60 уровня", "Легенда", 60, (c) => c.level],
@@ -76,6 +79,7 @@ export function achContext(player, profile, account = null) {
     talismans: ["amulet", "windcharm", "fang"].filter((k) => o.includes(k)).length,
     seraphGear: ["seraph", "wingarmor"].filter((k) => o.includes(k)).length,
     chestsOpened: player.chestsOpened || 0,
+    tower: profile.tower ? profile.tower.best || 0 : 0,
     chestWeapons: ["bonewail", "rogueking", "moonreap", "abyssheart"].filter((k) => o.includes(k)).length,
   };
 }

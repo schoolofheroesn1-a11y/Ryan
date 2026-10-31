@@ -15,6 +15,7 @@ import { Leaderboard } from "./leaderboard.js";
 import { Profile } from "./profile.js";
 import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
 import { CHESTS, CHEST_ORDER, RARITY, addChest, chestCount, chestState, openChest, rollDrop } from "./chests.js";
+import { FLUFF_DRAIN, GAZE_REFLECT, GAZE_TIME, GIFT, START_ESTUS, applyGift, emptyMods, floorChest, floorPlan, floorReward, floorWave, gazeEvery, offerGifts } from "./tower.js";
 import { ACH, ACHIEVEMENTS, ACH_CATS, achContext, achProgress, battleEvents, checkAchievements } from "./achievements.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
@@ -241,6 +242,7 @@ const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
 /** Тема сцены: в бою — музыка земли, у костра (кузница, инвентарь) — тема костра, в меню — увертюра. */
 const LOCATION_MUSIC = { 1: "crypt", 2: "castle", 3: "grave", 4: "abyss" };
 function sceneMusic(scene) {
+  if (scene.music) return scene.music; // у Шпиля Самайна — своя тема
   if (scene instanceof BattleScene) return LOCATION_MUSIC[scene.location] || "crypt";
   if (scene instanceof BonfireScene || scene instanceof ShopScene || scene instanceof InventoryScene) return "bonfire";
   return "menu"; // главное меню, карта, профиль, настройки, мультиплеер, лавка образов
@@ -1019,6 +1021,7 @@ class TitleScene extends Scene {
     const g = game;
     this.items = [
       ["Карта приключений", () => g.change(new MapScene(g))],
+      ["Шпиль Самайна", () => g.change(new SpireHallScene(g))],
       ["Костёр: прокачка", () => g.change(new BonfireScene(g))],
       ["Лавка образов", () => g.change(new CosmeticsScene(g))],
       ["Мультиплеер", () => g.change(new MultiplayerScene(g))],
@@ -1070,7 +1073,7 @@ class TitleScene extends Scene {
       const y0 = top + Math.max(0, Math.floor((g.H - top - 16 - n * h - gap * (n - 1)) / 2));
       return this.items.map((_, i) => [40, y0 + i * (h + gap), W - 80, h]);
     }
-    return this.items.map((_, i) => [24, 90 + i * 41, 290, 35]);
+    return this.items.map((_, i) => [24, 84 + i * 36, 290, 31]);
   }
   textSize(r) {
     return this.game.portrait ? (r[3] >= 64 ? 24 : 16) : 12;
@@ -2615,13 +2618,14 @@ class Skeleton {
     skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников",
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
     imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
+    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока",
   };
-  static BOSSES = ["knight", "chief", "wraith", "seraph"];
+  static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen"];
   static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
 
-  constructor(wave) {
+  constructor(wave, kind = null) {
     this.wave = wave;
-    this.kind = enemyKind(wave);
+    this.kind = kind || enemyKind(wave); // в Шпиле Самайна враг этажа задаётся явно
     this.boss = Skeleton.BOSSES.includes(this.kind);
     this.name = Skeleton.NAMES[this.kind];
     // баланс под обычного человека без спортивной подготовки
@@ -2711,6 +2715,20 @@ class Skeleton {
       this.aura = SERAPH_AURA;
       this.transforms = true;
       this.homeX = 160; // широкое крыло не заходит под окошко камеры справа
+    } else if (this.kind === "fluff") { // Пухоглот: кусает парами и высасывает силы
+      this.maxHp = Math.floor(baseHp * 0.9);
+      this.damage = Math.floor(baseDmg * 0.7);
+      this.comboChance = 0.65;
+      this.drain = FLUFF_DRAIN;
+    } else if (this.kind === "eyequeen") { // Королева Тринадцатого Ока: Око на груди отражает удары
+      this.maxHp = Math.floor(baseHp * 2);
+      this.damage = Math.floor(baseDmg * 1.15);
+      this.windupTime += 0.1;
+      this.maxPoise = 5;
+      this.comboChance = 0.35;
+      this.maxCombo = 2;
+      this.gazeT = gazeEvery(false) - 3; // первый взгляд — пораньше, чтобы его увидеть
+      this.homeX = 176;
     }
     this.hp = this.maxHp;
     this.poise = this.maxPoise;
@@ -2761,11 +2779,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -2855,6 +2873,7 @@ class BattleScene extends Scene {
     const p = this.game.player, en = this.enemy;
     if (move === "pushup") {
       if (en.state === "revive" || en.state === "transform") return this.float("НЕУЯЗВИМ", en.x + 12, 90, "rgb(120,255,230)", 8);
+      if (en.state === "gaze") return this.reflect();
       if (this.stamina < p.attackCost) {
         this.exhaustedSound();
         return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
@@ -2911,6 +2930,13 @@ class BattleScene extends Scene {
         en.windupTime *= 0.85;
         this.float("ЯРОСТЬ!", en.x + 12, 60, "rgb(255,60,40)");
       }
+      if (en.kind === "eyequeen" && !en.enraged && en.hp > 0 && en.hp <= en.maxHp / 2) {
+        en.enraged = true; // гнев Королевы: Око открывается чаще, замах быстрее
+        en.windupTime *= 0.85;
+        en.gazeT = Math.min(en.gazeT, 1.5);
+        this.float("ГНЕВ КОРОЛЕВЫ!", en.x + 24, 50, "rgb(120,190,255)");
+        sfx.thunder();
+      }
       if (en.potion && en.hp > 0 && en.hp <= en.maxHp / 2 && en.state !== "windup") {
         en.potion = false; // глава разбойников тянется к зелью — выбей его ударами
         en.drinkHits = 0;
@@ -2957,6 +2983,34 @@ class BattleScene extends Scene {
       this.actionT = 0.8;
       sfx.heal();
       this.float(`+${heal}`, this.HERO_X + 10, 90, "rgb(255,170,60)");
+    }
+  }
+
+  /** Удар в открытое Око Королевы: взгляд возвращает часть урона герою, сама она невредима. */
+  reflect() {
+    const p = this.game.player;
+    if (this.stamina < p.attackCost) {
+      this.exhaustedSound();
+      return this.float("Нет сил!", this.HERO_X + 10, 90, COL.green, 8);
+    }
+    this.stamina -= p.attackCost;
+    this.regenPause = 0.6;
+    this.action = "attack";
+    this.actionT = 0.35;
+    this.slashT = SLASH_TIME;
+    const dmg = Math.max(1, Math.round(p.damage * GAZE_REFLECT));
+    this.hp -= dmg;
+    if (this.feat) this.feat.tookDamage = true;
+    this.hurtT = 0.3;
+    this.gazeHitT = 0.4;
+    this.game.shake = 0.3;
+    sfx.hurt();
+    vibrate(120);
+    this.float("ОКО ОТРАЖАЕТ!", this.enemy.x + 20, 100, "rgb(255,220,110)", 8);
+    this.float(`-${dmg}`, this.HERO_X + 10, 86, COL.red);
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.die();
     }
   }
 
@@ -3156,9 +3210,23 @@ class BattleScene extends Scene {
       sfx.alert();
     }
 
+    // Королева: Око открывается между атаками — пока оно открыто, бить нельзя
+    if (en.kind === "eyequeen" && en.state !== "dead") {
+      if (en.state !== "gaze") en.gazeT -= dt;
+      if (en.state === "idle" && en.gazeT <= 0) {
+        en.gazeT = gazeEvery(en.enraged);
+        en.set("gaze", GAZE_TIME);
+        sfx.alert();
+      }
+    }
+    this.gazeHitT = Math.max(0, (this.gazeHitT || 0) - dt);
+
     // ИИ скелета: ожидание -> замах (окно для приседа) -> удар -> уязвимость
     en.timer -= dt;
-    if (en.state === "idle" && en.timer <= 0) {
+    if (en.state === "gaze" && en.timer <= 0) {
+      en.set("idle", 0.4);
+      this.float("Око закрылось: бей!", en.x + 24, 66, COL.gold, 8);
+    } else if (en.state === "idle" && en.timer <= 0) {
       en.poise = en.maxPoise;
       en.comboLeft = 0;
       for (let i = 0; i < en.maxCombo; i++) if (Math.random() < en.comboChance) en.comboLeft += 1;
@@ -3239,6 +3307,11 @@ class BattleScene extends Scene {
     vibrate(en.boss ? 250 : 150);
     this.float(`-${dmg}`, this.HERO_X + 10, 86, COL.red);
     const p = this.game.player;
+    if (en.drain && this.stamina > 0) { // Пухоглот высасывает силы
+      const lost = Math.min(Math.ceil(this.stamina), en.drain);
+      this.stamina -= lost;
+      this.float(`-${lost} сил`, this.HERO_X + 10, 72, "rgb(200,170,255)", 8);
+    }
     if (en.steal && p.souls > 0) { // разбойники крадут пепел
       const stolen = Math.min(p.souls, en.steal);
       p.souls -= stolen;
@@ -3252,7 +3325,9 @@ class BattleScene extends Scene {
 
   draw(c) {
     const t = this.game.time, en = this.enemy;
-    if (this.location === 1) {
+    if (this.bg) {
+      c.drawImage(IMG[this.bg], 0, 0); // Шпиль Самайна
+    } else if (this.location === 1) {
       c.drawImage(IMG.arena_bg, 0, 0);
       for (const tx of [60, 252]) c.drawImage(anim("torch", t, 8, 4), tx, 56);
       this.torchL.draw(c);
@@ -3268,6 +3343,7 @@ class BattleScene extends Scene {
     else if (en.state === "drink") spr = anim("chief_drink", t, 4, 2);
     else if (en.state === "revive") spr = anim("wraith_revive", t, 4, 2);
     else if (en.state === "transform") spr = anim("seraph_transform", t, 5, 2);
+    else if (en.state === "gaze") spr = anim("eyequeen_gaze", t, 3, 2);
     else if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
     else if (en.flash > 0) spr = IMG[`${kind}_hurt_0`];
     else if (en.state === "windup") spr = anim(`${kind}_windup`, t, 8, 2);
@@ -3287,6 +3363,7 @@ class BattleScene extends Scene {
     }
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
     else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
+    if (en.state === "gaze") this.drawGaze(c, en, t);
     if (en.kind === "wraith" || en.kind === "seraph") {
       const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"] : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
       for (const gp of this.ghosts) {
@@ -3332,6 +3409,25 @@ class BattleScene extends Scene {
     }
   }
 
+  /** Взгляд Ока: золотое сияние на груди Королевы и луч к герою. */
+  drawGaze(c, en, t) {
+    const cx = Math.round(en.x) + 24, cy = GROUND_ARENA - 38;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 10);
+    for (const [r, a] of [[22, 0.08], [14, 0.14], [8, 0.22]]) {
+      c.fillStyle = `rgba(255,214,110,${a + 0.06 * pulse})`;
+      c.beginPath();
+      c.ellipse(cx, cy, r, r * 0.7, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = `rgba(255,220,120,${0.1 + 0.08 * pulse})`; // луч взгляда к герою
+    c.beginPath();
+    c.moveTo(cx - 6, cy - 2);
+    c.lineTo(this.HERO_X + 16, GROUND_ARENA - 34);
+    c.lineTo(this.HERO_X + 16, GROUND_ARENA - 4);
+    c.lineTo(cx - 6, cy + 2);
+    c.fill();
+  }
+
   /** Аура Серафима: пульсирующее багровое марево и жар, доходящий до героя. */
   drawAura(c, en, t) {
     const cx = Math.round(en.x) + 50, cy = GROUND_ARENA - 50;
@@ -3352,6 +3448,7 @@ class BattleScene extends Scene {
     const g = this.game, p = g.player, en = this.enemy;
     this.hitFx.drawFlash(g.ctx, W, g.gameH);
     if (this.auraHitT > 0) g.rect([0, 0, W, g.gameH], `rgba(255,30,20,${this.auraHitT * 0.5})`); // жар ауры — краснеет экран
+    if (this.gazeHitT > 0) g.rect([0, 0, W, g.gameH], `rgba(255,214,110,${this.gazeHitT * 0.6})`); // отражённый удар — вспышка Ока
     const P = g.portrait; // на телефоне вертикально — полоски и зелья крупнее
     g.bar(16, 16, Math.min(P ? 400 : 999, Math.floor(p.maxHp * 1.4)), P ? 16 : 8, this.hp / p.maxHp, COL.red);
     g.bar(16, P ? 40 : 28, Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)), P ? 12 : 6, this.stamina / p.maxStamina, COL.green);
@@ -3373,11 +3470,11 @@ class BattleScene extends Scene {
       g.ctx.strokeStyle = COL.gold;
       g.ctx.strokeRect(bx - 2.5, by - 2.5, bw + 5, bh + 3);
       const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.state === "revive" ? " - ВОССТАЁТ"
-        : en.state === "transform" ? " - ПЕРЕРОЖДЕНИЕ" : en.stage2 ? " - II СТАДИЯ" : en.enraged ? " - ЯРОСТЬ" : en.aura ? " - АУРА" : "";
+        : en.state === "transform" ? " - ПЕРЕРОЖДЕНИЕ" : en.state === "gaze" ? " - ВЗГЛЯД ОКА" : en.stage2 ? " - II СТАДИЯ" : en.enraged ? " - ЯРОСТЬ" : en.aura ? " - АУРА" : "";
       const hot = en.enraged || en.state === "drink" || en.state === "revive" || en.state === "transform";
-      g.text(`${tr("БОСС")}: ${tr(en.name)} #${en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, hot ? "rgb(255,120,80)" : COL.gold);
+      g.text(`${tr("БОСС")}: ${tr(en.name)} #${this.foeNo ?? en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, hot ? "rgb(255,120,80)" : COL.gold);
     } else {
-      g.text(en.hero ? en.name : `${tr(en.name)} #${en.wave}`, bx, ny, nfs);
+      g.text(en.hero ? en.name : `${tr(en.name)} #${this.foeNo ?? en.wave}`, bx, ny, nfs);
     }
     g.bar(bx, by, bw, bh, Math.max(0, en.hp) / en.maxHp, "rgb(150,20,20)");
     if (P) { // в портрете пепел и камни — под кнопкой выхода, чтобы не мешать полоске врага
@@ -3411,6 +3508,8 @@ class BattleScene extends Scene {
         imp: "Мелкий и быстрый: кусает сериями",
         hound: "Короткий бросок и тяжёлый укус",
         husk: "Живучий, бьёт когтями",
+        fluff: "Кусает парами и высасывает силы: береги выносливость",
+        eyequeen: "Когда Око на груди открыто — НЕ БЕЙ: взгляд отразит удар",
         rival: "Соперник бьётся снаряжением и силой своего героя",
       };
       if (this.newLand) g.text(`${tr("НОВАЯ ЗЕМЛЯ")}: ${tr(LOCATIONS[this.location].name).toUpperCase()}`, W / 2, 44, 8, "rgb(150,200,140)", "center");
@@ -3428,6 +3527,10 @@ class BattleScene extends Scene {
       g.text("!", g.wx(Math.round(en.x + (HIT_X[en.kind] || 12))), g.wy(top), 24, "rgb(255,200,60)", "center");
     } else if (en.state === "recover" && !this.result) {
       g.text(tf("Окно для удара: {call}", { call: tr(ATTACK_CALL[g.bank.attack]) }), W / 2, 70, 8, COL.gold, "center");
+    } else if (en.state === "gaze" && !this.result) {
+      const pulse = 0.5 + 0.5 * Math.sin(g.time * 10);
+      g.text("ОКО ОТКРЫТО — НЕ БЕЙ!", W / 2, 56, 16, `rgb(255,${Math.floor(180 + 60 * pulse)},90)`, "center");
+      g.bar(W / 2 - 80, 80, 160, 5, en.timer / GAZE_TIME, "rgb(255,214,110)");
     } else if (en.state === "drink" && !this.result) {
       g.text(`ВЫБЕЙ ЗЕЛЬЕ! ${en.drinkHits}/${DRINK_HITS}`, W / 2, 60, 16, "rgb(255,120,90)", "center");
       g.bar(W / 2 - 80, 86, 160, 5, en.timer / DRINK_TIME, "rgb(120,220,120)");
@@ -3566,6 +3669,296 @@ class ChallengeScene extends BattleScene {
     else if (o) line = won ? "Место не изменилось" : "Место не изменилось. Попробуйте ещё раз";
     g.text(line, W / 2, g.gameH / 2 + 12, 8, COL.text, "center");
     g.text("Касание: к списку соперников", W / 2, g.gameH / 2 + 26, 8, COL.dim, "center");
+  }
+}
+
+// ------------------------------------------------------------------ Шпиль Самайна (режим выживания)
+/** Новый забег: здоровье полное, две фляги, даров нет. */
+function newTowerRun(game) {
+  const p = game.player;
+  p.mods = null;
+  return { floor: 1, seed: (Math.random() * 1e9) >>> 0, prevBest: game.profile.tower.best, hp: p.maxHp, estus: START_ESTUS, mods: emptyMods(), earned: [0, 0, 0], chests: [], gifts: [] };
+}
+
+/** Забег окончен: дары сгорают, рекорд — в профиль устройства. */
+function endTowerRun(game, run, cleared) {
+  game.player.mods = null;
+  const t = game.profile.tower;
+  const record = cleared > run.prevBest;
+  t.best = Math.max(t.best, cleared);
+  t.runs += 1;
+  game.profile.save();
+  game.checkAch();
+  game.change(new SpireHallScene(game, { ...run, cleared, record }));
+}
+
+/** Бой на этаже Шпиля: без костра, здоровье и зелья — с прошлого этажа, после победы — тыквенный дар. */
+class TowerScene extends BattleScene {
+  constructor(game, run) {
+    super(game);
+    const p = game.player;
+    this.run = run;
+    p.mods = run.mods; // дары забега усиливают героя
+    this.plan = floorPlan(run.floor, run.seed);
+    this.enemy = new Skeleton(floorWave(run.floor), this.plan.kind);
+    if (this.plan.queen) this.enemy.homeX = this.enemy.x = 176;
+    if (game.hard) this.enemy.makeHard();
+    this.foeNo = run.floor;
+    this.bg = "spire_bg";
+    this.music = "samhain";
+    this.location = 0;
+    this.newLand = false;
+    this.hp = Math.min(run.hp, p.maxHp);
+    this.estus = run.estus;
+    this.estusCap = Math.max(run.estus, START_ESTUS);
+    this.backLabel = "< ВЫЙТИ";
+  }
+  saveRun() {
+    this.run.hp = this.hp;
+    this.run.estus = this.estus;
+  }
+  win() {
+    const g = this.game, p = g.player, en = this.enemy, run = this.run;
+    en.set("dead", 0);
+    this.result = "won";
+    this.resultT = 0;
+    const [ash, red, blue] = floorReward(run.floor);
+    p.souls += ash;
+    p.redGems += red;
+    p.blueGems += blue;
+    this.reward = [ash, red, blue];
+    run.earned = run.earned.map((v, i) => v + this.reward[i]);
+    const chest = floorChest(run.floor);
+    this.drop = chest ? { kind: chest, t: 0 } : null;
+    if (chest) {
+      addChest(p, chest);
+      run.chests.push(chest);
+      setTimeout(() => sfx.chestDrop(), 350);
+    }
+    p.save();
+    this.saveRun();
+    const st = g.profile.streak, lit = st.award(en.boss); // огонёк дня — и за этажи Шпиля
+    this.streakLine = "";
+    if (lit.add) this.streakLine = tf(lit.fresh ? "Огонёк дня зажжён! +{n} · в серии {p}" : "Пламя разгорается! +{n} · в серии {p}", { n: lit.add, p: st.points });
+    const t = g.profile.tower;
+    if (en.kind === "eyequeen") t.queens += 1;
+    t.best = Math.max(t.best, run.floor);
+    g.profile.save();
+    const ev = battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind, hard: g.hard, hour: new Date().getHours() });
+    if (en.kind === "eyequeen") ev.push("eyequeen");
+    g.checkAch(ev);
+    sfx.win();
+    vibrate([40, 30, 40]);
+  }
+  die() {
+    this.result = "dead";
+    this.resultT = 0;
+    this.run.hp = 0;
+    sfx.die();
+  }
+  leave() {
+    this.saveRun();
+    endTowerRun(this.game, this.run, this.run.floor - 1);
+  }
+  handle(moves) {
+    const g = this.game;
+    if (!this.result) return super.handle(moves);
+    if (this.resultT < 1) return;
+    const go = g.taps.length || g.key("Enter", " ", "Escape") || moves.includes("jack") || moves.includes("pushup");
+    if (this.result === "won" && (go || this.resultT >= AUTO_BONFIRE)) {
+      g.taps.length = 0;
+      return g.change(new TowerGiftScene(g, this.run));
+    }
+    if (this.result === "dead" && go) {
+      g.taps.length = 0;
+      endTowerRun(g, this.run, this.run.floor - 1);
+    }
+  }
+  drawUi() {
+    super.drawUi();
+    const g = this.game;
+    if (!this.result) g.text(tf("ЭТАЖ {n} · ШПИЛЬ САМАЙНА", { n: this.run.floor }), W / 2, g.portrait ? 96 : 4, g.portrait ? 12 : 8, "rgb(255,150,60)", "center");
+  }
+  drawResult() {
+    const g = this.game, run = this.run, mid = g.gameH / 2;
+    g.rect([0, mid - 45, W, 90], `rgba(10,4,16,${Math.min(0.82, this.resultT * 1.2)})`);
+    if (this.result === "dead") {
+      g.text("ШПИЛЬ ПОБЕДИЛ", W / 2, mid - 28, 32, "rgb(170,20,20)", "center");
+      g.text(tf("Пройдено этажей: {n}. Награды остаются у вас", { n: run.floor - 1 }), W / 2, mid + 14, 8, COL.text, "center");
+      g.text("Касание: итоги забега", W / 2, mid + 28, 8, COL.dim, "center");
+      return;
+    }
+    const [ash, red, blue] = this.reward;
+    g.text(tf("ЭТАЖ {n} ПРОЙДЕН", { n: run.floor }), W / 2, mid - 28, 32, "rgb(255,150,60)", "center");
+    g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синих` : ""}`, W / 2, mid + 10, 8, COL.gold, "center");
+    g.text(tf("Тыквенный дар через {n}", { n: Math.max(1, Math.ceil(AUTO_BONFIRE - this.resultT)) }), W / 2, mid + 24, 8, COL.text, "center");
+    if (this.streakLine) g.text(this.streakLine, W / 2, mid + 35, 8, "rgb(255,200,110)", "center");
+    if (this.drop && this.drop.t > 0.5) g.text(tf("Выпал сундук: {name}! Откройте в инвентаре у костра", { name: tr(CHESTS[this.drop.kind].name) }), W / 2, mid - 42, 8, "rgb(255,230,150)", "center");
+  }
+}
+
+/** Фон Шпиля с героем и тыквами — для зала и выбора даров. */
+function drawSpireRoom(c, game, t, pumpkins = 0) {
+  c.drawImage(IMG.spire_bg, 0, 0);
+  const p = game.player;
+  const hero = anim(`${heroSprite(p.sword, p.worn, game.skin, game.outfit)}_idle`, t, 1.5, 2);
+  c.drawImage(hero, 70, GROUND_ARENA - hero.height);
+  for (let i = 0; i < pumpkins; i++) { // три тыквы-дара светятся на полу
+    const x = 150 + i * 44, y = GROUND_ARENA - 8, glow = 0.5 + 0.5 * Math.sin(t * 3 + i * 2);
+    c.fillStyle = `rgba(255,140,40,${0.18 + 0.14 * glow})`;
+    c.beginPath();
+    c.ellipse(x, y, 16, 10, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "rgb(230,110,26)";
+    c.beginPath();
+    c.ellipse(x, y, 8, 6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "rgb(60,90,30)";
+    c.fillRect(x - 1, y - 9, 2, 3);
+    c.fillStyle = `rgb(255,${200 + Math.round(40 * glow)},90)`;
+    c.fillRect(x - 5, y - 2, 2, 2);
+    c.fillRect(x + 3, y - 2, 2, 2);
+    c.fillRect(x - 3, y + 2, 6, 1);
+  }
+}
+
+/** Тыквенный дар: один из трёх. Касание, клавиши 1–3, а с камерой — присед листает, удар выбирает. */
+class TowerGiftScene extends Scene {
+  constructor(game, run) {
+    super(game);
+    this.run = run;
+    this.music = "samhain";
+    const p = game.player;
+    this.offer = offerGifts(run.floor, run.seed, { hpFrac: run.hp / p.maxHp, estus: run.estus });
+    this.index = 0;
+    this.t = 0;
+  }
+  get ownsPanel() {
+    return true;
+  }
+  get needsCamera() {
+    return this.game.motion.ok;
+  }
+  rects() {
+    const g = this.game, n = this.offer.length;
+    if (g.portrait) {
+      const top = GAME_H + 70, h = Math.min(150, Math.floor((g.H - top - 40 - 16 * (n - 1)) / n));
+      return this.offer.map((_, i) => [32, top + i * (h + 16), W - 64, h]);
+    }
+    return this.offer.map((_, i) => [24 + i * 202, 196, 188, 110]);
+  }
+  pick(i) {
+    const g = this.game, p = g.player, id = this.offer[i];
+    if (!id) return;
+    sfx.heal();
+    p.mods = null; // доля здоровья считается от силы героя без даров
+    const base = p.maxHp;
+    const next = applyGift(id, this.run, base);
+    next.gifts = [...this.run.gifts, id];
+    next.floor = this.run.floor + 1;
+    g.change(new TowerScene(g, next));
+  }
+  handle(moves) {
+    const g = this.game, n = this.offer.length;
+    if (this.t < 0.5) return;
+    if (g.key("Escape")) return endTowerRun(g, this.run, this.run.floor); // этаж уже пройден
+    if (g.key("ArrowLeft", "ArrowUp")) this.index = (this.index + n - 1) % n;
+    if (g.key("ArrowRight", "ArrowDown") || moves.includes("squat_down")) {
+      this.index = (this.index + 1) % n;
+      sfx.click();
+    }
+    if (g.key("Enter", " ") || moves.includes("pushup")) return this.pick(this.index);
+    for (let i = 0; i < n; i++) if (g.key(`${i + 1}`)) return this.pick(i);
+    this.rects().forEach((r, i) => { if (g.tapped(r)) this.pick(i); });
+  }
+  update(dt) {
+    this.t += dt;
+  }
+  draw(c) {
+    drawSpireRoom(c, this.game, this.game.time, this.game.portrait ? this.offer.length : 0); // в ландшафте тыквы закрыли бы карточки
+  }
+  drawUi() {
+    const g = this.game, P = g.portrait, run = this.run, p = g.player;
+    const ty = P ? GAME_H + 8 : 16;
+    g.text("ТЫКВЕННЫЙ ДАР", W / 2, ty, P ? 24 : 16, "rgb(255,150,60)", "center");
+    g.text(tf("Этаж {n} пройден. Здоровье {hp}/{max} · зелья {e}", { n: run.floor, hp: Math.round(run.hp), max: p.maxHp, e: run.estus }), W / 2, ty + (P ? 32 : 22), P ? 12 : 8, COL.text, "center");
+    this.rects().forEach((r, i) => {
+      const gift = GIFT[this.offer[i]], sel = i === this.index;
+      g.button(r, "", { selected: sel, border: sel ? "rgb(255,150,60)" : undefined });
+      const fs = P ? 24 : 12;
+      g.text(gift.name, r[0] + r[2] / 2, r[1] + (P ? 22 : 18), fs, sel ? "rgb(255,170,80)" : COL.gold, "center");
+      g.wrap(gift.desc, P ? 30 : 22).forEach((ln, k) => g.text(ln, r[0] + r[2] / 2, r[1] + (P ? 60 : 44) + k * (P ? 22 : 12), P ? 16 : 8, COL.text, "center", true));
+      if (!P) g.text(`[${i + 1}]`, r[0] + r[2] / 2, r[1] + r[3] - 16, 8, COL.dim, "center");
+    });
+    const hint = g.motion.ok ? tf("{dodge}: следующий дар · {atk}: взять", { dodge: tr(NAMES.squat), atk: tr(NAMES.pushup) }) : "Касание: взять дар";
+    g.text(hint, W / 2, P ? g.H - 30 : GAME_H - 30, P ? 12 : 8, COL.dim, "center");
+  }
+}
+
+/** Зал Шпиля: правила, рекорд, итоги прошлого забега. */
+class SpireHallScene extends Scene {
+  constructor(game, last = null) {
+    super(game);
+    this.last = last;
+    this.music = "samhain";
+    this.index = 0;
+    game.player.mods = null;
+  }
+  get ownsPanel() {
+    return true;
+  }
+  buttons() {
+    const g = this.game;
+    if (g.portrait) return [[40, g.H - 220, W - 80, 90], [40, g.H - 116, W - 80, 80]];
+    return [[W / 2 - 150, GAME_H - 76, 300, 30], [W / 2 - 150, GAME_H - 40, 300, 26]];
+  }
+  start() {
+    sfx.click();
+    this.game.change(new TowerScene(this.game, newTowerRun(this.game)));
+  }
+  handle() {
+    const g = this.game, [go, back] = this.buttons();
+    if (g.key("Escape") || g.tapped(back)) {
+      sfx.click();
+      return g.change(new TitleScene(g));
+    }
+    if (g.key("Enter", " ") || g.tapped(go)) return this.start();
+  }
+  draw(c) {
+    drawSpireRoom(c, this.game, this.game.time);
+  }
+  drawUi() {
+    const g = this.game, P = g.portrait, t = g.profile.tower, L = this.last;
+    let y = P ? GAME_H + 10 : 12;
+    g.text("ШПИЛЬ САМАЙНА", W / 2 + 2, y + 2, P ? 32 : 24, "rgb(60,10,40)", "center", false);
+    g.text("ШПИЛЬ САМАЙНА", W / 2, y, P ? 32 : 24, "rgb(255,150,60)", "center", false);
+    y += P ? 44 : 30;
+    const fs = P ? 12 : 8, lh = P ? 18 : 11;
+    if (L) {
+      g.text(L.record ? tf("НОВЫЙ РЕКОРД: {n} ЭТАЖЕЙ!", { n: L.cleared }) : tf("Забег окончен: пройдено этажей {n}", { n: L.cleared }), W / 2, y, P ? 16 : 12, L.record ? COL.gold : COL.text, "center");
+      y += P ? 24 : 16;
+      const [a, r, b] = L.earned;
+      g.text(tf("Добыто: {a} пепла, {r} алых, {b} синих, сундуков {c}", { a, r, b, c: L.chests.length }), W / 2, y, fs, COL.gold, "center");
+      y += lh * 1.6;
+    } else {
+      const rules = [
+        "Поднимайтесь по этажам башни без отдыха у костра.",
+        "Здоровье и зелья не восстанавливаются между боями.",
+        "После каждой победы выберите один из трёх тыквенных даров.",
+        "Каждый 5-й этаж — элитный страж, каждый 13-й —",
+        "Королева Тринадцатого Ока: не бейте, пока Око открыто!",
+        "Награды за этажи остаются, даже если вы падёте.",
+      ];
+      for (const ln of rules.flatMap((r) => (P ? g.wrap(r, 46) : [r]))) { // в портрете — переносим по словам
+        g.text(ln, W / 2, y, fs, COL.text, "center");
+        y += lh;
+      }
+      y += lh * 0.4;
+    }
+    g.text(tf("Рекорд: {n} эт. · Забегов: {r} · Королев повержено: {q}", { n: t.best, r: t.runs, q: t.queens }), W / 2, y, fs, "rgb(200,170,255)", "center");
+    const [go, back] = this.buttons();
+    g.button(go, L ? "Снова в Шпиль" : "Начать восхождение", { selected: true, size: P ? 24 : 12, border: "rgb(255,150,60)", color: "rgb(255,170,80)" });
+    g.button(back, "< В меню", { size: P ? 16 : 8 });
   }
 }
 
@@ -5459,4 +5852,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BankScene, InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene };
+export { BankScene, InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene, TowerScene, TowerGiftScene, SpireHallScene };

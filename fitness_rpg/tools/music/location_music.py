@@ -474,7 +474,53 @@ def menu():
     return tr.render(rt60=3.0, damp=4600)
 
 
-TRACKS = {"crypt": crypt, "castle": castle, "grave": grave, "abyss": abyss, "bonfire": bonfire, "menu": menu}
+# ------------------------------------------------------------------ Шпиль Самайна: жуткий вальс ми минор
+def theremin(f, dur, r=0.4):
+    """Терменвокс: чистый тон с широким вибрато и подъездом к ноте."""
+    t = t_(dur + r)
+    glide = f * (1 - 0.06 * np.exp(-t / 0.08))
+    ph = np.cumsum(glide * (1 + 0.012 * np.clip((t - 0.1) / 0.3, 0, 1) * np.sin(2 * np.pi * 6.2 * t))) / SR
+    x = np.sin(2 * np.pi * ph) + 0.12 * np.sin(4 * np.pi * ph)
+    return x * adsr(len(t), 0.12, 0.3, 0.9, r) * 0.5
+
+
+def samhain():
+    """Вальс в ми миноре: пиццикато и клавесин-шкатулка на «раз-два-три», терменвокс ведёт тему,
+    хор «у» и орган внизу, литавры на сильную долю, во второй половине — колокола полуночи."""
+    tr = Track(bpm=132, bars=32, beats=3)
+    prog = [("E", "m"), ("E", "m"), ("C", "M"), ("B", "7"), ("E", "m"), ("A", "m"), ("B", "7"), ("E", "m"),
+            ("A", "m"), ("E", "m"), ("F#", "dim"), ("B", "7"), ("C", "M"), ("A", "m"), ("B", "7"), ("E", "m")] * 2
+    for b, (r, k) in enumerate(prog):
+        dur = 3 * tr.beat
+        ct = chord_tones(r, k, 3)
+        tr.add(pluck(chord_tones(r, k, 2)[0], 1.2, 0.6, 0.2), tr.at(b), -0.25, 0.7, 0.25)  # бас на раз
+        for j in (1, 2):  # «ум-па-па»
+            for i, f in enumerate(ct[1:]):
+                tr.add(musicbox(f * 2, 0.9), tr.at(b, j), 0.25 + i * 0.2, 0.22, 0.35)
+        if b % 2 == 0:
+            tr.add(timpani(chord_tones(r, k, 1)[0], 1.4), tr.at(b), 0, 0.45, 0.3)
+        tr.add(organ(chord_tones(r, k, 2)[0], dur), tr.at(b), 0, 0.1, 0.5)
+        if b >= 16:
+            tr.add(choir(ct[0], dur, "u", 3, 0.5, 0.8), tr.at(b), -0.5, 0.3, 0.8)
+            tr.add(choir(ct[2], dur, "u", 3, 0.5, 0.8), tr.at(b), 0.5, 0.24, 0.8)
+    theme = [("B4", 2), ("G4", 1), ("E4", 3), ("C5", 2), ("B4", 1), ("A4", 1.5), ("F#4", 1.5), ("B4", 2), ("A4", 1), ("G4", 3),
+             ("E5", 2), ("D5", 1), ("C5", 3), ("B4", 2), ("A4", 1), ("G4", 3), ("F#4", 1), ("G4", 1), ("A4", 1), ("B4", 2), ("A4", 1),
+             ("G4", 1.5), ("D#4", 1.5), ("E4", 9)]
+    melody(tr, theme, 0, theremin, pan=0.1, gain=0.55, send=0.55)
+    melody(tr, theme, 16, theremin, pan=0.1, gain=0.45, send=0.6)
+    melody(tr, [(n.replace("4", "3").replace("5", "4"), d) for n, d in theme], 16, cello, pan=-0.2, gain=0.35, send=0.45)
+    for b in (16, 20, 24, 28):  # полночь: колокол
+        tr.add(bell(hz("E3"), 5.0), tr.at(b), -0.4, 0.45, 0.8)
+    for k in range(10):  # смешки-«скрипы» в темноте: короткие глиссандо вниз
+        t0 = rng.uniform(0, tr.L - 1)
+        t = t_(0.5)
+        sq = np.sin(2 * np.pi * np.cumsum(1400 - 900 * t / 0.5) / SR) * np.exp(-t / 0.18)
+        tr.add(sq * 0.08, t0, rng.uniform(-0.9, 0.9), 0.5, 0.9)
+    tr.add(wind(tr.L + 2, 500), 0, 0, 0.06, 0.4)
+    return tr.render(rt60=2.8, damp=4000)
+
+
+TRACKS = {"crypt": crypt, "castle": castle, "grave": grave, "abyss": abyss, "bonfire": bonfire, "menu": menu, "samhain": samhain}
 
 
 def save(name, loop, out_dir):

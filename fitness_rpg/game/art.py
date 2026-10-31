@@ -2104,6 +2104,10 @@ class Art:
         self.imp = abyss.make_imp_frames()
         self.hound = abyss.make_hound_frames()
         self.husk = abyss.make_husk_frames()
+        from game import samhain  # Шпиль Самайна: фон башни, Пухоглот и Королева Тринадцатого Ока
+        self.spire_bg = samhain.make_spire_background()
+        self.fluff = samhain.make_fluff_frames()
+        self.eyequeen = samhain.make_eyequeen_frames()
 
     def hero_for(self, sword, owned):
         """Кадры героя с этим мечом и обликом по реликвиям из owned."""

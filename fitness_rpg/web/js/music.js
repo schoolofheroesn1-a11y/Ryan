@@ -9,6 +9,7 @@ const FILES = {
   crypt: ["assets/music/crypt.m4a", "assets/music/crypt.ogg"], castle: ["assets/music/castle.m4a", "assets/music/castle.ogg"],
   grave: ["assets/music/grave.m4a", "assets/music/grave.ogg"], abyss: ["assets/music/abyss.m4a", "assets/music/abyss.ogg"],
   bonfire: ["assets/music/bonfire.m4a", "assets/music/bonfire.ogg"], menu: ["assets/music/menu.m4a", "assets/music/menu.ogg"],
+  samhain: ["assets/music/samhain.m4a", "assets/music/samhain.ogg"],
 };
 let format = 0; // какой формат декодируется в этом браузере (выясняется на первом треке)
 const MANIFEST = "assets/music/music.json";

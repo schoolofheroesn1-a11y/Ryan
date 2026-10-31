@@ -39,6 +39,8 @@ export class Profile {
     this.style = { sword: null, armor: null, hit: null, victory: null, ...(data.style || {}) };
     this.streak = new Streak(data.streak); // серия огоньков — одна на устройство, для обоих режимов
     this.ach = { ...(data.ach || {}) }; // открытые достижения: id → день
+    // Шпиль Самайна: лучший этаж, забеги и поверженные Королевы
+    this.tower = { best: 0, runs: 0, queens: 0, ...(data.tower || {}) };
     this.title = data.title && ACH[data.title] && this.ach[data.title] ? data.title : null; // выбранный титул (id достижения)
   }
 
@@ -70,7 +72,7 @@ export class Profile {
   }
 
   save() {
-    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style, streak: this.streak.toJSON(), ach: this.ach, title: this.title });
+    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style, streak: this.streak.toJSON(), ach: this.ach, title: this.title, tower: this.tower });
   }
 
   static load() {

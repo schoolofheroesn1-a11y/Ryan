@@ -1,9 +1,9 @@
 // Офлайн-кэш: после первого запуска с сетью игра открывается и без интернета.
-const CACHE = "ash-and-iron-v39";
+const CACHE = "ash-and-iron-v40";
 const CORE = [
   "./", "index.html", "style.css", "manifest.webmanifest",
   "js/game.js", "js/online.js", "js/motion.js", "js/exercises.js", "js/player.js", "js/sfx.js", "js/gear.js",
-  "js/cosmetics.js", "js/music.js", "js/chests.js", "js/achievements.js", "js/streak.js", "js/leaderboard.js", "js/profile.js", "js/store.js", "js/storage.js", "js/ui.js", "js/config.js", "js/platform.js", "js/i18n.js",
+  "js/cosmetics.js", "js/music.js", "js/tower.js", "js/chests.js", "js/achievements.js", "js/streak.js", "js/leaderboard.js", "js/profile.js", "js/store.js", "js/storage.js", "js/ui.js", "js/config.js", "js/platform.js", "js/i18n.js",
   "assets/atlas.png", "assets/atlas.json",
   "fonts/press-start-2p-cyrillic-400-normal.woff2", "fonts/press-start-2p-latin-400-normal.woff2",
 ];
