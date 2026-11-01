@@ -29,6 +29,8 @@ export const RELICS = {
   // талисманы: надет один (как и доспех)
   windcharm: { name: "Талисман Ветра", desc: "силы восполняются на 50% быстрее", price: [60, 5], unique: true },
   fang: { name: "Клык Вампира", desc: "вампиризм: 10% урона удара лечит", price: [72, 6], unique: true },
+  // только из Сундука Самайна (не продаётся)
+  pumpkin: { name: "Тыквенный амулет", desc: "+1 зелье, победа лечит 12% (в Шпиле 25%)", price: [0, 0], unique: true, chest: "samhain" },
   kingarmor: { name: "Доспех Короля-Призрака", desc: "получаемый урон -35%", price: [84, 7], unique: true },
   wingarmor: { name: "Доспех Серафима", desc: "урон -45%, аура Бездны вдвое слабее", price: [120, 10], unique: true },
 };

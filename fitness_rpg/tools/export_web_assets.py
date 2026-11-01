@@ -55,7 +55,8 @@ def main():
             ("zombie", a.zombie), ("bat", a.bat), ("wraith", a.wraith),
             ("seraph", a.seraph), ("seraph2", a.seraph2), ("imp", a.imp), ("hound", a.hound), ("husk", a.husk),
             ("fluff", a.fluff), ("eyequeen", a.eyequeen),
-            ("vampire", a.vampire), ("pumpkin", a.pumpkin)]
+            ("vampire", a.vampire), ("pumpkin", a.pumpkin),
+            ("stalker", a.stalker), ("stalker2", a.stalker2)]
     sets += [(f"hero_{sword}_{look}", frames) for (sword, look), frames in a.heroes.items()]
     for who, frames in sets:
         for anim_name, surfs in frames.items():

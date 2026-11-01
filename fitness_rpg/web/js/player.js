@@ -28,7 +28,8 @@ export const ESTUS_MAX = 3; // без Амулета Углей
 export const ARMORS = ["armor", "kingarmor", "wingarmor"];
 const ARMOR_TAKEN = { armor: 0.75, kingarmor: 0.65, wingarmor: 0.55 };
 // талисманы: надет один
-export const TALISMANS = ["amulet", "windcharm", "fang"];
+export const TALISMANS = ["amulet", "windcharm", "fang", "pumpkin"];
+export const PUMPKIN_HEAL = 0.12; // Тыквенный амулет: доля здоровья после победы (в Шпиле — вдвое больше)
 export const VAMPIRE = 0.1; // Клык Вампира: доля урона удара, которая лечит
 export const WIND_REGEN = 1.5; // Талисман Ветра: восполнение сил быстрее
 
@@ -98,7 +99,7 @@ export class Player {
   get worn() {
     return this.owned.filter((k) => (!ARMORS.includes(k) || k === this.armor) && (!TALISMANS.includes(k) || k === this.talisman));
   }
-  get estusMax() { return ESTUS_MAX + (this.talisman === "amulet" ? 1 : 0); }
+  get estusMax() { return ESTUS_MAX + (this.talisman === "amulet" || this.talisman === "pumpkin" ? 1 : 0); }
   /** Доля урона удара, которая лечит героя (Клык Вампира). */
   get vampire() { return this.talisman === "fang" ? VAMPIRE : 0; }
 

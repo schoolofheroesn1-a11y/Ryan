@@ -5,10 +5,10 @@ import { SWORDS } from "../js/gear.js";
 import { Player } from "../js/player.js";
 
 test("у каждой земли свой сундук и своё оружие; дальше — больше повторений", () => {
-  assert.deepEqual([1, 16, 31, 46].map(chestFor), CHEST_ORDER);
+  assert.deepEqual([1, 16, 31, 46].map(chestFor), CHEST_ORDER.slice(0, 4));
   const reps = CHEST_ORDER.map((k) => CHESTS[k].reps);
   assert.deepEqual([...reps].sort((a, b) => a - b), reps);
-  for (const k of CHEST_ORDER) assert.equal(SWORDS[CHESTS[k].weapon].chest, k);
+  for (const k of CHEST_ORDER.slice(0, 4)) assert.equal(SWORDS[CHESTS[k].weapon].chest, k);
 });
 
 test("сундук: с босса всегда, с обычного врага — иногда", () => {
@@ -43,4 +43,34 @@ test("сундуки и счётчики сохраняются со стары�
   const p = new Player({ chests: { crypt: 3 }, chestPity: { crypt: 7 } });
   assert.equal(p.chests.crypt, 3);
   assert.equal(new Player({}).chests.crypt || 0, 0);
+});
+
+test("сундук Самайна: 25 приседаний, уникальные награды не позже 6-го сундука", async () => {
+  const { Player } = await import("../js/player.js");
+  const p = new Player();
+  const skins = new Set();
+  const store = { owns: (id) => skins.has(id), grant: (id) => skins.add(id) };
+  assert.equal(CHESTS.samhain.reps, 25);
+  addChest(p, "samhain", 12);
+  const got = [];
+  for (let i = 0; i < 12; i++) {
+    const loot = openChest(p, "samhain", () => 0.99, store); // «невезучий» генератор: только гарантия
+    for (const it of loot) if (it.rarity === "legendary") got.push([i + 1, it.key]);
+  }
+  assert.deepEqual(got.map((g) => g[0]), [6, 12]);
+  assert.ok(p.owned.includes("pumpkin") || skins.has("sword_bat"));
+  assert.ok(p.owned.includes("pumpkin") && skins.has("sword_bat"));
+});
+
+test("сундук Самайна щедрее сундука Бездны", async () => {
+  const { Player } = await import("../js/player.js");
+  let a = 0, b = 0;
+  for (let i = 0; i < 200; i++) {
+    const p = new Player();
+    addChest(p, "samhain");
+    addChest(p, "abyss");
+    a += openChest(p, "samhain").find((x) => x.kind === "ash").n;
+    b += openChest(p, "abyss").find((x) => x.kind === "ash").n;
+  }
+  assert.ok(a > b);
 });

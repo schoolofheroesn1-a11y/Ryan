@@ -7,6 +7,7 @@
 export const QUEEN_EVERY = 13;
 export const ELITE_EVERY = 5;
 export const VAMPIRE_AT = 8; // Граф Пепельной Крови — на 8-м этаже каждого круга из 13
+export const STALKER_AT = 11; // Полуночный Охотник — на 11-м (две стадии: Сумерки и Полночь)
 export const ELITES = ["knight", "chief", "wraith"];
 const EARLY = ["skeleton", "bandit", "zombie", "bat"];
 const DEEP = ["imp", "hound", "husk"];
@@ -30,6 +31,7 @@ export const floorWave = (floor) => Math.max(1, Math.round(1.6 * floor - 1));
 export function floorPlan(floor, seed = 0) {
   if (floor % QUEEN_EVERY === 0) return { kind: "eyequeen", boss: true, elite: false, queen: true };
   if (floor % QUEEN_EVERY === VAMPIRE_AT) return { kind: "vampire", boss: true, elite: false, queen: false, vampire: true };
+  if (floor % QUEEN_EVERY === STALKER_AT) return { kind: "stalker", boss: true, elite: false, queen: false, stalker: true };
   const r = rng(seed * 977 + floor * 131);
   if (floor % ELITE_EVERY === 0) return { kind: ELITES[Math.floor(floor / ELITE_EVERY - 1) % ELITES.length], boss: true, elite: true, queen: false };
   const roll = r();
@@ -95,15 +97,15 @@ export function floorReward(floor) {
   const plan = floorPlan(floor);
   const ash = 60 + 30 * floor;
   if (plan.queen) return [ash * 3, 6 + Math.floor(floor / QUEEN_EVERY) * 2, 2];
+  if (plan.stalker) return [ash * 3, 5 + Math.floor(floor / ELITE_EVERY), 2];
   if (plan.elite || plan.vampire) return [ash * 2, 3 + Math.floor(floor / ELITE_EVERY), 1];
   return [ash, 1 + Math.floor(floor / 4), 0];
 }
 
-/** Сундук за элитного стража и Королеву: чем выше, тем богаче земля сундука. */
+/** Сундук за босса: Граф, Охотник и Королева — Сундук Самайна; элитный страж — сундук земли (выше — богаче). */
 export function floorChest(floor) {
   const plan = floorPlan(floor);
-  if (plan.queen) return floor >= 26 ? "abyss" : "grave";
-  if (plan.vampire) return floor >= 20 ? "abyss" : "castle";
+  if (plan.queen || plan.vampire || plan.stalker) return "samhain";
   if (plan.elite) return floor >= 20 ? "grave" : floor >= 10 ? "castle" : "crypt";
   return null;
 }

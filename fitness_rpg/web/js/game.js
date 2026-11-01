@@ -7,7 +7,7 @@ import {
   ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
-import { ARMORS, Player, STATS, TALISMANS, setSaveSlot } from "./player.js";
+import { ARMORS, PUMPKIN_HEAL, Player, STATS, TALISMANS, setSaveSlot } from "./player.js";
 import { initAudio, setAudio, sfx } from "./sfx.js";
 import { playMusic } from "./music.js";
 import { COSMETIC, COSMETICS, HitFx, KIND_TITLES, OutfitFx, SwordAura, VictoryFx, drawSkinSlash } from "./cosmetics.js";
@@ -1851,12 +1851,13 @@ class ProfileScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Инвентарь: сундуки и вещи
-const CHEST_GLOW = { crypt: [140, 220, 255], castle: [255, 220, 120], grave: [170, 255, 236], abyss: [255, 140, 50] };
+const CHEST_GLOW = { crypt: [140, 220, 255], castle: [255, 220, 120], grave: [170, 255, 236], abyss: [255, 140, 50], samhain: [255, 150, 50] };
 // Значки добычи 7×7: буквы → цвета
 const LOOT_ICON = {
   ash: [["...o...", "..oyo..", ".ooyoo.", ".gooog.", "ggggggg", ".ggggg.", "......."], { o: [240, 120, 40], y: [255, 220, 120], g: [110, 100, 100] }],
   red: [["..kkk..", ".krRrk.", "krRrrrk", "krrrrrk", ".krrrk.", "..krk..", "...k..."], { r: [210, 40, 50], R: [255, 150, 150] }],
   blue: [["..kkk..", ".kbBbk.", "kbBbbbk", "kbbbbbk", ".kbbbk.", "..kbk..", "...k..."], { b: [60, 120, 230], B: [180, 215, 255] }],
+  pumpkin: [["...g...", "..kgk..", ".kooOk.", "kyoyoOk", "kooooOk", "koyyyok", ".kkkkk."], { g: [70, 120, 40], o: [236, 120, 30], O: [255, 190, 90], y: [255, 236, 130] }],
   amulet: [["y.....y", ".y...y.", "..yky..", ".kooOk.", ".koOok.", "..kok..", "...k..."], { y: [200, 160, 60], o: [240, 110, 40], O: [255, 210, 120] }],
   windcharm: [["y.....y", ".y...y.", "..yky..", ".kttTk.", ".kTttk.", "..ktk..", "...k..."], { y: [200, 160, 60], t: [80, 190, 205], T: [225, 252, 255] }],
   fang: [["n.....n", ".n...n.", "..nkn..", "..kwk..", "..kwwk.", "...kwk.", "...kr.."], { n: [110, 70, 50], w: [240, 234, 212], r: [214, 28, 44] }],
@@ -1866,9 +1867,9 @@ const LOOT_K = [16, 12, 22];
 
 /** Значок предмета или добычи: центр (cx, cy), k — размер пикселя. Оружие — спрайт клинка наискосок. */
 function drawLootIcon(c, it, cx, cy, k, dim = false) {
-  const key = it.kind === "item" ? it.key : it.kind;
-  if (it.kind === "item" && SWORDS[key]) {
-    const spr = IMG[`sword_${key}`];
+  const key = it.kind === "item" || it.kind === "skin" ? it.key : it.kind;
+  if ((it.kind === "item" && SWORDS[key]) || it.kind === "skin") {
+    const spr = IMG[`sword_${it.kind === "skin" ? COSMETIC[key].skin : key}`];
     if (!spr) return;
     c.save();
     c.translate(cx, cy);
@@ -1888,12 +1889,15 @@ function drawLootIcon(c, it, cx, cy, k, dim = false) {
   }));
 }
 
+/** Описание предмета добычи: оружие/реликвия или облик меча (из Сундука Самайна). */
+const lootItem = (it) => (it.kind === "skin" ? COSMETIC[it.key] : item(it.key));
+
 /** Подпись добычи. */
 function lootText(it) {
   if (it.kind === "ash") return tf("+{n} пепла", { n: it.n });
   if (it.kind === "red") return tf("+{n} алых", { n: it.n });
   if (it.kind === "blue") return tf("+{n} синих", { n: it.n });
-  return tr(item(it.key).name);
+  return tr(lootItem(it).name);
 }
 
 /** Лучи за предметом (вращаются). */
@@ -1968,11 +1972,12 @@ class InventoryScene extends Scene {
   /** Ячейки сундуков (маленькие квадраты) и панель выбранного. */
   slots() {
     const L = this.layout();
+    const n = CHEST_ORDER.length;
     if (L.P) {
-      const s = Math.floor((W - 32 - 3 * 12) / 4);
-      return CHEST_ORDER.map((k, i) => [k, [16 + i * (s + 12), L.top, s, s]]);
+      const s = Math.floor((W - 32 - (n - 1) * 10) / n);
+      return CHEST_ORDER.map((k, i) => [k, [16 + i * (s + 10), L.top, s, s]]);
     }
-    return CHEST_ORDER.map((k, i) => [k, [12 + (i % 2) * 100, L.top + 4 + Math.floor(i / 2) * 100, 92, 92]]);
+    return CHEST_ORDER.map((k, i) => [k, [12 + (i % 2) * 100, L.top + 2 + Math.floor(i / 2) * 82, 92, 78]]);
   }
   panelRect() {
     const L = this.layout();
@@ -1990,7 +1995,10 @@ class InventoryScene extends Scene {
       if (p.owned.includes(key)) out.push([key, true]);
       else if (SWORDS[key].chest) out.push([key, false]);
     }
-    for (const key of [...ARMORS, ...TALISMANS]) if (p.owned.includes(key)) out.push([key, true]);
+    for (const key of [...ARMORS, ...TALISMANS]) {
+      if (p.owned.includes(key)) out.push([key, true]);
+      else if (RELICS[key] && RELICS[key].chest) out.push([key, false]); // Тыквенный амулет — силуэтом, из сундука
+    }
     const L = this.layout(), cols = L.P ? 3 : 6, gap = L.P ? 12 : 6;
     const cw = (W - (L.P ? 32 : 24) - (cols - 1) * gap) / cols, ch = L.P ? 150 : 76;
     return out.map(([key, own], i) => [key, own, [(L.P ? 16 : 12) + (i % cols) * (cw + gap), L.top + Math.floor(i / cols) * (ch + gap), cw, ch]]);
@@ -2010,7 +2018,7 @@ class InventoryScene extends Scene {
   }
   burst() {
     const g = this.game, p = this.player, o = this.open;
-    o.loot = openChest(p, o.kind);
+    o.loot = openChest(p, o.kind, Math.random, g.store); // облик меча из Сундука Самайна — в купленное
     p.save();
     o.phase = "burst";
     o.t = 0;
@@ -2052,7 +2060,10 @@ class InventoryScene extends Scene {
     if (this.tab === "chests") {
       for (const [kind, r] of this.slots()) if (g.tapped(r) && this.sel !== kind) { sfx.click(); this.sel = kind; }
       if (g.tapped(this.openRect()) || g.key("Enter", " ")) {
-        if (!(p.chests[this.sel] > 0)) { sfx.deny(); return this.say("Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда"); }
+        if (!(p.chests[this.sel] > 0)) {
+          sfx.deny();
+          return this.say(CHESTS[this.sel].spire ? "Сундуки Самайна выпадают с боссов Шпиля Самайна" : "Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда");
+        }
         return this.start(this.sel);
       }
     } else {
@@ -2134,7 +2145,7 @@ class InventoryScene extends Scene {
   }
   drawChests() {
     const g = this.game, c = g.ctx, P = g.portrait, p = this.player, t = g.time, front = locationFor(frontierOf(p));
-    const known = (kind) => CHESTS[kind].loc <= front || (p.chests[kind] || 0) > 0;
+    const known = (kind) => (CHESTS[kind].spire ? g.profile.tower.runs > 0 || g.profile.tower.best > 0 : CHESTS[kind].loc <= front) || (p.chests[kind] || 0) > 0;
     // ячейки: маленькие квадраты с сундуком и числом
     for (const [kind, r] of this.slots()) {
       const [x, y, w, h] = r, n = p.chests[kind] || 0, sel = this.sel === kind, kn = known(kind);
@@ -2158,9 +2169,10 @@ class InventoryScene extends Scene {
       }
     }
     if (!P) {
-      const hy = this.slots()[3][1][1] + 104;
-      g.text("С врагов земли — иногда,", 112, hy, 8, COL.dim, "center");
-      g.text("с босса — всегда", 112, hy + 12, 8, COL.dim, "center");
+      const hy = this.slots()[4][1][1] + 8;
+      g.text("С врагов земли —", 160, hy + 14, 8, COL.dim, "center");
+      g.text("иногда, с босса —", 160, hy + 26, 8, COL.dim, "center");
+      g.text("всегда", 160, hy + 38, 8, COL.dim, "center");
     }
     // панель выбранного сундука
     const kind = this.sel, C = CHESTS[kind], n = p.chests[kind] || 0, kn = known(kind), [x, y, w, h] = this.panelRect();
@@ -2185,7 +2197,26 @@ class InventoryScene extends Scene {
       g.text(tt, tx, ty, size, col, align);
       ty += lh;
     };
-    if (!kn) {
+    if (C.spire) { // Сундук Самайна: свои уникальные награды и гарантия
+      row(tf("В инвентаре: {n}", { n }), n ? "rgb(255,230,160)" : COL.dim);
+      row(tf("Открыть: {n} × {ex}", { n: C.reps, ex: tr(NAMES[C.ex]).toLowerCase() }), "rgb(150,230,140)");
+      row("С боссов Шпиля Самайна", "rgb(255,170,80)");
+      row("Много пепла и камней, чаще", COL.text);
+      row("легенды земель и талисманы", COL.text);
+      ty += P ? 6 : 2;
+      const ik = P ? 4 : 2;
+      C.uniques.forEach((key, i) => {
+        const skin = key.startsWith("sword_"), has = skin ? g.store.owns(key) : p.owned.includes(key);
+        const ix = P ? x + w / 2 + (i - 0.5) * 120 : tx + 10 * ik + i * 70;
+        drawGlow(c, ix, ty + 10 * ik, 12 * ik, [255, 160, 60], has ? 0.4 : 0.15);
+        drawLootIcon(c, { kind: skin ? "skin" : "item", key }, ix, ty + 10 * ik, ik, !has);
+        g.text(has ? "есть" : "???", ix, ty + 20 * ik + (P ? 4 : 2), P ? 12 : 8, has ? "rgb(150,230,140)" : "rgb(220,160,60)", "center");
+      });
+      ty += 24 * ik + (P ? 16 : 8);
+      const left = C.pity - (p.chestPity.samhain || 0);
+      const all = C.uniques.every((k) => (k.startsWith("sword_") ? g.store.owns(k) : p.owned.includes(k)));
+      g.text(all ? "Обе награды найдены!" : tf("Гарантия: до {n} сундуков", { n: left }), tx, ty, P ? 12 : 8, all ? "rgb(150,230,140)" : COL.dim, align);
+    } else if (!kn) {
       row(tf("Земля: {land}", { land: tr(LOCATIONS[C.loc].name) }), COL.dim);
       row("Дойдите до этой земли на карте", COL.dim);
     } else {
@@ -2210,7 +2241,7 @@ class InventoryScene extends Scene {
     const g = this.game, c = g.ctx, P = g.portrait, p = this.player;
     for (const [key, own, r] of this.items()) {
       const [x, y, w, h] = r, it = item(key), worn = own && (p.sword === key || p.armor === key || p.talisman === key);
-      const legend = !!(SWORDS[key] && SWORDS[key].chest);
+      const legend = !!(item(key) && item(key).chest);
       g.rect(r, own ? "rgba(30,22,28,0.95)" : "rgba(16,12,18,0.9)");
       c.strokeStyle = worn ? COL.gold : legend ? (own ? "rgb(255,190,60)" : "rgb(110,80,40)") : "rgb(70,58,60)";
       c.lineWidth = worn ? (P ? 3 : 2) : 1;
@@ -2307,9 +2338,10 @@ class InventoryScene extends Scene {
     if (L.t > 0.4) {
       const sw = SWORDS[L.it.key];
       g.text("ЛЕГЕНДАРНОЕ!", cx, P ? 150 : 30, P ? 40 : 20, "rgb(255,200,70)", "center");
-      g.text(tr(item(L.it.key).name), cx, cy + (P ? 200 : 96), P ? 26 : 14, "rgb(255,236,180)", "center");
-      g.text(tr(item(L.it.key).desc), cx, cy + (P ? 244 : 116), P ? 14 : 8, COL.text, "center");
-      if (sw) g.text("Надеть можно в инвентаре: «Вещи»", cx, cy + (P ? 276 : 130), P ? 12 : 8, COL.dim, "center");
+      g.text(tr(lootItem(L.it).name), cx, cy + (P ? 200 : 96), P ? 26 : 14, "rgb(255,236,180)", "center");
+      g.text(tr(lootItem(L.it).desc), cx, cy + (P ? 244 : 116), P ? 14 : 8, COL.text, "center");
+      if (sw || RELICS[L.it.key]) g.text("Надеть можно в инвентаре: «Вещи»", cx, cy + (P ? 276 : 130), P ? 12 : 8, COL.dim, "center");
+      else if (L.it.kind === "skin") g.text("Надеть можно в «Лавке образов»", cx, cy + (P ? 276 : 130), P ? 12 : 8, COL.dim, "center");
     }
     if (L.t > 1.2) g.text("Касание — дальше", cx, h - (P ? 120 : 20), P ? 16 : 8, `rgba(232,190,92,${0.6 + 0.4 * Math.sin(t * 4)})`, "center");
   }
@@ -2619,9 +2651,9 @@ class Skeleton {
     skeleton: "Скелет-страж", bandit: "Разбойник", knight: "Костяной Рыцарь", chief: "Глава разбойников",
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
     imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
-    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Пепельной Крови", pumpkin: "Тыквоголов",
+    fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Пепельной Крови", pumpkin: "Тыквоголов", stalker: "Полуночный Охотник",
   };
-  static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen", "vampire"];
+  static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen", "vampire", "stalker"];
   static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
 
   constructor(wave, kind = null) {
@@ -2736,6 +2768,13 @@ class Skeleton {
       this.maxPoise = 5;
       this.comboChance = 0.2;
       this.homeX = 158; // широкий плащ не заходит под окошко камеры справа
+    } else if (this.kind === "stalker") { // Полуночный Охотник: Сумерки, с половины здоровья — Полночь (крылья, тьма)
+      this.maxHp = Math.floor(baseHp * 2.2);
+      this.damage = Math.floor(baseDmg * 1.15);
+      this.maxPoise = 6;
+      this.comboChance = 0.25;
+      this.transforms = true;
+      this.homeX = 140;
     } else if (this.kind === "pumpkin") { // Тыквоголов: серп и тыквенные бомбы (поджигают героя)
       this.maxHp = Math.floor(baseHp * 1.1);
       this.damage = Math.floor(baseDmg * 1.05);
@@ -2798,7 +2837,7 @@ class Skeleton {
   }
   /** Есть ли у врага свои приёмы (вампир, тыквоголов) или режим без камеры. */
   get hasMoves() {
-    return this.btn || this.kind === "vampire" || this.kind === "pumpkin";
+    return this.btn || ["vampire", "pumpkin", "stalker"].includes(this.kind);
   }
   /** Длина очередного замаха: в хардкоре — то короче, то длиннее (не подстроиться под ритм). */
   nextWindup(base = this.windupTime) {
@@ -2817,11 +2856,11 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 34, pumpkin: 14 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 92, pumpkin: 48 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 34, pumpkin: 14, stalker: 40 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 92, pumpkin: 48, stalker: 100 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
-const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 46 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
+const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 46 : en.kind === "stalker" ? 52 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
 const DRINK_HITS = 3; // ударов, чтобы выбить зелье
 const READY_TIME = 4; // секунд на то, чтобы отойти от телефона
 const DODGE_COST = 10; // присед тратит немного сил: нельзя увёртываться без конца
@@ -2941,6 +2980,9 @@ class BattleScene extends Scene {
       en.flash = 0.15;
       this.game.shake = 0.12;
       crit ? sfx.crit() : sfx.hit();
+      if (this.game.skin === "bat") { // Клинок Нетопыря: стая мышей с острия летит во врага
+        this.aura.swarm(this.HERO_X + 10 + 37, GROUND_ARENA - 19, Math.round(en.x) + (HIT_X[en.kind] || 12), GROUND_ARENA - hitY(en));
+      }
       if (crit && this.game.skin === "phoenix") { // Клинок Феникса: на крите из острия бьёт струя пламени
         const cx = HIT_X[en.kind] || 12, cy = hitY(en);
         this.aura.jet(this.HERO_X + 10 + 37, GROUND_ARENA - 19, Math.round(en.x) + cx, GROUND_ARENA - cy);
@@ -3103,6 +3145,7 @@ class BattleScene extends Scene {
     this.reward = [ash, red, blue];
     p.wave += 1;
     p.frontier = frontierOf(p);
+    this.pumpkinHeal(PUMPKIN_HEAL);
     if (en.boss && first) p.bossesDefeated += 1; // в рейтинг — только новые боссы
     p.save();
     this.saveRun();
@@ -3130,6 +3173,15 @@ class BattleScene extends Scene {
       sfx.win();
     }
     vibrate([40, 30, 40]);
+  }
+
+  /** Тыквенный амулет: победа лечит долю здоровья. */
+  pumpkinHeal(frac) {
+    const p = this.game.player;
+    if (p.talisman !== "pumpkin" || this.hp >= p.maxHp) return;
+    const heal = Math.min(p.maxHp - this.hp, Math.round(p.maxHp * frac));
+    this.hp += heal;
+    this.float(`+${heal}`, this.HERO_X + 10, 80, "rgb(255,160,60)", 8);
   }
 
   die() {
@@ -3186,7 +3238,8 @@ class BattleScene extends Scene {
     this.aura.update(dt, this.game.skin, pose, hx, hy);
     this.outfitFx.update(dt, this.game.outfit, hx, hy);
     this.hitFx.update(dt);
-    if (en.kind === "wraith" || en.kind === "seraph") this.updateGhosts(dt);
+    if (en.kind === "wraith" || en.kind === "seraph" || (en.kind === "stalker" && (en.stage2 || en.state === "transform"))) this.updateGhosts(dt);
+    this.fearT = Math.max(0, (this.fearT || 0) - dt);
     this.auraHitT = Math.max(0, (this.auraHitT || 0) - dt);
     if (this.result) {
       this.resultT += dt;
@@ -3216,7 +3269,7 @@ class BattleScene extends Scene {
       if (d && d.low) this.float("Встаньте и присядьте снова", this.HERO_X + 10, 80, COL.dim, 8);
     }
     this.regenPause -= dt;
-    if (this.regenPause <= 0) this.stamina = Math.min(p.maxStamina, this.stamina + p.staminaRegen * dt);
+    if (this.regenPause <= 0) this.stamina = Math.min(p.maxStamina, this.stamina + p.staminaRegen * dt * (this.fearT > 0 ? 0.35 : 1)); // ужас: силы почти не восполняются
     this.updateEnemy(dt);
   }
 
@@ -3279,7 +3332,7 @@ class BattleScene extends Scene {
     if (en.transforms && !en.stage2 && en.state !== "transform" && en.hp > 0 && en.hp <= en.maxHp / 2) {
       en.comboLeft = 0;
       en.set("transform", TRANSFORM_TIME);
-      this.float("ВТОРАЯ СТАДИЯ!", en.x + 12, 50, "rgb(255,90,50)");
+      this.float(en.kind === "stalker" ? "НАСТУПАЕТ ПОЛНОЧЬ!" : "ВТОРАЯ СТАДИЯ!", en.x + 12, 50, en.kind === "stalker" ? "rgb(140,190,255)" : "rgb(255,90,50)");
       this.game.shake = 0.5;
       sfx.thunder();
       sfx.alert();
@@ -3384,7 +3437,7 @@ class BattleScene extends Scene {
     const en = this.enemy;
     const rate = en.state === "revive" || en.state === "transform" ? 60 : en.stage2 ? 34 : 18;
     if (en.state !== "dead" && Math.random() < dt * rate) {
-      const [x0, x1, y1] = en.kind === "seraph" ? [24, 90, 92] : [14, 48, 46];
+      const [x0, x1, y1] = en.kind === "seraph" ? [24, 90, 92] : en.kind === "stalker" ? [40, 110, 96] : [14, 48, 46];
       this.ghosts.push({ x: en.x + rand(x0, x1), y: GROUND_ARENA - rand(4, y1), vy: -rand(8, 20), life: rand(0.6, 1.3) });
     }
     for (const gp of this.ghosts) {
@@ -3408,6 +3461,11 @@ class BattleScene extends Scene {
       const heal = Math.min(en.maxHp - en.hp, Math.round(dmg * mv.drain));
       en.hp += heal;
       this.float(`+${heal} КРОВЬ`, en.x + 24, 70, "rgb(220,40,60)", 8);
+    }
+    if (mv.fear) { // вой ужаса: силы тают и почти не восполняются
+      this.fearT = mv.fear;
+      this.stamina = Math.max(0, this.stamina - 25);
+      this.float("УЖАС!", this.HERO_X + 10, 64, "rgb(150,170,255)", 8);
     }
     if (mv.burn) { // тыквенная бомба поджигает героя
       this.heroBurn = mv.burn;
@@ -3450,13 +3508,22 @@ class BattleScene extends Scene {
       c.drawImage(IMG[LOCATIONS[this.location].bg], 0, 0);
     }
 
+    if (en.kind === "stalker" && (en.stage2 || en.state === "transform") && en.state !== "dead") { // Полночь: на зал опускается тьма
+      const k = en.stage2 ? 1 : Math.min(1, 1 - en.timer / TRANSFORM_TIME);
+      c.fillStyle = `rgba(2,4,20,${0.55 * k})`;
+      c.fillRect(0, 0, CW, CH);
+      c.fillStyle = `rgba(150,170,255,${0.06 * k})`; // лунный круг над героем
+      c.beginPath();
+      c.ellipse(this.HERO_X + 14, GROUND_ARENA - 16, 26, 30, 0, 0, Math.PI * 2);
+      c.fill();
+    }
     let spr;
-    const kind = en.kind === "seraph" && en.stage2 ? "seraph2" : { knight: "boss" }[en.kind] || en.kind;
+    const kind = en.stage2 && IMG[`${en.kind}2_idle_0`] ? `${en.kind}2` : { knight: "boss" }[en.kind] || en.kind; // вторая стадия — свои кадры
     if (en.aura && en.state !== "dead") this.drawAura(c, en, t); // багровое марево за Серафимом
     if (en.hero) spr = rivalSprite(en, t);
     else if (en.state === "drink") spr = anim("chief_drink", t, 4, 2);
     else if (en.state === "revive") spr = anim("wraith_revive", t, 4, 2);
-    else if (en.state === "transform") spr = anim("seraph_transform", t, 5, 2);
+    else if (en.state === "transform") spr = anim(`${en.kind}_transform`, t, 5, 2);
     else if (en.state === "gaze") spr = anim("eyequeen_gaze", t, 3, 2);
     else if (en.state === "mist") spr = anim(`${kind}_mist`, t, 5, 2);
     else if (en.state === "dead") spr = IMG[`${kind}_dead_0`];
@@ -3480,12 +3547,25 @@ class BattleScene extends Scene {
       c.fill();
     }
     if (en.hero) drawFlipped(c, spr, Math.round(en.x) + 24 - spr.width, GROUND_ARENA - spr.height); // герой-соперник смотрит влево
-    else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
+    else if (en.kind === "stalker" && en.stage2 && (en.state === "idle" || en.state === "recover")) { // Полночь: растворяется во тьме, видны только глаза
+      const a = en.state === "recover" ? 0.85 : 0.3 + 0.12 * Math.sin(t * 3);
+      c.globalAlpha = a;
+      c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
+      c.globalAlpha = 1;
+      if (en.state === "idle") for (const dx of [19, 27]) { // глаза в темноте
+        c.fillStyle = "rgba(255,220,90,0.35)";
+        c.fillRect(ex + dx - 1, GROUND_ARENA - spr.height + 23, 3, 3);
+        c.fillStyle = "rgb(255,250,220)";
+        c.fillRect(ex + dx, GROUND_ARENA - spr.height + 24, 1, 1);
+      }
+    } else c.drawImage(spr, ex, GROUND_ARENA - spr.height - lift);
     if (en.state === "gaze") this.drawGaze(c, en, t);
     if (en.kind === "vampire" && en.state !== "dead") this.drawBloodMist(c, en, t);
     if (en.move === "swarm" && (en.state === "windup" || en.state === "attack")) this.drawBats(c, en, t);
-    if (en.kind === "wraith" || en.kind === "seraph") {
-      const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"] : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
+    if (en.kind === "wraith" || en.kind === "seraph" || en.kind === "stalker") {
+      const pal = en.kind === "seraph" ? ["rgb(255,220,150)", "rgb(255,110,50)", "rgb(140,20,20)"]
+        : en.kind === "stalker" ? ["rgb(200,230,255)", "rgb(110,90,200)", "rgb(40,24,80)"] // тени-языки ночи над крыльями
+          : ["rgb(200,255,240)", "rgb(110,240,200)", "rgb(40,120,110)"];
       for (const gp of this.ghosts) {
         c.fillStyle = gp.life > 0.8 ? pal[0] : gp.life > 0.4 ? pal[1] : pal[2];
         c.fillRect(Math.floor(gp.x), Math.floor(gp.y), 1, 1);
@@ -3618,6 +3698,7 @@ class BattleScene extends Scene {
     const P = g.portrait; // на телефоне вертикально — полоски и зелья крупнее
     g.bar(16, 16, Math.min(P ? 400 : 999, Math.floor(p.maxHp * 1.4)), P ? 16 : 8, this.hp / p.maxHp, COL.red);
     g.bar(16, P ? 40 : 28, Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)), P ? 12 : 6, this.stamina / p.maxStamina, COL.green);
+    if (this.fearT > 0) g.text("УЖАС: силы не восполняются", 16 + Math.min(P ? 400 : 999, Math.floor(p.maxStamina * 1.6)) + 8, P ? 38 : 27, P ? 12 : 8, "rgb(150,170,255)");
     const ek = P ? 2 : 1, ey = P ? 60 : 39;
     for (let i = 0; i < (this.estusCap ?? p.estusMax); i++) { // в дуэли — одна фляга
       g.rect([15 + i * 12 * ek, ey, 10 * ek, 14 * ek], COL.shadow);
@@ -3636,7 +3717,7 @@ class BattleScene extends Scene {
       g.ctx.strokeStyle = COL.gold;
       g.ctx.strokeRect(bx - 2.5, by - 2.5, bw + 5, bh + 3);
       const extra = en.state === "drink" ? ` - ЗЕЛЬЕ ${en.drinkHits}/${DRINK_HITS}` : en.state === "revive" ? " - ВОССТАЁТ"
-        : en.state === "transform" ? " - ПЕРЕРОЖДЕНИЕ" : en.state === "gaze" ? " - ВЗГЛЯД ОКА" : en.stage2 ? " - II СТАДИЯ" : en.enraged ? " - ЯРОСТЬ" : en.aura ? " - АУРА" : "";
+        : en.state === "transform" ? (en.kind === "stalker" ? " - НАСТУПАЕТ ПОЛНОЧЬ" : " - ПЕРЕРОЖДЕНИЕ") : en.kind === "stalker" && en.stage2 ? " - ПОЛНОЧЬ" : en.state === "gaze" ? " - ВЗГЛЯД ОКА" : en.stage2 ? " - II СТАДИЯ" : en.enraged ? " - ЯРОСТЬ" : en.aura ? " - АУРА" : "";
       const hot = en.enraged || en.state === "drink" || en.state === "revive" || en.state === "transform";
       g.text(`${tr("БОСС")}: ${tr(en.name)} #${this.foeNo ?? en.wave}${tr(extra)}`, bx, ny - 2, P ? 12 : 8, hot ? "rgb(255,120,80)" : COL.gold);
     } else {
@@ -3676,6 +3757,7 @@ class BattleScene extends Scene {
         husk: "Живучий, бьёт когтями",
         fluff: "Кусает парами и высасывает силы: береги выносливость",
         vampire: "Когти, укус (пьёт кровь), стая мышей и удар из тумана",
+        stalker: "Броски и вой ужаса. С половины здоровья — Полночь: тьма, крылья, пике",
         pumpkin: "Серп и тыквенные бомбы: горение тушит зелье",
         eyequeen: "Когда Око на груди открыто — НЕ БЕЙ: взгляд отразит удар",
         rival: "Соперник бьётся снаряжением и силой своего героя",
@@ -3917,6 +3999,7 @@ class TowerScene extends BattleScene {
       run.chests.push(chest);
       setTimeout(() => sfx.chestDrop(), 350);
     }
+    this.pumpkinHeal(PUMPKIN_HEAL * 2); // в Шпиле Тыквенный амулет лечит вдвое сильнее
     p.save();
     this.saveRun();
     const st = g.profile.streak, lit = st.award(en.boss); // огонёк дня — и за этажи Шпиля
@@ -3929,6 +4012,7 @@ class TowerScene extends BattleScene {
     const ev = battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind, hard: g.hard, hour: new Date().getHours() });
     if (en.kind === "eyequeen") ev.push("eyequeen");
     if (en.kind === "vampire") ev.push("vampire");
+    if (en.kind === "stalker") ev.push("stalker");
     g.checkAch(ev);
     sfx.win();
     vibrate([40, 30, 40]);
@@ -4110,6 +4194,47 @@ class SpireHallScene extends Scene {
   draw(c) {
     drawSpireRoom(c, this.game, this.game.time);
   }
+  /** Правила — в рамке: тёмная панель, тыквенная кайма и золотая внутренняя линия, тыквы по углам. */
+  drawRules(y) {
+    const g = this.game, P = g.portrait, c = g.ctx;
+    const rules = [
+      ["Поднимайтесь по этажам без отдыха у костра.", COL.text],
+      ["Здоровье и зелья не восстанавливаются между боями.", COL.text],
+      ["После победы выберите 1 из 3 тыквенных даров.", "rgb(255,190,110)"],
+      ["5, 10, 15... этаж — элитный страж земель.", COL.text],
+      ["8-й — Граф Пепельной Крови (вампир).", "rgb(200,170,255)"],
+      ["11-й — Полуночный Охотник: две стадии!", "rgb(140,190,255)"],
+      ["13-й — Королева Ока: не бейте, пока Око открыто!", "rgb(255,214,110)"],
+      ["Боссы Шпиля дают Сундук Самайна.", "rgb(255,170,80)"],
+      ["Награды остаются, даже если вы падёте.", COL.dim],
+    ];
+    const fs = P ? 12 : 8, lh = P ? 19 : 11;
+    const lines = rules.flatMap(([r, col]) => (P ? g.wrap(r, 44) : [tr(r)]).map((l, i) => [l, col, i === 0]));
+    const pad = P ? 18 : 9, head = P ? 30 : 16;
+    const bw = P ? W - 48 : 452, bh = head + lines.length * lh + pad * 1.4, bx = (W - bw) / 2, by = y;
+    g.rect([bx, by, bw, bh], "rgba(14,8,22,0.9)");
+    c.strokeStyle = "rgb(230,120,40)";
+    c.lineWidth = P ? 3 : 2;
+    c.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
+    c.strokeStyle = "rgba(232,190,92,0.7)";
+    c.lineWidth = 1;
+    c.strokeRect(bx + (P ? 7 : 4) + 0.5, by + (P ? 7 : 4) + 0.5, bw - (P ? 14 : 8) - 1, bh - (P ? 14 : 8) - 1);
+    const k = P ? 3 : 2;
+    for (const [px, py] of [[bx, by], [bx + bw, by], [bx, by + bh], [bx + bw, by + bh]]) { // тыквы по углам
+      drawLootIcon(c, { kind: "item", key: "pumpkin" }, px, py, k);
+    }
+    g.text("ПРАВИЛА", W / 2, by + (P ? 10 : 6), P ? 16 : 8, "rgb(255,150,60)", "center");
+    let ly = by + head + (P ? 4 : 1);
+    for (const [ln, col, first] of lines) {
+      if (first) { // маркер-огонёк у каждого правила
+        c.fillStyle = "rgb(255,150,50)";
+        c.fillRect(bx + pad, ly + (P ? 4 : 2), P ? 6 : 3, P ? 6 : 3);
+      }
+      g.text(ln, bx + pad + (P ? 14 : 7), ly, fs, col);
+      ly += lh;
+    }
+    return by + bh + (P ? 14 : 8);
+  }
   drawUi() {
     const g = this.game, P = g.portrait, t = g.profile.tower, L = this.last;
     let y = P ? GAME_H + 10 : 12;
@@ -4124,22 +4249,9 @@ class SpireHallScene extends Scene {
       g.text(tf("Добыто: {a} пепла, {r} алых, {b} синих, сундуков {c}", { a, r, b, c: L.chests.length }), W / 2, y, fs, COL.gold, "center");
       y += lh * 1.6;
     } else {
-      const rules = [
-        "Поднимайтесь по этажам башни без отдыха у костра.",
-        "Здоровье и зелья не восстанавливаются между боями.",
-        "После каждой победы выберите один из трёх тыквенных даров.",
-        "Каждый 5-й этаж — элитный страж, 8-й — вампир",
-        "Граф Пепельной Крови, 13-й — Королева Тринадцатого Ока:",
-        "не бейте её, пока Око на груди открыто!",
-        "Награды за этажи остаются, даже если вы падёте.",
-      ];
-      for (const ln of rules.flatMap((r) => (P ? g.wrap(r, 46) : [r]))) { // в портрете — переносим по словам
-        g.text(ln, W / 2, y, fs, COL.text, "center");
-        y += lh;
-      }
-      y += lh * 0.4;
+      y = this.drawRules(y);
     }
-    g.text(tf("Рекорд: {n} эт. · Забегов: {r} · Королев повержено: {q}", { n: t.best, r: t.runs, q: t.queens }), W / 2, y, fs, "rgb(200,170,255)", "center");
+    g.text(tf("Рекорд: {n} эт. · Забегов: {r} · Королев повержено: {q}", { n: t.best, r: t.runs, q: t.queens }), W / 2, y, P ? 12 : 8, "rgb(200,170,255)", "center");
     const [go, back] = this.buttons();
     g.button(go, L ? "Снова в Шпиль" : "Начать восхождение", { selected: true, size: P ? 24 : 12, border: "rgb(255,150,60)", color: "rgb(255,170,80)" });
     g.button(back, "< В меню", { size: P ? 16 : 8 });
@@ -5194,6 +5306,11 @@ class CosmeticsScene extends Scene {
   async action() {
     const g = this.game, it = this.item;
     if (this.busy) return;
+    if (it.chest && !g.store.owns(it.id)) { // облик из Сундука Самайна: купить нельзя
+      sfx.deny();
+      await choiceDialog({ title: "ОБЛИК ИЗ СУНДУКА", text: tf("«{name}» нельзя купить: он выпадает из Сундука Самайна — награды за боссов Шпиля Самайна.", { name: it.name }), buttons: [[null, "ПОНЯТНО", true]] });
+      return;
+    }
     if (it.invite && !g.store.owns(it.id)) { // облик за друга: купить нельзя — ведём во вкладку «Друзья»
       const go = await choiceDialog({
         title: "ОБЛИК ЗА ДРУГА",
@@ -5325,7 +5442,7 @@ class CosmeticsScene extends Scene {
       g.text(c.name, r[0] + 28, r[1] + r[3] / 2 - 20, 16, sel ? COL.gold : COL.text);
       g.text(c.desc, r[0] + 28, r[1] + r[3] / 2 + 4, 12, COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
-      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : g.store.price(c.id);
+      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : c.chest ? "СУНДУК" : g.store.price(c.id);
       g.text(status, r[0] + r[2] - 14, r[1] + r[3] / 2 - 8, 16, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     const on = g.profile.style[it.kind] === it.id && owned;
@@ -5350,7 +5467,7 @@ class CosmeticsScene extends Scene {
       g.text(c.name, r[0] + 16, r[1] + 2, 8, sel ? COL.gold : COL.text);
       g.text(c.desc, r[0] + 16, r[1] + 12, 8, c.price ? "rgb(255,170,80)" : c.invite ? "rgb(120,255,220)" : COL.dim);
       const on = g.profile.style[c.kind] === c.id && g.store.owns(c.id);
-      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : g.store.price(c.id);
+      const status = on ? "НАДЕТО" : g.store.owns(c.id) ? "ЕСТЬ" : c.invite ? "ДРУГ" : c.chest ? "СУНДУК" : g.store.price(c.id);
       g.text(status, r[0] + r[2] - 8, r[1] + 7, 8, on ? COL.gold : g.store.owns(c.id) ? COL.text : "rgb(120,220,255)", "right");
     }
     this.drawPreview();

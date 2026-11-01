@@ -7,10 +7,13 @@ test("Королева — каждый 13-й этаж, элита — кажд�
   assert.equal(floorPlan(26).queen, true);
   assert.deepEqual([5, 10, 15].map((f) => floorPlan(f).kind), ["knight", "chief", "wraith"]);
   assert.equal(floorPlan(20).kind, "knight");
-  for (let f = 1; f < 13; f++) if (f % 5 && f !== 8) assert.equal(floorPlan(f, 7).boss, false);
+  for (let f = 1; f < 13; f++) if (f % 5 && f !== 8 && f !== 11) assert.equal(floorPlan(f, 7).boss, false);
+  assert.equal(floorPlan(11).kind, "stalker");
+  assert.equal(floorPlan(24).kind, "stalker");
+  assert.equal(floorChest(11), "samhain");
   assert.equal(floorPlan(8).kind, "vampire");
   assert.equal(floorPlan(21).kind, "vampire");
-  assert.equal(floorChest(8), "castle");
+  assert.equal(floorChest(8), "samhain");
 });
 
 test("этаж с одним сидом — тот же враг; Пухоглот встречается часто", () => {
@@ -63,5 +66,5 @@ test("награды и сундуки", () => {
   assert.equal(floorReward(4)[2], 0);
   assert.equal(floorChest(4), null);
   assert.equal(floorChest(5), "crypt");
-  assert.equal(floorChest(13), "grave");
+  assert.equal(floorChest(13), "samhain");
 });

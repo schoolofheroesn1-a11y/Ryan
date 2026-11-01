@@ -47,3 +47,10 @@ test("без камеры враги крепче с каждым раундом
   assert.ok(buttonsScale(40).hp > buttonsScale(1).hp);
   assert.ok(buttonsScale(60).wind >= 0.85 && buttonsScale(1).wind <= 1.25);
 });
+
+test("Полуночный Охотник: в Полночь — пике и ночная охота", () => {
+  const day = moveTable("stalker", 20, false, true, false).map((m) => m[0]);
+  const night = moveTable("stalker", 20, false, true, true).map((m) => m[0]);
+  assert.ok(!day.includes("dive") && night.includes("dive") && night.includes("frenzy"));
+  assert.ok(MOVES.howl.fear > 0 && MOVES.dive.armor);
+});

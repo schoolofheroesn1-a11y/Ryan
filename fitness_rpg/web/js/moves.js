@@ -20,6 +20,13 @@ export const MOVES = {
   bite: { dmg: 1.2, wind: 0.8, drain: 1, pose: "bite", label: "УКУС!" },
   swarm: { dmg: 0.35, wind: 0.55, hits: [3, 4], pose: "swarm", label: "СТАЯ МЫШЕЙ!" },
   mist: { dmg: 1.3, wind: 0.55, mist: 1.4, label: "ИЗ ТУМАНА!" },
+  // Полуночный Охотник: Сумерки
+  rend: { dmg: 1, wind: 1, label: "КОГТИ-СЕРПЫ" },
+  pounce: { dmg: 1.4, wind: 0.75, pose: "pounce", label: "БРОСОК!" },
+  howl: { dmg: 0.3, wind: 1.1, pose: "roar", fear: 4, label: "ВОЙ УЖАСА!" },
+  // ...и Полночь
+  dive: { dmg: 1.45, wind: 1.05, armor: true, pose: "pounce", label: "ПИКЕ ИЗ ТЬМЫ!" },
+  frenzy: { dmg: 0.45, wind: 0.42, hits: [4, 5], label: "НОЧНАЯ ОХОТА!" },
   // Тыквоголов
   sickle: { dmg: 1, wind: 1, label: "СЕРП" },
   bomb: { dmg: 1.1, wind: 1.3, burn: 4, label: "ТЫКВЕННАЯ БОМБА!" },
@@ -38,6 +45,7 @@ export function moveTable(kind, wave, btn, boss = false, enraged = false) {
   let t;
   if (kind === "vampire") t = [["claw", 3], ["bite", enraged ? 3 : 2], ["swarm", 2], ["mist", enraged ? 2 : 1.2]];
   else if (kind === "pumpkin") t = [["sickle", 3], ["bomb", 2]];
+  else if (kind === "stalker") t = enraged ? [["rend", 2], ["pounce", 1.5], ["howl", 1], ["dive", 2], ["frenzy", 2]] : [["rend", 3], ["pounce", 2], ["howl", 1.5]];
   else t = [["strike", 3]];
   if (!btn) return t;
   // без камеры: всем — быстрые и тяжёлые удары, серии, финты; чем дальше, тем чаще

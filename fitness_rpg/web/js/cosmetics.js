@@ -8,6 +8,8 @@ export const COSMETICS = [
   // только за приглашённого друга (invite: купить нельзя)
   { id: "sword_kin", kind: "sword", skin: "kin", name: "Клинок Побратима", desc: "ДРУЗЬЯ: награда за друга", color: [90, 230, 200], invite: true },
   { id: "sword_phoenix", kind: "sword", skin: "phoenix", name: "Клинок Феникса", desc: "ЛЕГЕНДА: огонь и крылья феникса", color: [255, 140, 40], price: "3 $" },
+  // только из Сундука Самайна (chest: купить нельзя)
+  { id: "sword_bat", kind: "sword", skin: "bat", name: "Клинок Нетопыря", desc: "САМАЙН: стая мышей в каждом ударе", color: [230, 50, 80], chest: true },
   { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "золотые рога, знамя, вихрь сакуры", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
   { id: "hit_souls", kind: "hit", name: "Призраки павших", desc: "души вырываются из врага", color: [190, 170, 255] },
@@ -23,14 +25,36 @@ const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a
 // ------------------------------------------------------------------ Облик меча
 // Геометрия клинка на спрайте героя 32×32 (см. art.compose_hero): в стойке клинок вертикален
 // по x=20, в выпаде — горизонтален по y=13. Длины — по картам мечей в game/art.py.
-const BLADE_LEN = { void: 17, sun: 17, frost: 16, phoenix: 19, kin: 18 };
+const BLADE_LEN = { void: 17, sun: 17, frost: 16, phoenix: 19, kin: 18, bat: 19 };
 const SKIN = {
   void: { glow: [170, 80, 255], hi: [240, 200, 255], parts: [[190, 100, 255], [120, 50, 200], [50, 20, 80]] },
   sun: { glow: [255, 200, 80], hi: [255, 255, 230], parts: [[255, 240, 170], [255, 200, 80], [230, 130, 40]] },
   frost: { glow: [130, 210, 255], hi: [255, 255, 255], parts: [[255, 255, 255], [200, 235, 255], [140, 200, 255]] },
   kin: { glow: [70, 230, 200], hi: [255, 240, 170], parts: [[120, 255, 220], [255, 220, 110], [60, 180, 160]] },
   phoenix: { glow: [255, 120, 40], hi: [255, 250, 222], parts: [[255, 230, 140], [255, 150, 40], [220, 60, 30]] },
+  bat: { glow: [220, 30, 70], hi: [255, 200, 220], parts: [[230, 40, 70], [120, 20, 50], [200, 160, 255]] },
 };
+
+/** Летучая мышь 9×4: тельце с ушками, крылья взмахом вверх/вниз, светлая кромка и алые глаза. */
+function drawBat(c, x, y, up, col, a) {
+  x = Math.round(x);
+  y = Math.round(y);
+  const wy = up ? -2 : 1;
+  c.fillStyle = rgba([150, 40, 90], a * 0.9); // кромка крыльев — видна и на тёмном фоне
+  c.fillRect(x - 5, y + wy - 1, 3, 1);
+  c.fillRect(x + 3, y + wy - 1, 3, 1);
+  c.fillStyle = rgba(col, a);
+  c.fillRect(x - 1, y - 1, 3, 3); // тельце
+  c.fillRect(x - 1, y - 2, 1, 1); // ушки
+  c.fillRect(x + 1, y - 2, 1, 1);
+  c.fillRect(x - 4, y + wy, 3, 1); // крылья
+  c.fillRect(x + 2, y + wy, 3, 1);
+  c.fillRect(x - 2, y, 1, 1);
+  c.fillRect(x + 2, y, 1, 1);
+  c.fillStyle = rgba([255, 70, 90], a);
+  c.fillRect(x - 1, y, 1, 1);
+  c.fillRect(x + 1, y, 1, 1);
+}
 
 /** Цвет огня по остатку жизни частицы: белый жар -> золото -> оранжевый -> багровый. */
 const FIRE = [[255, 250, 222], [255, 214, 90], [255, 140, 40], [214, 54, 30], [110, 20, 20]];
@@ -61,6 +85,14 @@ export class SwordAura {
     this.acc = 0;
     this.twinkle = null;
     this.jets = []; // огненные струи Феникса на критах
+  }
+
+  /** Удар Клинком Нетопыря: с острия (x0, y0) срывается стая и летит к врагу (x1, y1). */
+  swarm(x0, y0, x1, y1) {
+    for (let i = 0; i < 8; i++) {
+      this.parts.push({ bat: true, x: x0, y: y0, x0, y0, x1: x1 + rand(-6, 6), y1: y1 + rand(-10, 8), t: -i * 0.03, dur: rand(0.3, 0.45),
+        arc: rand(-14, 14), life: 0.9, max: 0.9, seed: rand(0, 9) });
+    }
   }
 
   /** Крит Клинком Феникса: из острия (x0, y0) к врагу (x1, y1) бьёт струя пламени. */
@@ -120,6 +152,19 @@ export class SwordAura {
   update(dt, skin, pose, hx, hy) {
     this.updateJets(dt);
     for (const p of this.parts) {
+      if (p.bat) { // мышь стаи: дугой к врагу, затем разлетается
+        p.t += dt;
+        const q = Math.max(0, Math.min(1, p.t / p.dur));
+        if (q < 1) {
+          p.x = p.x0 + (p.x1 - p.x0) * q;
+          p.y = p.y0 + (p.y1 - p.y0) * q - Math.sin(q * Math.PI) * p.arc;
+        } else {
+          p.x += Math.cos(p.seed) * 40 * dt;
+          p.y -= 30 * dt;
+        }
+        p.life -= dt;
+        continue;
+      }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       if (skin === "frost") p.vx += Math.sin((p.life + p.x) * 6) * 8 * dt; // снежинки покачиваются
@@ -147,7 +192,11 @@ export class SwordAura {
         this.parts.push({ x: hx + 11 + rand(-14, 14), y: hy + rand(0, 10), vx: 0, vy: rand(-6, 2), life: 1.8, max: 1.8, feather: true, col: Math.random() < 0.5 ? [255, 180, 60] : [240, 90, 30] });
       }
     }
-    const rate = { void: 20, sun: 16, frost: 9, phoenix: 34, kin: 12 }[skin];
+    if (skin === "bat" && Math.random() < dt * 0.7) { // в стойке с клинка вспархивает мышь
+      const [x, y] = pts[Math.floor(Math.random() * pts.length)];
+      this.parts.push({ bat: true, x, y, x0: x, y0: y, x1: x + rand(-20, 20), y1: y - rand(16, 30), t: 0, dur: 1.1, arc: rand(-6, 6), life: 1.1, max: 1.1, seed: rand(0, 9) });
+    }
+    const rate = { void: 20, sun: 16, frost: 9, phoenix: 34, kin: 12, bat: 10 }[skin];
     this.acc += dt * rate;
     while (this.acc >= 1) {
       this.acc -= 1;
@@ -220,6 +269,11 @@ export class SwordAura {
     this.drawJets(c, t);
     for (const p of this.parts) {
       const k = p.life / p.max;
+      if (p.bat) {
+        if (p.t < 0) continue;
+        drawBat(c, p.x, p.y, Math.floor((t + p.seed) * 16) % 2, [40, 12, 34], Math.min(1, k * 2));
+        continue;
+      }
       if (p.feather) { // перо: 2×1 с тлеющим кончиком
         c.fillStyle = rgba(p.col, Math.min(1, k * 2));
         c.fillRect(Math.round(p.x), Math.round(p.y), 2, 1);
@@ -275,6 +329,14 @@ export function drawSkinSlash(c, x, y, skin, k) {
   arc(radius, 3, s.glow, 0.9);
   arc(radius - 3, 1, s.hi, 1);
   if (skin === "void") arc(radius - 5, 2, [30, 0, 50], 0.9);
+  if (skin === "bat") { // багровая дуга и мыши, срывающиеся с неё
+    arc(radius - 4, 2, [40, 6, 20], 0.9);
+    for (let deg = -60; deg <= sweep; deg += 40) {
+      const rad = (deg * Math.PI) / 180;
+      drawBat(c, x + Math.cos(rad) * (radius + 4 * k) * 0.55 + 6 * k, y + Math.sin(rad) * (radius + 4 * k), Math.floor(k * 12) % 2, [30, 8, 24], fade);
+    }
+    return;
+  }
   if (skin === "phoenix") { // огненная дуга шире и с языками пламени наружу
     arc(radius + 5, 4, [214, 54, 30], 0.35);
     arc(radius - 1, 2, [255, 214, 90], 0.9);
