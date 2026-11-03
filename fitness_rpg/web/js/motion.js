@@ -34,6 +34,12 @@ async function loadVision() {
   }
 }
 
+/** Встроенный браузер соцсети/мессенджера: камеру он обычно не даёт — нужен Safari или Chrome. */
+export const inAppBrowser = (ua = typeof navigator !== "undefined" ? navigator.userAgent : "") =>
+  /FBAN|FBAV|Instagram|Telegram|VKClient|vkontakte|Line\/|MicroMessenger|OKApp|YaBrowser\/.*YaApp|TikTok|musical_ly|; wv\)/i.test(ua);
+export const isIOS = (ua = typeof navigator !== "undefined" ? navigator.userAgent : "") =>
+  /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && typeof navigator !== "undefined" && navigator.maxTouchPoints > 1);
+
 export class Motion {
   constructor() {
     this.events = [];
@@ -59,16 +65,22 @@ export class Motion {
   }
 
   async _start() {
+    this.reason = null; // почему нет камеры: inapp | denied | busy | nocam | other — по нему «Камера и советы» подсказывает, что делать
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      this.status = "браузер не даёт камеру (нужен https)";
+      this.reason = inAppBrowser() ? "inapp" : "other";
+      this.status = this.reason === "inapp" ? "откройте игру в Safari или Chrome" : "браузер не даёт камеру (нужен https)";
       return;
     }
     try {
       this.status = "доступ к камере…";
       await this._openStream();
     } catch (e) {
-      this.denied = !!e && (e.name === "NotAllowedError" || e.name === "SecurityError");
-      this.status = "нет доступа к камере";
+      const name = e && e.name;
+      this.denied = name === "NotAllowedError" || name === "SecurityError";
+      this.reason = this.denied ? (inAppBrowser() ? "inapp" : "denied") : name === "NotReadableError" || name === "AbortError" ? "busy"
+        : name === "NotFoundError" || name === "OverconstrainedError" ? "nocam" : "other";
+      this.status = { inapp: "откройте игру в Safari или Chrome", denied: "камера запрещена: см. «Камера и советы»",
+        busy: "камера занята другим приложением", nocam: "камера не найдена" }[this.reason] || "нет доступа к камере";
       return;
     }
     try {

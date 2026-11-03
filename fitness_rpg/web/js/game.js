@@ -2,7 +2,7 @@
 // Мир рисуется в 320×180 и масштабируется ×2; интерфейс — в логических координатах 640×H.
 // В портретной ориентации под игрой появляется большая панель камеры.
 import { BANK, DEFAULT_BANK, EX_NAMES, EX_SHORT, EX_TIPS, NAMES, cleanBank, mapBank, setBank } from "./exercises.js";
-import { Motion } from "./motion.js";
+import { Motion, isIOS } from "./motion.js";
 import {
   ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
@@ -5618,6 +5618,30 @@ class LeaderboardScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Камера и советы
+/** Что делать, если браузер не дал камеру: по причине из motion.reason и по системе телефона. */
+function cameraHelp(reason) {
+  if (reason === "inapp") return [
+    "Игра открыта внутри другого приложения (Telegram, ВК, Instagram...): его браузер не даёт камеру.",
+    "Нажмите «...» → «Открыть в браузере» и запустите ash-a-iron.com в Safari или Chrome.",
+  ];
+  if (reason === "denied" && isIOS()) return [
+    "Safari запомнил запрет камеры для этого сайта, поэтому больше не спрашивает. Как включить:",
+    "1) «аА» слева в адресной строке → «Настройки веб-сайта» → Камера → «Разрешить».",
+    "2) Или Настройки iPhone → Приложения → Safari → Камера → «Спросить».",
+    "3) Экранное время → Контент и конфиденциальность → Разрешённые приложения: Камера включена.",
+    "Потом обновите страницу и нажмите «Играть с камерой».",
+  ];
+  if (reason === "denied") return [
+    "Браузер запретил камеру для этого сайта, поэтому больше не спрашивает. Как включить:",
+    "значок замка или настроек слева от адреса → Разрешения → Камера → «Разрешить».",
+    "Потом обновите страницу и нажмите «Играть с камерой».",
+  ];
+  if (reason === "busy") return ["Камеру держит другое приложение (видеозвонок, камера). Закройте его и нажмите «Включить камеру»."];
+  if (reason === "nocam") return ["Браузер не нашёл фронтальную камеру на этом устройстве."];
+  if (reason === "other") return ["Браузер не даёт камеру. Откройте ash-a-iron.com в Safari (iPhone) или Chrome (Android)."];
+  return null;
+}
+
 class CameraScene extends Scene {
   constructor(game) {
     super(game);
@@ -5648,20 +5672,34 @@ class CameraScene extends Scene {
     g.text("КАМЕРА И СОВЕТЫ", W / 2, 12, 16, COL.gold, "center");
     const fmt = (v) => (v == null ? "-" : `${Math.round(v)}°`);
     const x = 20;
-    g.text(tf("Статус: {status}", { status: g.motion.status }), x, 40, 8);
-    g.text(tf("Поза: {pose}", { pose: d.posture }), x, 54, 8);
-    g.text(tf("Колени {knee}  Локти {elbow}  Наклон {tilt}", { knee: fmt(d.knee), elbow: fmt(d.elbow), tilt: fmt(d.tilt) }), x, 68, 8, COL.dim);
-    const counts = g.motion.ok ? d.counts : g.manualCounts;
-    ["pushup", "squat", "jack"].forEach((ex, i) => g.text(`${NAMES[ex]}: ${counts[ex]}`, x, 88 + i * 14, 8));
-    const tips = [
-      "Поставьте телефон на пол, прислонив к стене, и отойдите на 2-3 м.",
-      "Отжимания и приседания: встаньте к телефону БОКОМ.",
-      "Звёздочка: встаньте ЛИЦОМ, руки поднимайте над головой.",
-      "Всё тело должно быть в кадре. Экран не гаснет во время игры.",
-      "Без камеры жмите кнопки ОТЖИМ / ПРИСЕД / ЗВЕЗДА.",
-    ];
-    let y = 140;
-    for (const tip of tips) for (const l of g.wrap(tip, g.portrait ? 74 : 56)) { g.text(l, x, y, 8, COL.dim); y += 12; }
+    const help = !g.motion.ok && !isNative() ? cameraHelp(g.motion.reason) : null;
+    if (help && g.portrait) { // вертикально: подсказка крупно сверху вместо пустых показаний датчика
+      const lines = help.flatMap((t) => g.wrap(t, 46));
+      let hy = 40;
+      g.rect([x - 6, hy - 8, W - 2 * x + 12, lines.length * 19 + 12], "rgba(60,20,20,0.9)");
+      for (const l of lines) { g.text(l, x, hy, 12, "rgb(255,210,170)"); hy += 19; }
+    } else {
+      g.text(tf("Статус: {status}", { status: g.motion.status }), x, 40, 8);
+      g.text(tf("Поза: {pose}", { pose: d.posture }), x, 54, 8);
+      g.text(tf("Колени {knee}  Локти {elbow}  Наклон {tilt}", { knee: fmt(d.knee), elbow: fmt(d.elbow), tilt: fmt(d.tilt) }), x, 68, 8, COL.dim);
+      const counts = g.motion.ok ? d.counts : g.manualCounts;
+      ["pushup", "squat", "jack"].forEach((ex, i) => g.text(`${NAMES[ex]}: ${counts[ex]}`, x, 88 + i * 14, 8));
+      const tips = [
+        "Поставьте телефон на пол, прислонив к стене, и отойдите на 2-3 м.",
+        "Отжимания и приседания: встаньте к телефону БОКОМ.",
+        "Звёздочка: встаньте ЛИЦОМ, руки поднимайте над головой.",
+        "Всё тело должно быть в кадре. Экран не гаснет во время игры.",
+        "Без камеры жмите кнопки ОТЖИМ / ПРИСЕД / ЗВЕЗДА.",
+      ];
+      let y = 140;
+      if (help) { // камеры нет — вместо советов: что именно сделать на этом телефоне
+        const lines = help.flatMap((t) => g.wrap(t, 70));
+        g.rect([x - 6, y - 6, W - 2 * x + 12, lines.length * 12 + 10], "rgba(60,20,20,0.9)");
+        for (const l of lines) { g.text(l, x, y, 8, "rgb(255,210,170)"); y += 12; }
+      } else {
+        for (const tip of tips) for (const l of g.wrap(tip, g.portrait ? 74 : 56)) { g.text(l, x, y, 8, COL.dim); y += 12; }
+      }
+    }
     if (g.motion.denied && isNative()) g.button([20, 300, 200, 24], "РАЗРЕШИТЬ В НАСТРОЙКАХ");
     else if ((!g.motion.ok && !g.motion.starting) || (g.motion.ok && g.motion.status !== "камера активна")) {
       g.button([20, 300, 200, 24], "ВКЛЮЧИТЬ КАМЕРУ");
