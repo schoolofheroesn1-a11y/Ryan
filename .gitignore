@@ -1,7 +1,7 @@
 node_modules/
-build/
 dist/
-coverage/
+dist-server/
+data/
 .DS_Store
 *.log
 .env*
