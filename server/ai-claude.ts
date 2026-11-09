@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ProxyAgent } from 'undici';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
 let client: Anthropic | null = null;
 
@@ -13,7 +13,8 @@ function getClient() {
     client = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
       // Optional outbound proxy (e.g. when the hosting region is not supported by the API).
-      fetchOptions: proxy ? { dispatcher: new ProxyAgent(proxy) } : undefined,
+      // undici's ProxyAgent only works with undici's own fetch, not Node's built-in one.
+      ...(proxy ? { fetch: undiciFetch as unknown as typeof fetch, fetchOptions: { dispatcher: new ProxyAgent(proxy) } } : {}),
       timeout: 5 * 60 * 1000,
     });
   }

@@ -49,6 +49,16 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 CLAUDE_MODEL=claude-opus-5-5
 ```
 
+Через посредника **starimg** (работает с серверов в России):
+
+```
+ANTHROPIC_API_KEY=sk-star-...
+ANTHROPIC_BASE_URL=https://ai.starimg.ru
+CLAUDE_MODEL=claude-opus-5-5
+```
+
+Список доступных моделей и баланс — в личном кабинете https://ai.starimg.ru. Один анализ занимает около минуты.
+
 Один анализ ученика стоит примерно 5–10 ₽ (около $0.05–0.10). Если Claude задан, он используется в первую очередь.
 
 > Anthropic API не обслуживает запросы из России. Если сервер стоит в РФ, укажите в `AI_PROXY`
@@ -79,7 +89,7 @@ CLAUDE_MODEL=claude-opus-5-5
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs nginx certbot python3-certbot-nginx git
 sudo git clone https://github.com/schoolofheroesn1-a11y/Ryan.git /var/www/coach-sl && cd /var/www/coach-sl
 sudo npm ci && sudo npm run build
-sudo cp .env.example .env && sudo nano .env   # ANTHROPIC_API_KEY, COOKIE_SECURE=true
+sudo cp .env.example .env && sudo nano .env   # ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, COOKIE_SECURE=true
 sudo chown -R www-data:www-data /var/www/coach-sl
 sudo cp deploy/school-portfolio.service /etc/systemd/system/ && sudo systemctl enable --now school-portfolio
 sudo cp deploy/coach-sl.ru.nginx.conf /etc/nginx/sites-available/coach-sl.ru
