@@ -11,9 +11,10 @@ import {
   hashPassword, loadUser, requireAdmin, requireAuth, verifyPassword, type User,
 } from './auth';
 import { computeStudentStats } from './stats';
-import { aiConfig, aiEnabled, analyzeStudent } from './ai';
+import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT || 3000);
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -75,7 +76,7 @@ function removeFile(stored: string) {
 // ---------- Auth ----------
 app.get('/api/setup-status', (_req, res) => {
   const c = get<{ c: number }>('SELECT COUNT(*) AS c FROM users')!.c;
-  res.json({ needsSetup: c === 0, aiEnabled: aiEnabled(), aiModel: aiEnabled() ? aiConfig().model : null });
+  res.json({ needsSetup: c === 0, aiEnabled: aiEnabled(), aiModel: aiModelName() });
 });
 
 app.post('/api/setup', wrap((req, res) => {
@@ -544,7 +545,7 @@ async function start() {
   }
   app.listen(PORT, () => {
     console.log(`Сайт запущен: http://localhost:${PORT}`);
-    console.log(aiEnabled() ? `ИИ: ${aiConfig().model} (${aiConfig().baseUrl})` : 'ИИ: ключ не задан — используется анализ по правилам');
+    console.log(aiEnabled() ? `ИИ: ${aiProvider()} / ${aiModelName()}` : 'ИИ: ключ не задан — используется анализ по правилам');
   });
 }
 start();

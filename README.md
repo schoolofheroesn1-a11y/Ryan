@@ -40,6 +40,22 @@ npm start
 
 ## Подключение ИИ
 
+### Claude (рекомендуется)
+
+В `.env` достаточно указать ключ Anthropic (он начинается с `sk-ant-api03-…`, создаётся на platform.claude.com → API Keys):
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-...
+CLAUDE_MODEL=claude-opus-5-5
+```
+
+Один анализ ученика стоит примерно 5–10 ₽ (около $0.05–0.10). Если Claude задан, он используется в первую очередь.
+
+> Anthropic API не обслуживает запросы из России. Если сервер стоит в РФ, укажите в `AI_PROXY`
+> адрес HTTP-прокси за рубежом (например, свой недорогой VPS с Squid/3proxy) или разместите сайт на зарубежном VPS.
+
+### Другие провайдеры
+
 Подходит любой OpenAI-совместимый API — достаточно трёх строк в `.env`:
 
 | Провайдер | AI_BASE_URL | Пример AI_MODEL | Цена |
@@ -51,6 +67,30 @@ npm start
 
 Названия моделей у провайдеров меняются — актуальные смотрите в их документации.
 Если `AI_API_KEY` пустой, сайт работает и выдаёт базовый анализ по правилам (без нейросети).
+
+## Размещение на coach-sl.ru
+
+Нужен VPS (Ubuntu 22.04/24.04), а не обычный «PHP-хостинг» — сайт работает на Node.js.
+
+1. В панели регистратора домена создайте A-записи `coach-sl.ru` и `www` → IP сервера.
+2. На сервере:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs nginx certbot python3-certbot-nginx git
+sudo git clone https://github.com/schoolofheroesn1-a11y/Ryan.git /var/www/coach-sl && cd /var/www/coach-sl
+sudo npm ci && sudo npm run build
+sudo cp .env.example .env && sudo nano .env   # ANTHROPIC_API_KEY, COOKIE_SECURE=true
+sudo chown -R www-data:www-data /var/www/coach-sl
+sudo cp deploy/school-portfolio.service /etc/systemd/system/ && sudo systemctl enable --now school-portfolio
+sudo cp deploy/coach-sl.ru.nginx.conf /etc/nginx/sites-available/coach-sl.ru
+sudo ln -s /etc/nginx/sites-available/coach-sl.ru /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d coach-sl.ru -d www.coach-sl.ru
+```
+
+3. Откройте https://coach-sl.ru — сайт предложит создать администратора.
+
+Обновление: `git pull && npm ci && npm run build && sudo systemctl restart school-portfolio`.
+Бэкап: регулярно копируйте папку `data/`.
 
 ## Структура
 

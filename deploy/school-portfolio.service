@@ -1,0 +1,17 @@
+# /etc/systemd/system/school-portfolio.service
+[Unit]
+Description=Портфолио учеников (coach-sl.ru)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/coach-sl
+EnvironmentFile=/var/www/coach-sl/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist-server/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

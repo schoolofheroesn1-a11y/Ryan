@@ -1,5 +1,7 @@
 import { all, get } from './db';
 import { computeStudentStats, type StudentStats } from './stats';
+import { callClaude, claudeModel } from './ai-claude';
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 export interface AiReport {
   summary: string;
@@ -12,6 +14,18 @@ export interface AiReport {
   parentMessage: string;
 }
 
+export type AiProvider = 'claude' | 'openai' | 'rules';
+
+/** Claude if ANTHROPIC_API_KEY is set, otherwise any OpenAI-compatible API, otherwise rule-based. */
+export function aiProvider(): AiProvider {
+  const forced = process.env.AI_PROVIDER;
+  if (forced === 'claude' && process.env.ANTHROPIC_API_KEY) return 'claude';
+  if (forced === 'openai' && process.env.AI_API_KEY) return 'openai';
+  if (process.env.ANTHROPIC_API_KEY) return 'claude';
+  if (process.env.AI_API_KEY) return 'openai';
+  return 'rules';
+}
+
 export function aiConfig() {
   return {
     baseUrl: (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
@@ -21,7 +35,12 @@ export function aiConfig() {
 }
 
 export function aiEnabled() {
-  return Boolean(aiConfig().apiKey);
+  return aiProvider() !== 'rules';
+}
+
+export function aiModelName() {
+  const p = aiProvider();
+  return p === 'claude' ? claudeModel() : p === 'openai' ? aiConfig().model : null;
 }
 
 /** Collects an anonymised snapshot of the student: no full name, no birth date. */
@@ -161,8 +180,11 @@ async function callModel(system: string, user: string): Promise<string> {
     temperature: 0.6,
     response_format: { type: 'json_object' },
   };
+  const proxy = process.env.AI_PROXY;
+  const dispatcher = proxy ? new ProxyAgent(proxy) : undefined;
   const send = () =>
-    fetch(`${baseUrl}/chat/completions`, {
+    undiciFetch(`${baseUrl}/chat/completions`, {
+      dispatcher,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
@@ -262,8 +284,9 @@ function ruleBasedReport(ctx: ReturnType<typeof buildContext>): AiReport {
 
 export async function analyzeStudent(studentId: number, focus: string): Promise<{ report: AiReport; source: string }> {
   const ctx = buildContext(studentId);
-  if (!aiEnabled()) return { report: ruleBasedReport(ctx), source: 'rules' };
+  const provider = aiProvider();
+  if (provider === 'rules') return { report: ruleBasedReport(ctx), source: 'rules' };
   const { system, user } = buildPrompt(ctx, focus);
-  const raw = await callModel(system, user);
-  return { report: normalize(extractJson(raw)), source: aiConfig().model };
+  const raw = provider === 'claude' ? await callClaude(system, user) : await callModel(system, user);
+  return { report: normalize(extractJson(raw)), source: aiModelName()! };
 }
