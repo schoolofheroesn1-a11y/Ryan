@@ -11,6 +11,7 @@ import {
   hashPassword, loadUser, requireAdmin, requireAuth, verifyPassword, type User,
 } from './auth';
 import { computeStudentStats } from './stats';
+import { extractText } from './extract';
 import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
 const app = express();
@@ -359,7 +360,10 @@ app.get('/api/students/:id', wrap((req, res) => {
       `SELECT a.*, f.original_name AS file_name, u.name AS teacher FROM achievements a LEFT JOIN files f ON f.id = a.file_id
        LEFT JOIN users u ON u.id = a.teacher_id WHERE a.student_id = ? ORDER BY a.date DESC`, sid),
     notes: all('SELECT n.*, u.name AS teacher FROM notes n LEFT JOIN users u ON u.id = n.teacher_id WHERE n.student_id = ? ORDER BY n.created_at DESC', sid),
-    files: all('SELECT f.*, u.name AS uploader FROM files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.student_id = ? ORDER BY f.created_at DESC', sid),
+    files: all(
+      `SELECT f.id, f.student_id, f.original_name, f.mime, f.size, f.description, f.kind, f.extract_status, f.created_at,
+       LENGTH(f.extracted_text) AS text_length, u.name AS uploader
+       FROM files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.student_id = ? ORDER BY f.created_at DESC`, sid),
     reports: all<any>('SELECT r.*, u.name AS author FROM ai_reports r LEFT JOIN users u ON u.id = r.created_by WHERE r.student_id = ? ORDER BY r.created_at DESC', sid)
       .map((r) => ({ ...r, content: JSON.parse(r.content) })),
   });
@@ -425,15 +429,18 @@ app.delete('/api/attendance/:id', wrap((req, res) => {
 }));
 
 // Files
-function saveFile(user: User, studentId: number, f: Express.Multer.File, description: string) {
+async function saveFile(user: User, studentId: number, f: Express.Multer.File, description: string) {
+  const name = fileName(f);
+  const { text, status } = await extractText(path.join(UPLOAD_DIR, f.filename), name, f.mimetype);
   const r = run(
-    'INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    studentId, fileName(f), f.filename, f.mimetype, f.size, description, user.id,
+    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'file', ?, ?)`,
+    studentId, name, f.filename, f.mimetype, f.size, description, user.id, text || null, status,
   );
   return Number(r.lastInsertRowid);
 }
 
-app.post('/api/students/:id/files', upload.array('files', 20), wrap((req, res) => {
+app.post('/api/students/:id/files', upload.array('files', 20), wrap(async (req, res) => {
   const files = (req.files as Express.Multer.File[]) || [];
   const sid = id(req.params.id);
   try {
@@ -444,8 +451,31 @@ app.post('/api/students/:id/files', upload.array('files', 20), wrap((req, res) =
   }
   if (!files.length) throw new HttpError(400, 'Файлы не выбраны');
   const description = str(req.body.description, 'Описание', false);
-  files.forEach((f) => saveFile(req.user!, sid, f, description));
+  for (const f of files) await saveFile(req.user!, sid, f, description);
   res.json({ added: files.length });
+}));
+
+// Text messages (from parents, chats, observations) are stored as .txt documents.
+app.post('/api/students/:id/messages', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const text = str(req.body.text, 'Текст сообщения').slice(0, 60_000);
+  const source = str(req.body.source, 'От кого', false);
+  const d = req.body.date ? date(req.body.date) : new Date().toISOString().slice(0, 10);
+  const title = `Сообщение${source ? ` (${source})` : ''} от ${d.split('-').reverse().join('.')}`;
+  const stored = crypto.randomBytes(16).toString('hex') + '.txt';
+  fs.writeFileSync(path.join(UPLOAD_DIR, stored), text, 'utf8');
+  const r = run(
+    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status)
+     VALUES (?, ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, 'message', ?, 'ok')`,
+    sid, `${title}.txt`, stored, Buffer.byteLength(text), source, req.user!.id, text,
+  );
+  res.json({ id: Number(r.lastInsertRowid) });
+}));
+
+app.get('/api/files/:id/text', wrap((req, res) => {
+  const f = ownedRow(req.user!, 'files', id(req.params.id));
+  res.json({ name: f.original_name, status: f.extract_status, text: f.extracted_text || '' });
 }));
 
 app.get('/api/files/:id', wrap((req, res) => {
@@ -467,7 +497,7 @@ app.delete('/api/files/:id', wrap((req, res) => {
 }));
 
 // Achievements
-app.post('/api/students/:id/achievements', upload.single('file'), wrap((req, res) => {
+app.post('/api/students/:id/achievements', upload.single('file'), wrap(async (req, res) => {
   const sid = id(req.params.id);
   try {
     assertStudent(req.user!, sid);
@@ -476,7 +506,7 @@ app.post('/api/students/:id/achievements', upload.single('file'), wrap((req, res
     throw e;
   }
   const title = str(req.body.title, 'Название');
-  const fileId = req.file ? saveFile(req.user!, sid, req.file, `Подтверждение: ${title}`) : null;
+  const fileId = req.file ? await saveFile(req.user!, sid, req.file, `Подтверждение: ${title}`) : null;
   const r = run(
     `INSERT INTO achievements (student_id, title, category, level, result, date, description, file_id, teacher_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

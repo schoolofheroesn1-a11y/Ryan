@@ -127,6 +127,15 @@ CREATE INDEX IF NOT EXISTS idx_att_student ON attendance(student_id, date);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 `);
 
+// Migrations for databases created by earlier versions.
+function addColumn(table: string, column: string, ddl: string) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+addColumn('files', 'kind', "kind TEXT NOT NULL DEFAULT 'file'");
+addColumn('files', 'extracted_text', 'extracted_text TEXT');
+addColumn('files', 'extract_status', 'extract_status TEXT');
+
 const subjectCount = db.prepare('SELECT COUNT(*) AS c FROM subjects').get() as { c: number };
 if (subjectCount.c === 0) {
   const ins = db.prepare('INSERT INTO subjects (name) VALUES (?)');

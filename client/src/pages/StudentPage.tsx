@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Award, CalendarCheck, Download, FileText, Image as ImageIcon, Lightbulb, Pencil, Plus, Sparkles,
+  ArrowLeft, Eye, MessageSquare, Award, CalendarCheck, Download, FileText, Lightbulb, Pencil, Plus, Sparkles,
   StickyNote, Target, Trash2, TrendingDown, TrendingUp, Minus, Upload, AlertTriangle, Heart, Users, User, GraduationCap,
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -78,7 +78,7 @@ export function StudentPage() {
         <Stat label="Средний балл" value={stats.average ?? '—'} valueCls={gradeColor(stats.average)} hint={`оценок: ${stats.gradesCount}`} />
         <Stat label="Посещаемость" value={stats.attendance.rate != null ? `${stats.attendance.rate}%` : '—'} hint={`пропусков: ${stats.attendance.absent + stats.attendance.sick + stats.attendance.excused}`} />
         <Stat label="Достижения" value={stats.achievementsCount} hint={Object.keys(stats.achievementsByCategory).join(', ') || 'пока нет'} />
-        <Stat label="Файлы и заметки" value={`${stats.filesCount} / ${stats.notesCount}`} hint="файлов / заметок" />
+        <Stat label="Документы и заметки" value={`${stats.filesCount} / ${stats.notesCount}`} hint="документов / заметок" />
       </div>
 
       <Tabs<Tab>
@@ -91,7 +91,7 @@ export function StudentPage() {
           { id: 'attendance', label: 'Посещаемость', count: data.attendance.length },
           { id: 'achievements', label: 'Достижения', count: data.achievements.length },
           { id: 'notes', label: 'Заметки', count: data.notes.length },
-          { id: 'files', label: 'Файлы', count: data.files.length },
+          { id: 'files', label: 'Документы', count: data.files.length },
         ]}
       />
 
@@ -277,7 +277,7 @@ function AiTab({ data, reload }: { data: any; reload: () => void }) {
           </Field>
           <ErrorText error={error} />
           <Button onClick={analyze} loading={loading} icon={<Sparkles className="h-4 w-4" />}>
-            {loading ? 'Анализирую… (до минуты)' : 'Проанализировать'}
+            {loading ? 'Анализирую документы… (1–5 минут)' : 'Проанализировать'}
           </Button>
         </div>
       </Card>
@@ -729,21 +729,35 @@ function NotesTab({ data, reload }: { data: any; reload: () => void }) {
   );
 }
 
-// ---------- Files ----------
+// ---------- Documents & messages ----------
+const MSG_SOURCES = ['Родитель', 'Ученик', 'Учитель', 'Классный руководитель', 'Психолог', 'Тренер / педагог доп. образования', 'Другое'];
+
+function extractBadge(f: any) {
+  const img = f.mime.startsWith('image/') && f.mime !== 'image/svg+xml';
+  if (f.kind === 'message') return { text: 'ИИ читает', cls: 'bg-emerald-50 text-emerald-700' };
+  if (f.extract_status === 'ok') return { text: `ИИ читает текст · ${Math.round((f.text_length || 0) / 100) / 10} тыс. символов`, cls: 'bg-emerald-50 text-emerald-700' };
+  if (img) return { text: 'Изображение — Claude посмотрит', cls: 'bg-sky-50 text-sky-700' };
+  if (f.extract_status === 'empty' && f.mime === 'application/pdf') return { text: 'Скан PDF — Claude посмотрит', cls: 'bg-sky-50 text-sky-700' };
+  if (f.extract_status === 'error') return { text: 'Не удалось прочитать', cls: 'bg-rose-50 text-rose-700' };
+  return { text: 'Только хранится', cls: 'bg-slate-100 text-slate-500' };
+}
+
 function FilesTab({ data, reload }: { data: any; reload: () => void }) {
   const [files, setFiles] = useState<FileList | null>(null);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputKey, setInputKey] = useState(0);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [viewing, setViewing] = useState<any | null>(null);
+  const [drag, setDrag] = useState(false);
 
-  const upload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!files?.length) return;
+  const upload = async (list: FileList | File[] | null) => {
+    if (!list || !list.length) return;
     setLoading(true);
     setError(null);
     const fd = new FormData();
-    [...files].forEach((f) => fd.append('files', f));
+    [...list].forEach((f) => fd.append('files', f));
     fd.append('description', description);
     try {
       await api.post(`/api/students/${data.student.id}/files`, fd);
@@ -758,42 +772,81 @@ function FilesTab({ data, reload }: { data: any; reload: () => void }) {
     }
   };
   const del = async (fid: number) => {
-    if (!confirmDelete('файл')) return;
+    if (!confirmDelete('документ')) return;
     await api.del(`/api/files/${fid}`);
     reload();
   };
+  const view = async (f: any) => setViewing(await api.get(`/api/files/${f.id}/text`));
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader title="Загрузить файлы" subtitle="Работы, фото, грамоты, PDF — до 20 МБ каждый" />
-        <form onSubmit={upload} className="grid gap-3 p-5 sm:grid-cols-[1fr_1fr_auto]">
-          <input key={inputKey} type="file" multiple className="input" onChange={(e) => setFiles(e.target.files)} />
-          <input className="input" placeholder="Описание (например: проект по биологии)" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <Button type="submit" loading={loading} disabled={!files?.length} icon={<Upload className="h-4 w-4" />}>Загрузить</Button>
-          <div className="sm:col-span-3"><ErrorText error={error} /></div>
-        </form>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Загрузить документы" subtitle="Word, PDF, TXT, RTF, фото и сканы — до 20 МБ, можно сразу несколько" />
+          <form onSubmit={(e) => { e.preventDefault(); upload(files); }} className="space-y-3 p-5">
+            <label
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center text-sm transition ${drag ? 'border-indigo-500 bg-indigo-50' : 'border-slate-300 hover:border-indigo-400'}`}
+            >
+              <Upload className="mb-2 h-6 w-6 text-slate-400" />
+              <span className="font-medium text-slate-700">{files?.length ? `Выбрано файлов: ${files.length}` : 'Перетащите файлы сюда или нажмите'}</span>
+              <span className="text-xs text-slate-400">характеристики, отчёты, контрольные, грамоты, переписка</span>
+              <input key={inputKey} type="file" multiple className="hidden" onChange={(e) => setFiles(e.target.files)}
+                accept=".pdf,.doc,.docx,.rtf,.txt,.md,.csv,.htm,.html,.jpg,.jpeg,.png,.webp,.gif,image/*,application/pdf" />
+            </label>
+            <input className="input" placeholder="Описание (например: характеристика от психолога)" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <ErrorText error={error} />
+            <Button type="submit" loading={loading} disabled={!files?.length} icon={<Upload className="h-4 w-4" />}>Загрузить</Button>
+          </form>
+        </Card>
+        <Card>
+          <CardHeader title="Добавить сообщение" subtitle="Вставьте текст из мессенджера, письма или устное наблюдение" />
+          <div className="space-y-3 p-5 text-sm text-slate-600">
+            <p>Например: сообщение от родителей, отзыв тренера, жалоба ученика, переписка в чате класса. ИИ учтёт это при анализе.</p>
+            <Button icon={<MessageSquare className="h-4 w-4" />} onClick={() => setMsgOpen(true)}>Добавить сообщение</Button>
+          </div>
+        </Card>
+      </div>
+
+      <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        Имя и фамилия ученика в тексте документов автоматически заменяются на «Ученик» перед отправкой в ИИ. Другие персональные данные (адреса, телефоны, имена родителей) лучше не загружать.
+      </p>
 
       <Card>
-        {data.files.length === 0 ? <Empty icon={<FileText className="h-10 w-10" />} title="Файлов пока нет" /> : (
+        {data.files.length === 0 ? <Empty icon={<FileText className="h-10 w-10" />} title="Документов пока нет" text="Загрузите документы или добавьте сообщения — ИИ прочитает их при анализе." /> : (
           <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.files.map((f: any) => {
               const isImg = f.mime.startsWith('image/') && f.mime !== 'image/svg+xml';
+              const badge = extractBadge(f);
+              const hasText = f.kind === 'message' || f.extract_status === 'ok';
               return (
-                <div key={f.id} className="group overflow-hidden rounded-lg border border-slate-200">
-                  <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="flex h-36 items-center justify-center bg-slate-50">
-                    {isImg ? <img src={`/api/files/${f.id}`} alt={f.original_name} className="h-full w-full object-cover" loading="lazy" />
-                      : f.mime.startsWith('image/') ? <ImageIcon className="h-10 w-10 text-slate-300" /> : <FileText className="h-10 w-10 text-slate-300" />}
-                  </a>
-                  <div className="flex items-start gap-2 p-3">
+                <div key={f.id} className="group flex flex-col overflow-hidden rounded-lg border border-slate-200">
+                  {isImg ? (
+                    <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="flex h-36 items-center justify-center bg-slate-50">
+                      <img src={`/api/files/${f.id}`} alt={f.original_name} className="h-full w-full object-cover" loading="lazy" />
+                    </a>
+                  ) : (
+                    <button onClick={() => (hasText ? view(f) : window.open(`/api/files/${f.id}`, '_blank'))}
+                      className="flex h-24 items-center justify-center gap-2 bg-slate-50 text-slate-300 hover:bg-slate-100">
+                      {f.kind === 'message' ? <MessageSquare className="h-9 w-9 text-indigo-300" /> : <FileText className="h-9 w-9" />}
+                      <span className="text-xs font-semibold uppercase text-slate-400">{f.kind === 'message' ? 'сообщение' : (f.original_name.split('.').pop() || '')}</span>
+                    </button>
+                  )}
+                  <div className="flex flex-1 items-start gap-2 p-3">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium" title={f.original_name}>{f.original_name}</div>
                       {f.description && <div className="truncate text-xs text-slate-500">{f.description}</div>}
-                      <div className="text-xs text-slate-400">{fmtSize(f.size)} · {fmtDate(f.created_at)}</div>
+                      <div className="text-xs text-slate-400">{fmtSize(f.size)} · {fmtDate(f.created_at)}{f.uploader ? ` · ${f.uploader}` : ''}</div>
+                      <Badge className={`mt-1.5 ${badge.cls}`}>{badge.text}</Badge>
                     </div>
-                    <a href={`/api/files/${f.id}?download=1`} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Скачать"><Download className="h-4 w-4" /></a>
-                    <DelBtn onClick={() => del(f.id)} />
+                    <div className="flex flex-col">
+                      {hasText && <button onClick={() => view(f)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Показать текст"><Eye className="h-4 w-4" /></button>}
+                      <a href={`/api/files/${f.id}?download=1`} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Скачать"><Download className="h-4 w-4" /></a>
+                      <DelBtn onClick={() => del(f.id)} />
+                    </div>
                   </div>
                 </div>
               );
@@ -801,7 +854,55 @@ function FilesTab({ data, reload }: { data: any; reload: () => void }) {
           </div>
         )}
       </Card>
+
+      {msgOpen && <MessageModal studentId={data.student.id} onClose={() => setMsgOpen(false)} onDone={() => { setMsgOpen(false); reload(); }} />}
+      {viewing && (
+        <Modal open onClose={() => setViewing(null)} title={viewing.name} wide>
+          <pre className="max-h-[65vh] overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 font-sans text-sm text-slate-700">{viewing.text || 'Текст не найден'}</pre>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+function MessageModal({ studentId, onClose, onDone }: { studentId: number; onClose: () => void; onDone: () => void }) {
+  const [source, setSource] = useState(MSG_SOURCES[0]);
+  const [date, setDate] = useState(today());
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      await api.post(`/api/students/${studentId}/messages`, { source, date, text });
+      onDone();
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Новое сообщение" wide>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="От кого"><select className="input" value={source} onChange={(e) => setSource(e.target.value)}>{MSG_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></Field>
+          <Field label="Дата"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        </div>
+        <Field label="Текст сообщения (можно вставить сразу всю переписку)">
+          <textarea className="input h-64" value={text} onChange={(e) => setText(e.target.value)} required autoFocus
+            placeholder="Например: «Здравствуйте! Дима последнее время жалуется, что не успевает с домашкой из-за тренировок…»" />
+        </Field>
+        <ErrorText error={error} />
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="secondary" onClick={onClose}>Отмена</Button>
+          <Button type="submit" loading={loading}>Сохранить</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

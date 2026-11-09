@@ -15,14 +15,37 @@ function getClient() {
       // Optional outbound proxy (e.g. when the hosting region is not supported by the API).
       // undici's ProxyAgent only works with undici's own fetch, not Node's built-in one.
       ...(proxy ? { fetch: undiciFetch as unknown as typeof fetch, fetchOptions: { dispatcher: new ProxyAgent(proxy) } } : {}),
-      timeout: 5 * 60 * 1000,
+      timeout: 10 * 60 * 1000,
     });
   }
   return client;
 }
 
-/** Sends the prompt to Claude and returns the text of the answer (expected to be JSON). */
-export async function callClaude(system: string, user: string): Promise<string> {
+export interface Attachment {
+  kind: 'image' | 'pdf';
+  mediaType: string;
+  data: string; // base64
+  name: string;
+}
+
+function attachmentBlocks(attachments: Attachment[]): Anthropic.Beta.BetaContentBlockParam[] {
+  const blocks: Anthropic.Beta.BetaContentBlockParam[] = [];
+  for (const a of attachments) {
+    blocks.push({ type: 'text', text: `Файл из портфолио: «${a.name}»` });
+    if (a.kind === 'image') {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: a.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: a.data },
+      });
+    } else {
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.data } });
+    }
+  }
+  return blocks;
+}
+
+/** Sends the prompt (plus images / scanned PDFs) to Claude and returns the answer text (expected to be JSON). */
+export async function callClaude(system: string, user: string, attachments: Attachment[] = []): Promise<string> {
   try {
     const stream = getClient().beta.messages.stream({
       model: claudeModel(),
@@ -33,7 +56,7 @@ export async function callClaude(system: string, user: string): Promise<string> 
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       system,
-      messages: [{ role: 'user', content: user }],
+      messages: [{ role: 'user', content: [...attachmentBlocks(attachments), { type: 'text', text: user }] }],
     });
     const message = await stream.finalMessage();
 
