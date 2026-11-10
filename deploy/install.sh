@@ -14,6 +14,13 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq nginx certbot python3-certbot-nginx curl ca-certificates >/dev/null
 
+# На серверах с 1 ГБ памяти добавляем файл подкачки, чтобы большие PDF не роняли сайт.
+if [ "$(swapon --show --noheadings | wc -l)" -eq 0 ] && [ "$(awk '/MemTotal/ {print $2}' /proc/meminfo)" -lt 2000000 ]; then
+  echo "   Создаю файл подкачки 1 ГБ"
+  fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap -q /swapfile && swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 echo "→ 2/6 Проверка Node.js (нужна версия 22.13+)"
 need_node=1
 if command -v node >/dev/null; then
