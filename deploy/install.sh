@@ -96,7 +96,7 @@ fi
 sleep 2
 if curl -fsS -o /dev/null http://127.0.0.1:3000/api/setup-status; then
   echo
-  echo "✅ Готово! Откройте $URL и создайте администратора."
+  echo "✅ Готово! Откройте $URL (при первой установке сайт предложит создать администратора)."
 else
   echo "❌ Сайт не ответил. Журнал: journalctl -u school-portfolio -n 50"
   exit 1
