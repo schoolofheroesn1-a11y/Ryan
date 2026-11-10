@@ -12,6 +12,10 @@ import {
 } from './auth';
 import { computeStudentStats } from './stats';
 import { extractText } from './extract';
+import { enqueueMaterial, resumePendingMaterials } from './material-ai';
+import { analyzeClass, classAnalytics } from './class-ai';
+import { MATERIAL_CATEGORIES, SCALES, cleanScores } from './scales';
+import { computeScaleStats } from './stats';
 import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
 const app = express();
@@ -360,10 +364,18 @@ app.get('/api/students/:id', wrap((req, res) => {
       `SELECT a.*, f.original_name AS file_name, u.name AS teacher FROM achievements a LEFT JOIN files f ON f.id = a.file_id
        LEFT JOIN users u ON u.id = a.teacher_id WHERE a.student_id = ? ORDER BY a.date DESC`, sid),
     notes: all('SELECT n.*, u.name AS teacher FROM notes n LEFT JOIN users u ON u.id = n.teacher_id WHERE n.student_id = ? ORDER BY n.created_at DESC', sid),
-    files: all(
+    files: all<any>(
       `SELECT f.id, f.student_id, f.original_name, f.mime, f.size, f.description, f.kind, f.extract_status, f.created_at,
-       LENGTH(f.extracted_text) AS text_length, u.name AS uploader
-       FROM files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.student_id = ? ORDER BY f.created_at DESC`, sid),
+       f.category, COALESCE(f.material_date, substr(f.created_at, 1, 10)) AS material_date, f.ai_status, f.ai_summary,
+       f.ai_scores, f.ai_tags, f.ai_error, LENGTH(f.extracted_text) AS text_length, u.name AS uploader
+       FROM files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.student_id = ?
+       ORDER BY material_date DESC, f.id DESC`, sid,
+    ).map((f) => ({ ...f, ai_scores: f.ai_scores ? JSON.parse(f.ai_scores) : null, ai_tags: f.ai_tags ? JSON.parse(f.ai_tags) : [] })),
+    assessments: all<any>(
+      `SELECT a.*, u.name AS teacher FROM assessments a LEFT JOIN users u ON u.id = a.teacher_id
+       WHERE a.student_id = ? ORDER BY a.date DESC, a.id DESC`, sid,
+    ).map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') })),
+    scaleStats: computeScaleStats(sid),
     reports: all<any>('SELECT r.*, u.name AS author FROM ai_reports r LEFT JOIN users u ON u.id = r.created_by WHERE r.student_id = ? ORDER BY r.created_at DESC', sid)
       .map((r) => ({ ...r, content: JSON.parse(r.content) })),
   });
@@ -380,6 +392,16 @@ app.patch('/api/students/:id', wrap((req, res) => {
     str(req.body.interests, 'Интересы', false), str(req.body.about, 'О ученике', false), cid, sid,
   );
   res.json({ ok: true });
+}));
+
+app.post('/api/students/bulk-delete', wrap((req, res) => {
+  const ids: number[] = (Array.isArray(req.body.ids) ? req.body.ids : []).map(id);
+  if (!ids.length) throw new HttpError(400, 'Не выбраны ученики');
+  for (const sid of ids) assertStudent(req.user!, sid);
+  const files = all<any>(`SELECT stored_name FROM files WHERE student_id IN (${ids.map(() => '?').join(',')})`, ...ids);
+  tx(() => ids.forEach((sid) => run('DELETE FROM students WHERE id = ?', sid)));
+  files.forEach((f) => removeFile(f.stored_name));
+  res.json({ deleted: ids.length });
 }));
 
 app.delete('/api/students/:id', wrap((req, res) => {
@@ -429,15 +451,23 @@ app.delete('/api/attendance/:id', wrap((req, res) => {
 }));
 
 // Files
-async function saveFile(user: User, studentId: number, f: Express.Multer.File, description: string) {
+const category = (v: unknown, fallback: string) => {
+  const c = typeof v === 'string' ? v.trim() : '';
+  return MATERIAL_CATEGORIES.includes(c) ? c : fallback;
+};
+const optDate = (v: unknown) => (v ? date(v) : new Date().toISOString().slice(0, 10));
+
+async function saveFile(user: User, studentId: number, f: Express.Multer.File, description: string, cat = 'Другое', mdate = optDate(null)) {
   const name = fileName(f);
   const { text, status } = await extractText(path.join(UPLOAD_DIR, f.filename), name, f.mimetype);
   const r = run(
-    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'file', ?, ?)`,
-    studentId, name, f.filename, f.mimetype, f.size, description, user.id, text || null, status,
+    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status, category, material_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'file', ?, ?, ?, ?)`,
+    studentId, name, f.filename, f.mimetype, f.size, description, user.id, text || null, status, cat, mdate,
   );
-  return Number(r.lastInsertRowid);
+  const fid = Number(r.lastInsertRowid);
+  enqueueMaterial(fid);
+  return fid;
 }
 
 app.post('/api/students/:id/files', upload.array('files', 20), wrap(async (req, res) => {
@@ -451,7 +481,9 @@ app.post('/api/students/:id/files', upload.array('files', 20), wrap(async (req, 
   }
   if (!files.length) throw new HttpError(400, 'Файлы не выбраны');
   const description = str(req.body.description, 'Описание', false);
-  for (const f of files) await saveFile(req.user!, sid, f, description);
+  const cat = category(req.body.category, 'Другое');
+  const mdate = optDate(req.body.date);
+  for (const f of files) await saveFile(req.user!, sid, f, description, cat, mdate);
   res.json({ added: files.length });
 }));
 
@@ -459,18 +491,52 @@ app.post('/api/students/:id/files', upload.array('files', 20), wrap(async (req, 
 app.post('/api/students/:id/messages', wrap((req, res) => {
   const sid = id(req.params.id);
   assertStudent(req.user!, sid);
-  const text = str(req.body.text, 'Текст сообщения').slice(0, 60_000);
+  const text = str(req.body.text, 'Текст').slice(0, 60_000);
   const source = str(req.body.source, 'От кого', false);
-  const d = req.body.date ? date(req.body.date) : new Date().toISOString().slice(0, 10);
-  const title = `Сообщение${source ? ` (${source})` : ''} от ${d.split('-').reverse().join('.')}`;
+  const d = optDate(req.body.date);
+  const cat = category(req.body.category, 'Сообщение / переписка');
+  const title = `${cat}${source ? ` (${source})` : ''} от ${d.split('-').reverse().join('.')}`;
   const stored = crypto.randomBytes(16).toString('hex') + '.txt';
   fs.writeFileSync(path.join(UPLOAD_DIR, stored), text, 'utf8');
   const r = run(
-    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status)
-     VALUES (?, ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, 'message', ?, 'ok')`,
-    sid, `${title}.txt`, stored, Buffer.byteLength(text), source, req.user!.id, text,
+    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, uploaded_by, kind, extracted_text, extract_status, category, material_date)
+     VALUES (?, ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, 'message', ?, 'ok', ?, ?)`,
+    sid, `${title}.txt`, stored, Buffer.byteLength(text), source, req.user!.id, text, cat, d,
   );
+  const fid = Number(r.lastInsertRowid);
+  enqueueMaterial(fid);
+  res.json({ id: fid });
+}));
+
+app.patch('/api/files/:id', wrap((req, res) => {
+  const f = ownedRow(req.user!, 'files', id(req.params.id));
+  run('UPDATE files SET category = ?, material_date = ?, description = ? WHERE id = ?',
+    category(req.body.category, f.category || 'Другое'), req.body.date ? date(req.body.date) : f.material_date,
+    req.body.description !== undefined ? str(req.body.description, 'Описание', false) : f.description, f.id);
+  if (req.body.reanalyze) enqueueMaterial(f.id);
+  res.json({ ok: true });
+}));
+
+app.post('/api/files/:id/reanalyze', wrap((req, res) => {
+  const f = ownedRow(req.user!, 'files', id(req.params.id));
+  enqueueMaterial(f.id);
+  res.json({ ok: true });
+}));
+
+// General assessments on the 1–10 scales
+app.post('/api/students/:id/assessments', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const scores = cleanScores(req.body.scores);
+  if (!Object.keys(scores).length) throw new HttpError(400, 'Поставьте оценку хотя бы по одной шкале');
+  const r = run('INSERT INTO assessments (student_id, date, scores, comment, teacher_id) VALUES (?, ?, ?, ?, ?)',
+    sid, optDate(req.body.date), JSON.stringify(scores), str(req.body.comment, 'Комментарий', false), req.user!.id);
   res.json({ id: Number(r.lastInsertRowid) });
+}));
+app.delete('/api/assessments/:id', wrap((req, res) => {
+  ownedRow(req.user!, 'assessments', id(req.params.id));
+  run('DELETE FROM assessments WHERE id = ?', id(req.params.id));
+  res.json({ ok: true });
 }));
 
 app.get('/api/files/:id/text', wrap((req, res) => {
@@ -506,7 +572,7 @@ app.post('/api/students/:id/achievements', upload.single('file'), wrap(async (re
     throw e;
   }
   const title = str(req.body.title, 'Название');
-  const fileId = req.file ? await saveFile(req.user!, sid, req.file, `Подтверждение: ${title}`) : null;
+  const fileId = req.file ? await saveFile(req.user!, sid, req.file, `Подтверждение: ${title}`, 'Грамота / сертификат', optDate(req.body.date)) : null;
   const r = run(
     `INSERT INTO achievements (student_id, title, category, level, result, date, description, file_id, teacher_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -552,6 +618,37 @@ app.delete('/api/reports/:id', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Class analytics
+app.get('/api/classes/:id/analytics', wrap((req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  res.json({
+    ...classAnalytics(cid),
+    reports: all<any>(
+      'SELECT r.*, u.name AS author FROM class_reports r LEFT JOIN users u ON u.id = r.created_by WHERE r.class_id = ? ORDER BY r.created_at DESC',
+      cid,
+    ).map((r) => ({ ...r, content: JSON.parse(r.content) })),
+  });
+}));
+app.post('/api/classes/:id/analyze', wrap(async (req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  const focus = str(req.body.focus, 'Фокус', false).slice(0, 1000);
+  const { report, source } = await analyzeClass(cid, focus);
+  const r = run('INSERT INTO class_reports (class_id, created_by, source, focus, content) VALUES (?, ?, ?, ?, ?)',
+    cid, req.user!.id, source, focus, JSON.stringify(report));
+  res.json({ id: Number(r.lastInsertRowid), report, source });
+}));
+app.delete('/api/class-reports/:id', wrap((req, res) => {
+  const r = get<any>('SELECT * FROM class_reports WHERE id = ?', id(req.params.id));
+  if (!r) throw new HttpError(404, 'Запись не найдена');
+  assertClass(req.user!, r.class_id);
+  run('DELETE FROM class_reports WHERE id = ?', r.id);
+  res.json({ ok: true });
+}));
+
+app.get('/api/meta', (_req, res) => res.json({ scales: SCALES, categories: MATERIAL_CATEGORIES }));
+
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Не найдено' }));
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -573,6 +670,7 @@ async function start() {
     const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   }
+  resumePendingMaterials();
   app.listen(PORT, () => {
     console.log(`Сайт запущен: http://localhost:${PORT}`);
     console.log(aiEnabled() ? `ИИ: ${aiProvider()} / ${aiModelName()}` : 'ИИ: ключ не задан — используется анализ по правилам');

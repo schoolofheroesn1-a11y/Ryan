@@ -7,6 +7,19 @@ export function claudeModel() {
   return process.env.CLAUDE_MODEL || 'claude-opus-5-5';
 }
 
+/** Fast, inexpensive model used to analyse each uploaded material. */
+export function claudeFastModel() {
+  return process.env.CLAUDE_FAST_MODEL || 'claude-haiku-5-5';
+}
+
+export interface ClaudeOptions {
+  model?: string;
+  effort?: 'low' | 'medium' | 'high';
+  maxTokens?: number;
+  /** Server-side refusal fallback (supported by Opus/Sonnet/Fable, not by Haiku). */
+  fallbacks?: boolean;
+}
+
 function getClient() {
   if (!client) {
     const proxy = process.env.AI_PROXY;
@@ -45,16 +58,16 @@ function attachmentBlocks(attachments: Attachment[]): Anthropic.Beta.BetaContent
 }
 
 /** Sends the prompt (plus images / scanned PDFs) to Claude and returns the answer text (expected to be JSON). */
-export async function callClaude(system: string, user: string, attachments: Attachment[] = []): Promise<string> {
+export async function callClaude(system: string, user: string, attachments: Attachment[] = [], opts: ClaudeOptions = {}): Promise<string> {
+  const useFallbacks = opts.fallbacks ?? true;
   try {
     const stream = getClient().beta.messages.stream({
-      model: claudeModel(),
-      max_tokens: 16000,
+      model: opts.model || claudeModel(),
+      max_tokens: opts.maxTokens || 16000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
+      output_config: { effort: opts.effort || 'medium' },
       // If the model declines, the API retries on a fallback model automatically.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      ...(useFallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
       system,
       messages: [{ role: 'user', content: [...attachmentBlocks(attachments), { type: 'text', text: user }] }],
     });

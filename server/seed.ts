@@ -82,6 +82,21 @@ tx(() => {
   note('Иванов Артём', 'Учёба', 'Быстро решает задачи, иногда скучает — нужны задания посложнее.');
   note('Кузнецова Мария', 'Социальное', 'Стесняется выступать перед классом, хотя материал знает хорошо.');
   note('Морозов Кирилл', 'Учёба', 'Пропуски из-за соревнований, отстаёт по алгебре.');
+  // General assessments (1–10) over the last three months — feeds the charts.
+  const scaleBase: Record<string, number> = {
+    'Иванов Артём': 8, 'Кузнецова Мария': 7, 'Соколов Дмитрий': 5, 'Попова Анна': 9, 'Лебедев Никита': 6,
+    'Новикова Елизавета': 8, 'Морозов Кирилл': 5, 'Волкова София': 9,
+  };
+  for (const [n, base] of Object.entries(scaleBase)) {
+    for (const [offset, drift] of [[80, 0], [50, 0], [15, n.includes('Соколов') ? -2 : n.includes('Лебедев') ? 2 : 0]] as const) {
+      const scores: Record<string, number> = {};
+      for (const k of ['motivation', 'independence', 'responsibility', 'communication', 'wellbeing', 'curiosity']) {
+        scores[k] = Math.max(1, Math.min(10, base + drift + rnd(-1, 1) + (k === 'communication' && n.includes('Кузнецова') ? -2 : 0)));
+      }
+      run('INSERT INTO assessments (student_id, date, scores, comment, teacher_id) VALUES (?, ?, ?, ?, ?)',
+        id(n), day(offset), JSON.stringify(scores), '', teacher);
+    }
+  }
   void admin;
 });
 

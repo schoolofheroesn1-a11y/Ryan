@@ -1,4 +1,5 @@
 import { all, get } from './db';
+import { SCALES, type ScaleKey } from './scales';
 
 export interface SubjectStat {
   subject: string;
@@ -118,4 +119,81 @@ export function computeStudentStats(studentId: number): StudentStats {
     risk: score >= 3 ? 'high' : score >= 1 ? 'medium' : 'low',
     riskReasons,
   };
+}
+
+// ---------- General scales (teacher assessments + AI scores of materials) ----------
+
+export interface ScalePoint { date: string; source: 'teacher' | 'ai'; scores: Partial<Record<ScaleKey, number>> }
+export interface ScaleStat {
+  key: ScaleKey;
+  label: string;
+  current: number | null; // blended current level
+  teacher: number | null; // latest teacher rating
+  ai: number | null; // AI average for the last 90 days
+  trend: 'up' | 'down' | 'flat' | 'unknown';
+  points: number;
+}
+export interface ScaleStats {
+  scales: ScaleStat[];
+  monthly: Record<string, number | string | null>[]; // { month: '2026-09', motivation: 6.5, ... }
+  materialsByMonth: { month: string; count: number }[];
+  totalPoints: number;
+}
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const r1 = (n: number) => Math.round(n * 10) / 10;
+const mean = (xs: number[]) => (xs.length ? r1(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+
+export function scalePoints(studentId: number): ScalePoint[] {
+  const pts: ScalePoint[] = [];
+  for (const a of all<any>('SELECT date, scores FROM assessments WHERE student_id = ? ORDER BY date', studentId)) {
+    pts.push({ date: a.date, source: 'teacher', scores: JSON.parse(a.scores || '{}') });
+  }
+  for (const f of all<any>(
+    "SELECT COALESCE(material_date, substr(created_at, 1, 10)) AS date, ai_scores FROM files WHERE student_id = ? AND ai_status = 'done' AND ai_scores IS NOT NULL",
+    studentId,
+  )) {
+    const scores = JSON.parse(f.ai_scores || '{}');
+    if (Object.keys(scores).length) pts.push({ date: f.date, source: 'ai', scores });
+  }
+  return pts.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function computeScaleStats(studentId: number): ScaleStats {
+  const pts = scalePoints(studentId);
+  const recent = daysAgo(60);
+  const prevStart = daysAgo(120);
+  const aiFrom = daysAgo(90);
+
+  const scales: ScaleStat[] = SCALES.map((s) => {
+    const vals = pts.filter((p) => p.scores[s.key] != null);
+    const teacherPts = vals.filter((p) => p.source === 'teacher');
+    const teacher = teacherPts.length ? teacherPts[teacherPts.length - 1].scores[s.key]! : null;
+    const ai = mean(vals.filter((p) => p.source === 'ai' && p.date >= aiFrom).map((p) => p.scores[s.key]!));
+    const current = teacher != null && ai != null ? r1((teacher + ai) / 2) : (teacher ?? ai);
+    const last = mean(vals.filter((p) => p.date >= recent).map((p) => p.scores[s.key]!));
+    const prev = mean(vals.filter((p) => p.date < recent && p.date >= prevStart).map((p) => p.scores[s.key]!));
+    let trend: ScaleStat['trend'] = 'unknown';
+    if (last != null && prev != null) trend = last - prev > 0.7 ? 'up' : last - prev < -0.7 ? 'down' : 'flat';
+    return { key: s.key, label: s.label, current, teacher, ai, trend, points: vals.length };
+  });
+
+  const byMonth = new Map<string, ScalePoint[]>();
+  for (const p of pts) {
+    const m = p.date.slice(0, 7);
+    if (!byMonth.has(m)) byMonth.set(m, []);
+    byMonth.get(m)!.push(p);
+  }
+  const monthly = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, list]) => {
+    const row: Record<string, number | string | null> = { month };
+    for (const s of SCALES) row[s.key] = mean(list.filter((p) => p.scores[s.key] != null).map((p) => p.scores[s.key]!));
+    return row;
+  });
+
+  const materialsByMonth = all<{ month: string; count: number }>(
+    `SELECT substr(COALESCE(material_date, created_at), 1, 7) AS month, COUNT(*) AS count FROM files
+     WHERE student_id = ? GROUP BY month ORDER BY month`,
+    studentId,
+  );
+  return { scales, monthly, materialsByMonth, totalPoints: pts.length };
 }

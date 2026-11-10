@@ -135,6 +135,36 @@ function addColumn(table: string, column: string, ddl: string) {
 addColumn('files', 'kind', "kind TEXT NOT NULL DEFAULT 'file'");
 addColumn('files', 'extracted_text', 'extracted_text TEXT');
 addColumn('files', 'extract_status', 'extract_status TEXT');
+addColumn('files', 'category', 'category TEXT');
+addColumn('files', 'material_date', 'material_date TEXT');
+addColumn('files', 'ai_status', 'ai_status TEXT');
+addColumn('files', 'ai_summary', 'ai_summary TEXT');
+addColumn('files', 'ai_scores', 'ai_scores TEXT');
+addColumn('files', 'ai_tags', 'ai_tags TEXT');
+addColumn('files', 'ai_error', 'ai_error TEXT');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS assessments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  scores TEXT NOT NULL,
+  comment TEXT NOT NULL DEFAULT '',
+  teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_assess_student ON assessments(student_id, date);
+
+CREATE TABLE IF NOT EXISTS class_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT NOT NULL,
+  focus TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
 
 const subjectCount = db.prepare('SELECT COUNT(*) AS c FROM subjects').get() as { c: number };
 if (subjectCount.c === 0) {

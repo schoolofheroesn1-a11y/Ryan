@@ -37,11 +37,23 @@ echo "   Node.js $(node -v)"
 echo "→ 3/6 Копирование сайта в $APP_DIR"
 mkdir -p "$APP_DIR"
 if [ "$SRC_DIR" != "$APP_DIR" ]; then
-  # Данные (база и загруженные файлы) при повторной установке не трогаем.
+  # Обновление: данные (папка data) и настройки (.env) на сервере сохраняются.
+  [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" /tmp/coach-sl.env.keep
+  if [ -d "$APP_DIR/data" ]; then
+    echo "   Резервная копия данных"
+    mkdir -p /var/backups/coach-sl
+    tar -czf "/var/backups/coach-sl/data-$(date +%Y%m%d-%H%M%S).tar.gz" -C "$APP_DIR" data
+  fi
+  rm -rf "$APP_DIR/dist" "$APP_DIR/dist-server" "$APP_DIR/node_modules"
   cp -a "$SRC_DIR"/. "$APP_DIR"/
+  [ -f /tmp/coach-sl.env.keep ] && mv /tmp/coach-sl.env.keep "$APP_DIR/.env"
 fi
 cd "$APP_DIR"
 [ -f .env ] || cp .env.example .env
+# Добавляем в .env новые настройки, которых там ещё нет (существующие не трогаем).
+grep -E '^[A-Z_]+=' .env.example | while IFS='=' read -r key _; do
+  grep -q "^$key=" .env || grep -E "^$key=" .env.example >> .env
+done
 if [ ! -d node_modules ] || [ ! -d node_modules/express ]; then npm ci --omit=dev; fi
 mkdir -p data
 chown -R www-data:www-data "$APP_DIR"
