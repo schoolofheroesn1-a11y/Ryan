@@ -53,11 +53,20 @@ systemctl enable --now school-portfolio >/dev/null
 systemctl restart school-portfolio
 
 echo "→ 5/6 Настройка nginx для $DOMAIN"
+# Некоторые образы VPS (например, «Node.js» у SpaceWeb) запускают демо-приложение в Docker на порту 80.
+if command -v docker >/dev/null && systemctl is-active --quiet docker; then
+  if docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE '(0\.0\.0\.0|\[?::\]?):(80|443|3000)->'; then
+    echo "   Отключаю предустановленное демо-приложение в Docker (занимает нужные порты)"
+    systemctl disable --now docker.socket docker >/dev/null 2>&1 || true
+    systemctl restart school-portfolio
+  fi
+fi
 sed "s/coach-sl\.ru/$DOMAIN/g" deploy/coach-sl.ru.nginx.conf > "/etc/nginx/sites-available/$DOMAIN"
 ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 rm -f /etc/nginx/sites-enabled/default
 nginx -t -q
-systemctl reload nginx
+systemctl enable nginx >/dev/null 2>&1
+systemctl restart nginx
 
 echo "→ 6/6 HTTPS-сертификат"
 if certbot --nginx -n --agree-tos --register-unsafely-without-email --redirect -d "$DOMAIN" -d "www.$DOMAIN"; then
