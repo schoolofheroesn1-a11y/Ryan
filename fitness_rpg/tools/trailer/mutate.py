@@ -4,10 +4,13 @@
 1-бит → глаза героя и удар кулаком → Game Boy → четыре земли → синтвейв → реальность (видео отжиманий)
 → Хеллоуин и рисунки → туннель стикеров → хаос «Windows 95» и синий экран → психоделический босс
 → глаза и кулак → логотип. Всё рисуется из атласа игры в пикселях 200×150 (окно ×5), реальные кадры —
-из видео игроков. Музыка синтезируется здесь же (150 уд/мин: доля = 12 кадров), каждая сцена — свой жанр.
+из видео игроков, глаза и кулак — вставки из видео-референса. Звук — отрезок трека (121 уд/мин), сцены режутся по долям:
+кулак — на дроп, синий экран — в провал, босс — на повторный дроп. Кадр «качается» на каждую долю, трясётся на ударах,
+на склейках — RGB-расслоение и глитч.
 
 Запуск:
-  python mutate.py --fonts FONTS_DIR --clips CLIP1 CLIP2 CLIP3 CLIP4 --drawings QUEEN.png FLUFF.png --out mutate.mp4
+  python mutate.py --fonts FONTS_DIR --clips CLIP:старт:x:y:w:h ... --drawings QUEEN.png FLUFF.png \
+      --ref REF.mp4 --track TRACK.mp3 --out mutate.mp4
 """
 import argparse
 import math
@@ -20,24 +23,26 @@ import zlib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
-import music as M
+
 from compose import H, W, PixelFont, caption_image, fit_size
 from promo import Atlas
 
 FPS = 30
-BPM = 150
-BEAT = 12  # кадров на долю
+BPM = 121.0  # темп трека (Angelov — Katalam)
+BEAT = FPS * 60 / BPM  # кадров на долю (≈14.88)
+TRACK_START = 281.958  # с этой секунды трека: 8 долей нарастания, на 9-й — дроп (285.925)
 CW, CH = 200, 150  # пиксельный холст игры (окно 1000×750)
 SCALE = 5
 WIN_X, WIN_Y = 40, 560
-SR = M.SR
+SR = 44100
 GROUND = 120  # земля на холсте
 rnd = random.Random(7)
 
 # Сцены: (имя, долей). Счёт «ТЫ n : 0 ТЬМА» растёт на каждой новой земле, счётчик отжиманий — на каждом ударе.
-SCENES = [("onebit", 8), ("eyes", 3), ("fist", 1), ("gameboy", 6), ("lands", 8), ("synth", 8), ("real", 8),
-          ("spire", 8), ("tunnel", 4), ("win95", 8), ("bsod", 3), ("boss", 10), ("eyes2", 2), ("fist2", 1),
-          ("flash", 1), ("logo", 10)]
+# кулак — ровно на дроп, синий экран — в провал трека, босс — на повторный дроп (через 64 доли)
+SCENES = [("onebit", 4), ("eyes", 4), ("fist", 1), ("gameboy", 7), ("lands", 8), ("synth", 10), ("real", 10),
+          ("spire", 9), ("tunnel", 4), ("win95", 11), ("bsod", 4), ("boss", 12), ("eyes2", 3), ("fist2", 1),
+          ("flash", 1), ("logo", 9)]
 LABEL = {"onebit": "1-БИТ", "gameboy": "GAME BOY", "lands": "4 ЗЕМЛИ", "synth": "СИНТВЕЙВ", "real": "РЕАЛЬНОСТЬ",
          "spire": "ХЕЛЛОУИН", "tunnel": "???", "win95": "WINDOWS 95", "bsod": "", "boss": "ФИНАЛЬНЫЙ БОСС"}
 BATTLE = {"onebit", "gameboy", "lands", "synth", "real", "spire", "win95", "boss"}
@@ -101,18 +106,19 @@ class Fight:
         return img
 
     def draw(self, c, k, style=None, dmg_col=(255, 240, 200)):
-        b, p = k // BEAT, k % BEAT
+        b = int(k // BEAT)
+        p = k - b * BEAT
         hero_turn = b % 2 == 0
         at = self.at
-        e_name = f"{self.enemy}_idle_{(k // 8) % 2}"
+        e_name = f"{self.enemy}_idle_{int(k // 8) % 2}"
         ex = self.ex
         if hero_turn and 1 <= p <= 4:
             e_name = f"{self.enemy}_hurt_0"
         if not hero_turn:
-            e_name = f"{self.enemy}_windup_{(k // 3) % 2}" if p >= 8 else f"{self.enemy}_attack_0" if p < 4 else f"{self.enemy}_idle_0"
+            e_name = f"{self.enemy}_windup_{int(k // 3) % 2}" if p >= 8 else f"{self.enemy}_attack_0" if p < 4 else f"{self.enemy}_idle_0"
             if p < 4:
                 ex -= 26 * (1 - p / 4)
-        h_name = f"{self.hero}_idle_{(k // 10) % 2}"
+        h_name = f"{self.hero}_idle_{int(k // 10) % 2}"
         hx = self.hx
         if hero_turn and p < 5:
             h_name, hx = f"{self.hero}_attack_0", self.hx + 8
@@ -257,10 +263,10 @@ def make_scenes(at, pf, clips, drawings):
     LANDS = [("arena_bg", "skeleton"), ("castle_bg", "bandit"), ("graveyard_bg", "wraith"), ("abyss_bg", "imp")]
 
     def lands(k, sc):
-        bgn, en = LANDS[min(3, k // (BEAT * 2))]
+        bgn, en = LANDS[min(3, int(k // (BEAT * 2)))]
         c = bg_crop(bgn)
         Fight(at, hero, en, ex=112 if en != "wraith" else 100).draw(c, k)
-        score(c, sc + k // (BEAT * 2))
+        score(c, sc + int(k // (BEAT * 2)))
         return c
 
     # --- синтвейв: закат, полосатое солнце, неоновая сетка, герой с контуром
@@ -289,13 +295,13 @@ def make_scenes(at, pf, clips, drawings):
 
     # --- реальность: видео отжиманий игроков, поверх — пиксельный бой
     def real(k, sc):
-        i = min(len(clips) - 1, k // (BEAT * 2))
-        fr = clips[i][(k % (BEAT * 2)) % len(clips[i])]
+        i = min(len(clips) - 1, int(k // (BEAT * 2.5)))
+        fr = clips[i][int(k % (BEAT * 2.5)) % len(clips[i])]
         c = fr.copy()  # уже CW×CH пиксельное
         Fight(at, "hero_phoenix_king", "skeleton").draw(c, k)
         d = ImageDraw.Draw(c)
         d.rectangle([2, 2, 30, 13], fill=(0, 0, 0, 170))
-        if (k // 10) % 2:
+        if int(k // 10) % 2:
             d.ellipse([5, 5, 10, 10], fill=(255, 40, 40, 255))
         d.text((13, 3), "REC", fill=(255, 255, 255, 255))
         score(c, sc + i)
@@ -338,7 +344,7 @@ def make_scenes(at, pf, clips, drawings):
             s = 6 + z * z * 260
             col = [(255, 230, 0), (0, 230, 255), (255, 0, 160)][i % 3]
             d.rectangle([cx - s, cy - s * 0.75, cx + s, cy + s * 0.75], outline=col + (255,), width=max(1, int(z * 4)))
-            st = stickers[(i + k // 6) % len(stickers)]
+            st = stickers[(i + int(k // 6)) % len(stickers)]
             sz = max(4, int(4 + z * 40))
             sti = st.copy()
             sti.thumbnail((sz, sz))
@@ -370,12 +376,12 @@ def make_scenes(at, pf, clips, drawings):
         for j, (tx, ty) in enumerate(trail):
             col = [(255, 0, 0), (255, 140, 0), (255, 230, 0), (0, 200, 0), (0, 120, 255), (160, 0, 255)][j % 6]
             d.rectangle([tx + 6, ty + 12, tx + 18, ty + 18], fill=col + (255,))
-        hs = at["hero_frost_both_attack_0"] if (k // 6) % 2 else at["hero_frost_both_idle_0"]
+        hs = at["hero_frost_both_attack_0"] if int(k // 6) % 2 else at["hero_frost_both_idle_0"]
         c.alpha_composite(hs, (int(x), int(y)))
         big = c.resize((500, 375), Image.NEAREST)  # окна и надписи — пиксельным шрифтом игры в двойном разрешении
         d = ImageDraw.Draw(big)
         pf.draw(d, (14, 375 - 26), "Пуск", 8, (0, 0, 0))
-        n = min(len(ERRS), k // BEAT + 1)
+        n = min(len(ERRS), int(k // BEAT) + 1)
         for i in range(n):  # окна ошибок копятся каскадом
             wx, wy = 30 + (i * 37) % 170, 40 + (i * 31) % 190
             d.rectangle([wx + 4, wy + 4, wx + 284, wy + 84], fill=(0, 0, 0))
@@ -402,7 +408,7 @@ def make_scenes(at, pf, clips, drawings):
                  "* Ctrl+Alt+Del - к костру."]
         for i, ln in enumerate(lines):
             pf.draw(d, (36, 100 + i * 24), ln, 8, (255, 255, 255))
-        if (k // 8) % 2:
+        if int(k // 8) % 2:
             pf.draw(d, (36, 100 + 7 * 24), "_", 8, (255, 255, 255))
         return c
 
@@ -422,14 +428,15 @@ def make_scenes(at, pf, clips, drawings):
             s = 20 + ((i * 25 + k * 3) % 100)
             d.rectangle([cx - s, cy - s * 0.7, cx + s, cy + s * 0.7], outline=(255, 0, 255, 255), width=2)
         en = "stalker2" if k < BEAT * 6 else "vampire"
-        b, p = k // BEAT, k % BEAT
-        es = at[f"{en}_hurt_0"] if 1 <= p <= 3 and b % 2 == 0 else at[f"{en}_idle_{(k // 8) % 2}"]
+        b = int(k // BEAT)
+        p = k - b * BEAT
+        es = at[f"{en}_hurt_0"] if 1 <= p <= 3 and b % 2 == 0 else at[f"{en}_idle_{int(k // 8) % 2}"]
         es = es.resize((int(es.width * 0.9), int(es.height * 0.9)), Image.NEAREST) if en == "stalker2" else es
         glow = outline(es, (255, 220, 60), 2)
         c.alpha_composite(glow, (int(CW - glow.width - 6 + math.sin(t * 9) * 2), int(GROUND + 18 - glow.height)))
         hs = at["hero_phoenix_wing_attack_0"] if p < 5 and b % 2 == 0 else at["hero_phoenix_wing_idle_0"]
         c.alpha_composite(outline(hs, (255, 255, 255)), (24, GROUND + 18 - hs.height))
-        if p == 1 and b % 2 == 0:
+        if 1 <= p < 2 and b % 2 == 0:
             for _ in range(40):
                 a = rnd.uniform(0, math.tau)
                 sparks.append([CW - 50, CH / 2, math.cos(a) * rnd.uniform(1, 4), math.sin(a) * rnd.uniform(1, 4), 1.0])
@@ -451,7 +458,7 @@ def make_scenes(at, pf, clips, drawings):
         c = bg_crop("title_bg", 60)
         d = ImageDraw.Draw(c)
         d.rectangle([0, 0, CW, CH], fill=(0, 0, 0, 120))
-        hs = at["hero_phoenix_wing_idle_" + str((k // 10) % 2)]
+        hs = at["hero_phoenix_wing_idle_" + str(int(k // 10) % 2)]
         c.alpha_composite(hs.resize((hs.width * 2, hs.height * 2), Image.NEAREST), (CW // 2 - hs.width, 66))
         text(c, (CW // 2, 18), "ASH & IRON", 16, (232, 206, 160), stroke=1, sc=(120, 30, 26))
         if k > 10:
@@ -478,99 +485,31 @@ def load_clip(path, start, n, crop):
     return frames
 
 
-# ------------------------------------------------------------------ музыка: у каждой сцены свой жанр, всё в одном темпе
-def build_track(spans, dur):
-    beat = 60 / BPM
-    m = np.zeros(int(SR * dur) + SR)
-    prog = [("A", ["A", "C", "E"]), ("F", ["F", "A", "C"]), ("C", ["C", "E", "G"]), ("G", ["G", "B", "D"])]
-
-    def blip(f, d, duty=0.5, g=1.0):
-        return M.square(f, d, duty) * M.env(int(SR * d), 0.001, d / 3) * g
-
-    def bass(f, d, grit=2.0):
-        return np.tanh(grit * M.saw(f, d)) * M.env(int(SR * d), 0.003, d / 2)
-
-    big = M.taiko(58, 0.6)
-    for name, t0, nb in spans:
-        for b in range(nb):
-            t = t0 + b * beat
-            gb = int(round(t / beat))
-            root, chord = prog[(gb // 4) % 4]
-            if name == "onebit":  # понг: только бипы и щелчки
-                mix_at(m, blip(hz(chord[b % 3], 5), 0.08, 0.5), t, 0.18)
-                if b % 2:
-                    mix_at(m, blip(hz(root, 4), 0.05, 0.5), t + beat / 2, 0.12)
-                mix_at(m, M.HAT, t, 0.15)
-            elif name in ("eyes", "eyes2"):  # нарастание: шум вверх и дробь
-                mix_at(m, M.hp(M.noise(beat)) * np.linspace(0, 1, int(SR * beat)) ** 2, t, 0.25)
-                for k in range(4):
-                    mix_at(m, M.SNARE, t + k * beat / 4, 0.15 + 0.08 * b)
-            elif name in ("fist", "fist2"):
-                mix_at(m, M.sfx("boom"), t, 0.8)
-                mix_at(m, M.KICK, t, 1.0)
-            elif name == "bsod":  # тишина и писк
-                mix_at(m, np.sin(2 * np.pi * 50 * M.t_(beat)) * 0.05, t, 1.0)
-                if b == 0:
-                    mix_at(m, M.square(880, 0.4, 0.5) * M.env(int(SR * 0.4), 0.002, 0.3), t, 0.12)
-            elif name == "flash":
-                mix_at(m, M.CRASH, t, 0.6)
-                mix_at(m, M.KICK, t, 1.0)
-            elif name == "logo":
-                if b == 0:
-                    tail = nb * beat
-                    pad = sum(M.saw(hz(n, o) * (1 + det), tail) for n, o in (("A", 2), ("E", 3), ("A", 3), ("C", 4)) for det in (0, 0.006))
-                    mix_at(m, np.tanh(pad / 4) * np.linspace(1, 0, int(SR * tail)) ** 1.4, t, 0.35)
-                    mix_at(m, big, t, 1.0)
-                    mix_at(m, M.CRASH, t, 0.5)
-            else:  # ритмичные миры
-                heavy = name in ("real", "boss", "lands")
-                mix_at(m, M.KICK, t, 1.0 if heavy else 0.85)
-                if b % 2:
-                    mix_at(m, M.SNARE, t, 0.5)
-                hats = 4 if name in ("synth", "boss", "lands", "tunnel") else 2
-                for k in range(hats):
-                    mix_at(m, M.HAT, t + k * beat / hats, 0.16)
-                if name == "gameboy":  # чиптюн-арпеджио
-                    for k in range(4):
-                        mix_at(m, blip(hz(chord[(b * 4 + k) % 3], 5), beat / 4 * 0.8, 0.25), t + k * beat / 4, 0.1)
-                    mix_at(m, M.tri(hz(root, 3), beat * 0.9) * M.env(int(SR * beat * 0.9), 0.003, 0.2), t, 0.3)
-                elif name == "synth":  # синтвейв: гейтованный бас восьмыми и пад
-                    for k in range(2):
-                        mix_at(m, M.lp(bass(hz(root, 2), beat / 2 * 0.9, 1.2), 0.15), t + k * beat / 2, 0.3)
-                    if b % 4 == 0:
-                        pad = sum(M.saw(hz(n, 4) * (1 + d), beat * 4) for n in chord for d in (0, 0.005))
-                        mix_at(m, M.lp(pad / 6, 0.05) * M.env(int(SR * beat * 4), 0.2, 2.0), t, 0.3)
-                elif name == "tunnel":  # глитч: дробь малого
-                    for k in range(4):
-                        mix_at(m, M.SNARE, t + k * beat / 4, 0.2)
-                elif name == "win95":  # «динь» ошибки на каждую долю
-                    mix_at(m, (np.sin(2 * np.pi * 1047 * M.t_(0.25)) + 0.5 * np.sin(2 * np.pi * 1568 * M.t_(0.25))) * M.env(int(SR * 0.25), 0.002, 0.08), t, 0.18)
-                    mix_at(m, M.tri(hz(root, 3), beat * 0.5) * M.env(int(SR * beat * 0.5), 0.003, 0.1), t, 0.35)
-                elif name == "spire":  # колокол и тёмный бас
-                    if b % 2 == 0:
-                        mix_at(m, M.bell(hz(chord[b % 3], 5), 1.2), t, 0.25)
-                    mix_at(m, bass(hz(root, 2), beat * 0.9, 3), t, 0.18)
-                else:  # земли, реальность, босс: рычащий бас и мотив
-                    for k in range(2):
-                        mix_at(m, bass(hz(root, 2), beat / 2 * 0.85, 3), t + k * beat / 2, 0.25)
-                    for k in range(2):
-                        n = chord[(b * 2 + k) % 3]
-                        mix_at(m, (M.square(hz(n, 5), beat / 2 * 0.8, 0.25) + 0.4 * M.square(hz(n, 6), beat / 2 * 0.8, 0.5)) * M.env(int(SR * beat / 2 * 0.8), 0.002, 0.08), t + k * beat / 2, 0.07)
-                    if name == "boss":
-                        mix_at(m, big, t, 0.6)
-                        if b % 4 == 0:
-                            mix_at(m, M.CRASH, t, 0.35)
-            if name in BATTLE and b % 2 == 0 and name not in ("onebit",):
-                mix_at(m, M.sfx("hit"), t, 0.25)  # удар героя
-    return m
+def load_ref(path, start, n, box):
+    """Кадры вставки из видео-референса (глаза, кулак): вырезка окна box=(x0, y0, x1, y1), RGB-массивы."""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(start), "-i", path, "-frames:v", str(n), "-r", str(FPS),
+                          "-vf", f"crop={w}:{h}:{x0}:{y0}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                         capture_output=True, check=True).stdout
+    return [np.frombuffer(raw[i * w * h * 3:(i + 1) * w * h * 3], np.uint8).reshape(h, w, 3) for i in range(len(raw) // (w * h * 3))]
 
 
-def mix_at(buf, x, t, gain):
-    M.mix_at(buf, x, t, gain)
-
-
-def hz(n, o):
-    return M.hz(n, o)
+def eyes_window(fr, k, base):
+    """Полоса с глазами по жёлтым кромкам (без цифр понга) поверх нашего тёмного 1-бит поля."""
+    yel = (fr[..., 0] > 190) & (fr[..., 1] > 160) & (fr[..., 2] < 110)
+    mask = np.zeros(fr.shape[:2], bool)
+    cols = np.where(yel.any(0))[0]
+    for x in cols:
+        ys = np.where(yel[:, x])[0]
+        if ys[-1] - ys[0] > 20:
+            mask[ys[0]:ys[-1] + 1, x] = True
+    band = Image.fromarray(fr).convert("RGBA")
+    band.putalpha(Image.fromarray((mask * 255).astype(np.uint8)))
+    win = base.copy()
+    band = band.resize((1000, int(band.height * 1000 / band.width)), Image.BILINEAR)
+    win.alpha_composite(band, (0, (750 - band.height) // 2))
+    return win
 
 
 def main():
@@ -578,6 +517,8 @@ def main():
     ap.add_argument("--fonts", required=True)
     ap.add_argument("--clips", nargs="+", required=True, help="видео:старт:x:y:w:h")
     ap.add_argument("--drawings", nargs=2, required=True)
+    ap.add_argument("--ref", required=True, help="видео-референс: глаза 3.53–5.93 с, кулак 6.03–6.33 с")
+    ap.add_argument("--track", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     pf = PixelFont(a.fonts)
@@ -585,92 +526,162 @@ def main():
     clips = []
     for spec in a.clips:
         path, start, x, y, w, h = spec.rsplit(":", 5)
-        clips.append(load_clip(path, float(start), BEAT * 2, (int(x), int(y), int(w), int(h))))
+        clips.append(load_clip(path, float(start), int(BEAT * 2.5) + 2, (int(x), int(y), int(w), int(h))))
     drawings = [Image.open(p).convert("RGBA") for p in a.drawings]
     scenes = make_scenes(at, pf, clips, drawings)
+    ref_eyes = load_ref(a.ref, 3.53, 75, (45, 115, 810, 705))
+    ref_fist = load_ref(a.ref, 6.03, 10, (50, 125, 805, 691))
+
+    def eyes_scene(k, sc):
+        base = scenes["onebit"](0, sc).convert("RGBA").resize((1000, 750), Image.NEAREST)
+        base = Image.blend(base, Image.new("RGBA", base.size, (0, 0, 0, 255)), 0.6)
+        return eyes_window(ref_eyes[min(len(ref_eyes) - 1, k)], k, base)
+
+    def fist_scene(k, sc):
+        fr = Image.fromarray(ref_fist[min(len(ref_fist) - 1, k)]).convert("RGBA")
+        z = 1.25 - min(0.25, k * 0.04)  # кулак летит в камеру
+        big = fr.resize((int(1000 * z), int(750 * z)), Image.BILINEAR)
+        win = Image.new("RGBA", (1000, 750))
+        win.paste(big, ((1000 - big.width) // 2, (750 - big.height) // 2))
+        return win
+
+    scenes.update({"eyes": eyes_scene, "eyes2": eyes_scene, "fist": fist_scene, "fist2": fist_scene})
 
     hook = caption_image(pf, ["КАЖДОЕ ОТЖИМАНИЕ", "МЕНЯЕТ ИГРУ"], [fit_size(pf, "КАЖДОЕ ОТЖИМАНИЕ", 60), 76],
                          [(240, 232, 214), (255, 150, 60)])
+    SCENE_COL = {"onebit": (60, 60, 60), "gameboy": (60, 110, 30), "lands": (150, 60, 30), "synth": (200, 40, 200),
+                 "real": (60, 120, 200), "spire": (230, 110, 30), "tunnel": (230, 210, 0), "win95": (0, 128, 128),
+                 "bsod": (0, 0, 170), "boss": (255, 40, 160), "logo": (150, 40, 30)}
+    CALM = {"onebit", "eyes", "bsod", "logo"}
     frames = Frames()
-    spans, t, score, reps = [], 0.0, 0, 0
+    score, reps, beat_no = 0, 0, 0
     label_age = {}
-    for name, nb in SCENES:
-        spans.append((name, t, nb))
-        n = nb * BEAT
+    lines = []  # линии скорости на фоне
+    meta = []  # (сцена, кадр в сцене, номер доли, фаза доли)
+    for si, (name, nb) in enumerate(SCENES):
+        f0, f1 = round(beat_no * BEAT), round((beat_no + nb) * BEAT)
         if name in BATTLE:
             score += 1
-        for k in range(n):
-            if name in BATTLE and k % (BEAT * 2) == 0:
+        for k in range(f1 - f0):
+            gk = f0 + k
+            gb = int(gk // BEAT)
+            phase = gk - gb * BEAT
+            if name in BATTLE and int(k // BEAT) % 2 == 0 and phase < 1:
                 reps += 1
-            win = scenes[name](k, score).convert("RGB").resize((CW * SCALE, CH * SCALE), Image.NEAREST)  # холст 200×150 или 500×375
-            f = Image.new("RGB", (W, H), (14, 12, 18))
-            d = ImageDraw.Draw(f)
-            for gy in range(0, H, 6):  # тёмный «стол» с лёгкими полосами
-                if gy % 12 == 0:
-                    d.line([0, gy, W, gy], fill=(18, 16, 24))
-            # окно браузера: заголовок, кнопки, адрес
+            win = scenes[name](k, score).convert("RGB").resize((CW * SCALE, CH * SCALE), Image.NEAREST)
+            col = SCENE_COL.get(name, (40, 30, 50))
+            calm = name in CALM
+            pump = 0 if calm else math.exp(-phase / 3)  # «качка» на каждую долю
+            f = Image.new("RGB", (W, H), tuple(int(c * 0.12) for c in col))
+            d = ImageDraw.Draw(f, "RGBA")
+            # фон: радиальная вспышка цвета сцены на долю и летящие линии скорости
+            r = 700 + 200 * pump
+            for rr, aa in ((r, 30), (r * 0.7, 40), (r * 0.45, 50)):
+                d.ellipse([W / 2 - rr, 960 - rr, W / 2 + rr, 960 + rr], fill=col + (int(aa * (0.4 + pump)),))
+            if not calm:
+                for _ in range(3):
+                    lines.append([rnd.uniform(0, W), -200, rnd.uniform(40, 90), rnd.uniform(100, 300)])
+            for ln in lines:
+                ln[1] += ln[2]
+                d.line([ln[0], ln[1], ln[0], ln[1] + ln[3]], fill=col + (90,), width=4)
+            lines[:] = [ln for ln in lines if ln[1] < H]
+            # окно браузера
             d.rectangle([WIN_X - 4, WIN_Y - 52, WIN_X + CW * SCALE + 4, WIN_Y + CH * SCALE + 4], fill=(48, 46, 54))
-            for i, col in enumerate(((255, 95, 86), (255, 189, 46), (39, 201, 63))):
-                d.ellipse([WIN_X + 14 + i * 34, WIN_Y - 38, WIN_X + 38 + i * 34, WIN_Y - 14], fill=col)
+            for i, cc in enumerate(((255, 95, 86), (255, 189, 46), (39, 201, 63))):
+                d.ellipse([WIN_X + 14 + i * 34, WIN_Y - 38, WIN_X + 38 + i * 34, WIN_Y - 14], fill=cc)
             d.rounded_rectangle([WIN_X + 140, WIN_Y - 42, WIN_X + CW * SCALE - 140, WIN_Y - 10], 10, fill=(30, 28, 34))
             url = "ash-a-iron.com"
             pf.draw(d, ((W - pf.width(url, 22)) // 2, WIN_Y - 36), url, 22, (200, 196, 210))
-            if name == "real":  # реальность — без пикселизации
-                f.paste(win, (WIN_X, WIN_Y))
-            else:
-                f.paste(win, (WIN_X, WIN_Y))
-            # крючок сверху
-            f_rgba = f.convert("RGBA")
-            f_rgba.alpha_composite(hook, ((W - hook.width) // 2, 230))
-            dd = ImageDraw.Draw(f_rgba)
-            if name not in ("logo",):
-                s = f"ОТЖИМАНИЙ: {reps}"
-                sz = 54
-                pop = 1.0 + (0.25 if name in BATTLE and k % (BEAT * 2) < 4 else 0)
-                sz2 = int(sz * pop)
-                pf.draw(dd, ((W - pf.width(s, sz2)) // 2 + 6, 1370 + 6), s, sz2, (120, 30, 26), stroke=4, stroke_fill=(120, 30, 26))
-                pf.draw(dd, ((W - pf.width(s, sz2)) // 2, 1370), s, sz2, (255, 214, 110), stroke=4, stroke_fill=(10, 8, 12))
+            f.paste(win, (WIN_X, WIN_Y))
+            fr = f.convert("RGBA")
+            hz_ = 1 + 0.06 * pump  # зацепка подпрыгивает в такт
+            hk = hook.resize((int(hook.width * hz_), int(hook.height * hz_)), Image.BILINEAR) if pump > 0.05 else hook
+            fr.alpha_composite(hk, ((W - hk.width) // 2, 230 - (hk.height - hook.height) // 2))
+            dd = ImageDraw.Draw(fr)
+            if name != "logo":
+                txt = f"ОТЖИМАНИЙ: {reps}"
+                sz = int(54 * (1 + 0.3 * pump * (name in BATTLE)))
+                pf.draw(dd, ((W - pf.width(txt, sz)) // 2 + 6, 1370 + 6), txt, sz, (120, 30, 26), stroke=4, stroke_fill=(120, 30, 26))
+                pf.draw(dd, ((W - pf.width(txt, sz)) // 2, 1370), txt, sz, (255, 214, 110), stroke=4, stroke_fill=(10, 8, 12))
             lab = LABEL.get(name, "")
             if lab:
-                age = label_age.setdefault(name, 0)
-                label_age[name] += 1
                 ls = fit_size(pf, lab, 44)
-                col = (150, 220, 255) if name != "boss" else (255, 120, 90)
-                pf.draw(dd, ((W - pf.width(lab, ls)) // 2, 1470), lab, ls, col, stroke=3, stroke_fill=(10, 8, 12))
+                lc = (150, 220, 255) if name != "boss" else (255, 120, 90)
+                pf.draw(dd, ((W - pf.width(lab, ls)) // 2, 1470), lab, ls, lc, stroke=3, stroke_fill=(10, 8, 12))
             if name == "logo" and k > 20:
-                for i2, (ln, sz, col) in enumerate((("ASH-A-IRON.COM", 64, (255, 180, 90)), ("ИГРАЙ БЕСПЛАТНО В БРАУЗЕРЕ", 34, (240, 232, 214)))):
-                    s2 = fit_size(pf, ln, sz)
-                    pf.draw(dd, ((W - pf.width(ln, s2)) // 2, 1380 + i2 * 100), ln, s2, col, stroke=4, stroke_fill=(10, 8, 12))
-            out = f_rgba.convert("RGB")
-            if k < 2 and name not in ("onebit",):  # вспышка на склейке
-                out = Image.blend(out, Image.new("RGB", (W, H), (255, 255, 255)), 0.5 if k == 0 else 0.25)
-            frames.append(out)
-        t += nb * 60 / BPM
+                for i2, (ln, sz2, c2) in enumerate((("ASH-A-IRON.COM", 64, (255, 180, 90)), ("ИГРАЙ БЕСПЛАТНО В БРАУЗЕРЕ", 34, (240, 232, 214)))):
+                    s2 = fit_size(pf, ln, sz2)
+                    pf.draw(dd, ((W - pf.width(ln, s2)) // 2, 1380 + i2 * 100), ln, s2, c2, stroke=4, stroke_fill=(10, 8, 12))
+            frames.append(fr)
+            meta.append((name, k, gb, phase, si))
+        beat_no += nb
 
     total = len(frames)
     dur = total / FPS
-    track = build_track(spans, dur)[: int(SR * dur)]
-    track = np.tanh(track * 1.1) / np.tanh(1.1)
-    track /= max(1e-6, np.max(np.abs(track))) / 0.9
+    # звук: отрезок трека; на логотипе — затухание
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(TRACK_START), "-t", str(dur + 0.5), "-i", a.track, "-ac", "2", "-ar", str(SR),
+                          "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    track = np.frombuffer(raw, np.int16).reshape(-1, 2).astype(np.float32) / 32768
+    track = track[: int(SR * dur)].copy()
+    fade = int(SR * 3.0)
+    track[-fade:] *= np.linspace(1, 0, fade)[:, None] ** 1.5
+    track[: int(SR * 0.03)] *= np.linspace(0, 1, int(SR * 0.03))[:, None]
     tmp = tempfile.mkdtemp()
     wav = f"{tmp}/a.wav"
     with wave.open(wav, "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(SR)
         w.writeframes((np.clip(track, -1, 1) * 32767).astype(np.int16).tobytes())
     enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
                             "-i", wav, "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
                             "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-movflags", "+faststart", "-shortest", a.out], stdin=subprocess.PIPE)
-    shake_at = {sum(nb for _, nb in SCENES[:i]) * BEAT for i, (n, _) in enumerate(SCENES) if n in ("fist", "fist2", "boss", "gameboy", "logo")}
-    for k in range(total):
-        f = frames.image(k)
-        for s0 in shake_at:
-            if 0 <= k - s0 < 8:
-                amp = 24 * (1 - (k - s0) / 8)
-                moved = Image.new("RGB", (W, H), (14, 12, 18))
-                moved.paste(f, (int(rnd.uniform(-amp, amp)), int(rnd.uniform(-amp, amp))))
-                f = moved
+    cuts = {i for i in range(total) if i == 0 or meta[i][4] != meta[i - 1][4]}
+    since_cut = 99
+    for i in range(total):
+        f = frames.image(i)
+        name, k, gb, phase, si = meta[i]
+        since_cut = 0 if i in cuts else since_cut + 1
+        calm = name in ("onebit", "eyes", "eyes2", "bsod", "logo")
+        pump = 0 if calm else math.exp(-phase / 3)
+        # 1) «качка»: кадр чуть приближается на каждую долю, в бою — ещё и наклон
+        zoom = 1 + 0.045 * pump + (0.08 if since_cut < 3 and name in ("fist", "fist2", "boss", "gameboy") else 0)
+        ang = 0
+        if name in ("boss", "real", "synth", "tunnel"):
+            ang = 1.6 * math.sin(i / 9) + (2.5 * pump if gb % 2 == 0 else -2.5 * pump)
+        if zoom != 1 or ang:
+            big = f.resize((int(W * zoom), int(H * zoom)), Image.BILINEAR)
+            if ang:
+                big = big.rotate(ang, resample=Image.BILINEAR, fillcolor=(10, 8, 12))
+            f = big.crop(((big.width - W) // 2, (big.height - H) // 2, (big.width - W) // 2 + W, (big.height - H) // 2 + H))
+        # 2) тряска: на склейках и на ударе героя (каждая вторая доля)
+        amp = 0
+        if since_cut < 8 and name not in ("onebit", "logo"):
+            amp = 28 * (1 - since_cut / 8)
+        elif not calm and gb % 2 == 0 and phase < 5:
+            amp = 10 * (1 - phase / 5)
+        if amp:
+            moved = Image.new("RGB", (W, H), (10, 8, 12))
+            moved.paste(f, (int(rnd.uniform(-amp, amp)), int(rnd.uniform(-amp, amp))))
+            f = moved
+        # 3) RGB-расслоение и глитч-полосы на склейках
+        if since_cut < 4 and name != "onebit":
+            arr = np.array(f)
+            sh = int(18 * (1 - since_cut / 4))
+            arr[..., 0] = np.roll(arr[..., 0], sh, 1)
+            arr[..., 2] = np.roll(arr[..., 2], -sh, 1)
+            for _ in range(6):
+                y0 = rnd.randrange(0, H - 120)
+                hh = rnd.randrange(20, 120)
+                arr[y0:y0 + hh] = np.roll(arr[y0:y0 + hh], rnd.randint(-80, 80), 1)
+            f = Image.fromarray(arr)
+            if since_cut == 0:
+                f = Image.blend(f, Image.new("RGB", (W, H), (255, 255, 255)), 0.55)
+        elif not calm and pump > 0.8 and gb % 4 == 0:  # лёгкое расслоение на сильную долю
+            arr = np.array(f)
+            arr[..., 0] = np.roll(arr[..., 0], 6, 1)
+            arr[..., 2] = np.roll(arr[..., 2], -6, 1)
+            f = Image.fromarray(arr)
         enc.stdin.write(f.tobytes())
     enc.stdin.close()
     enc.wait()
