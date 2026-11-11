@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 
-from compose import H, W, PixelFont, caption_image, fit_size
+from compose import H, W, PixelFont, fit_size
 from promo import Atlas
 
 FPS = 30
@@ -547,8 +547,6 @@ def main():
 
     scenes.update({"eyes": eyes_scene, "eyes2": eyes_scene, "fist": fist_scene, "fist2": fist_scene})
 
-    hook = caption_image(pf, ["КАЖДОЕ ОТЖИМАНИЕ", "МЕНЯЕТ ИГРУ"], [fit_size(pf, "КАЖДОЕ ОТЖИМАНИЕ", 60), 76],
-                         [(240, 232, 214), (255, 150, 60)])
     SCENE_COL = {"onebit": (60, 60, 60), "gameboy": (60, 110, 30), "lands": (150, 60, 30), "synth": (200, 40, 200),
                  "real": (60, 120, 200), "spire": (230, 110, 30), "tunnel": (230, 210, 0), "win95": (0, 128, 128),
                  "bsod": (0, 0, 170), "boss": (255, 40, 160), "logo": (150, 40, 30)}
@@ -594,9 +592,6 @@ def main():
             pf.draw(d, ((W - pf.width(url, 22)) // 2, WIN_Y - 36), url, 22, (200, 196, 210))
             f.paste(win, (WIN_X, WIN_Y))
             fr = f.convert("RGBA")
-            hz_ = 1 + 0.06 * pump  # зацепка подпрыгивает в такт
-            hk = hook.resize((int(hook.width * hz_), int(hook.height * hz_)), Image.BILINEAR) if pump > 0.05 else hook
-            fr.alpha_composite(hk, ((W - hk.width) // 2, 230 - (hk.height - hook.height) // 2))
             dd = ImageDraw.Draw(fr)
             if name != "logo":
                 txt = f"ОТЖИМАНИЙ: {reps}"
