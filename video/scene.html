@@ -22,7 +22,7 @@
   <div id="caps"></div>
 </div>
 <script>
-const TOTAL = 68;
+const TOTAL = 65;
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const eo=t=>1-Math.pow(1-clamp(t),3);
@@ -131,12 +131,12 @@ const SCENES=[
  {t0:6.5, t1:13.5, f:atrium},
  {t0:13.5,t1:21.5, f:lesson},
  {t0:21.5,t1:32,   f:breakTime},
- {t0:32,  t1:37.5, f:canteen},
- {t0:37.5,t1:45,   f:volley},
- {t0:45,  t1:53.5, f:bday},
- {t0:53.5,t1:56.5, f:santa},
- {t0:56.5,t1:59.5, f:homework},
- {t0:59.5,t1:68,   f:finale},
+ {t0:32,  t1:36.3, f:canteen},
+ {t0:36.3,t1:43,   f:volley},
+ {t0:43,  t1:49.3, f:bday},
+ {t0:49.3,t1:53,   f:santa},
+ {t0:53,  t1:56.5, f:homework},
+ {t0:56.5,t1:65,   f:finale},
 ];
 
 function street(lt){
@@ -261,7 +261,7 @@ function canteen(lt){
   g+=`<rect x="0" y="1420" width="1080" height="500" fill="#E9B97F"/>`;
   // tiles
   const tiles=[['Завтрак',0],['Обед',1],['Полдник',2],['Ужин',3]];
-  tiles.forEach(([lab,i])=>{const cx=i%2?775:305, cy=i<2?690:990; const k=pop(lt,.5+i*.55);
+  tiles.forEach(([lab,i])=>{const cx=i%2?775:305, cy=i<2?690:990; const k=pop(lt,2.0+i*.5);
     if(k<=0)return; let ic='';
     if(i===0) ic=`<rect x="-40" y="-40" width="80" height="80" rx="16" fill="${P.coral}"/><path d="M40,-20 Q72,-20 72,6 Q72,30 40,30" fill="none" stroke="${P.coral}" stroke-width="12"/>${[-18,8].map(x=>`<path d="M${x},-56 q-10,-14 0,-28 q10,-14 0,-28" fill="none" stroke="#C9B8A8" stroke-width="7" stroke-linecap="round" transform="translate(0,${S(lt*4+x)*3})"/>`).join('')}`;
     if(i===1) ic=`<path d="M-80,-10 L80,-10 Q76,64 0,66 Q-76,64 -80,-10Z" fill="${P.teal}"/><ellipse cx="0" cy="-10" rx="80" ry="16" fill="#F4A261"/><rect x="40" y="-90" width="12" height="80" rx="6" fill="#B0B8C0" transform="rotate(30 46 -50)"/>`;
@@ -285,7 +285,7 @@ function volley(lt){
   for(let i=0;i<3;i++) g+=`<rect x="${90+i*320}" y="760" width="260" height="380" rx="20" fill="#EAF6FF" stroke="#fff" stroke-width="14"/>`;
   // plaque + sticky
   g+=`<rect x="250" y="560" width="580" height="110" rx="24" fill="${P.navy}"/><text x="540" y="633" font-size="56" font-weight="900" text-anchor="middle" fill="#fff">НОВОЕ ЗДАНИЕ</text>`;
-  const sk=pop(lt,4.1,.4);
+  const sk=pop(lt,3.0,.4);
   if(sk>0) g+=`<g transform="translate(800,700) rotate(-9) scale(${sk})"><rect x="-140" y="-60" width="280" height="140" fill="#FFE66D"/><rect x="-40" y="-72" width="80" height="26" fill="#fff" opacity=".7"/><text x="0" y="-4" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">давно</text><text x="0" y="48" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">не новое :)</text></g>`;
   g+=`<rect x="0" y="1380" width="1080" height="540" fill="#EDBB78"/><line x1="0" y1="1560" x2="1080" y2="1560" stroke="#fff" stroke-width="8" opacity=".7"/>`;
   for(let i=0;i<9;i++) g+=`<line x1="${i*135}" y1="1380" x2="${i*135-60}" y2="1920" stroke="#DDA865" stroke-width="4"/>`;
@@ -328,8 +328,8 @@ function bday(lt){
     const real={1:'A',3:'B',5:'C',7:'D'}[p.i]; if(real){g+=K(real,o);return;}
     g+=p.hero?hero(o):kid(Object.assign(o,{shirt:cols[p.i],hs:hs[p.i%hs.length],hair:['#2E1F1A','#3A2A1E','#7A4A2A','#5A3B2A','#6B4B3A'][p.i%5],skin:SK[p.i%5]}));});
   // warm words
-  const words=[['С днём рождения!',300,1020,3.6],['Ты классный!',800,1110,4.6],['Спасибо, что ты с нами!',540,880,5.6],['Ты нам очень дорог!',330,1180,6.6]];
-  words.forEach(([t,x,y,t0],i)=>{const k=pop(lt,t0)*(1-fade(lt,t0+2.4,.3)*(i<words.length-1?1:0));g+=bubble(x,y,t,k,'#fff',38);});
+  const words=[['С днём рождения!',300,1020,3.3],['Ты классный!',800,1110,4.0],['Спасибо, что ты с нами!',540,880,4.7],['Ты нам очень дорог!',330,1180,5.4]];
+  words.forEach(([t,x,y,t0],i)=>{const k=pop(lt,t0)*(1-fade(lt,t0+1.8,.3)*(i<words.length-1?1:0));g+=bubble(x,y,t,k,'#fff',38);});
   if(lt>4){for(let i=0;i<8;i++){const tt=((lt-4)*.5+i/8)%1;g+=heart(160+rnd(i+20)*760,1500-tt*900,.5+rnd(i+7)*.5,[P.coral,'#FF4F7B',P.pink][i%3],clamp((lt-4)*2)*(1-tt));}}
   return g;
 }
@@ -396,14 +396,14 @@ const CAPS=[
  [19.0,21.4,'main','Учителя добрые'],[19.3,21.4,'sub','и объясняют понятно',P.purple],
  [21.8,26.5,'main','Перемена!'],[22.1,26.5,'sub','шумно и весело',P.coral],
  [26.5,31.9,'main','Все классы дружат'],[26.8,31.9,'sub','как одна семья','#FF4F7B'],
- [32.3,37.4,'main','Столовая'],[32.6,37.4,'sub','4 раза в день',P.orange],
- [37.8,41.5,'main','Любимое — волейбол!'],
- [41.5,44.9,'main','Тренировки — в «новом» здании'],
- [45.3,49.5,'main','День рождения — всей школой'],
- [49.5,53.4,'main','В кругу — тёплые слова'],[49.8,53.4,'sub','каждый, кто хочет',P.coral],
- [53.8,56.4,'main','Зимой — Тайный Санта'],
- [56.8,59.4,'main','Домашка — только тем, кому нужна'],[57.1,59.4,'sub','без давления',P.teal],
- [63.3,65.5,'main','Не стесняйся — тут все добрые'],
+ [32.3,36.2,'main','Столовая'],[32.6,36.2,'sub','4 раза в день',P.orange],
+ [36.5,39.3,'main','Любимое — волейбол!'],
+ [39.3,42.9,'main','Тренировки — в «новом» здании'],
+ [43.3,46.6,'main','День рождения — всей школой'],
+ [46.6,49.2,'main','В кругу — тёплые слова'],[46.9,49.2,'sub','каждый, кто хочет',P.coral],
+ [49.6,52.9,'main','Зимой — Тайный Санта'],[50.6,52.9,'sub','а ещё Новый год, 9 мая, иногда Хэллоуин',P.teal],
+ [53.3,56.4,'main','Домашка — только тем, кому нужна'],[53.6,56.4,'sub','без давления',P.teal],
+ [60.3,62.5,'main','Не стесняйся — тут все добрые'],
 ];
 function renderCaps(t){
   let h='';
