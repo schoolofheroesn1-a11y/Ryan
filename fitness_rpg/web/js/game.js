@@ -2372,6 +2372,8 @@ const RITUAL_TAB_H = 92; // «чёлка» с повторениями пове�
 const PUNCHES_TO_FIGHT = 3; // столько ударов (бокс) подряд у костра — и в бой
 const PUNCH_WINDOW = 3; // ...за столько секунд
 
+const BTN_STAT_NAMES = { strength: "СИЛА", vigor: "ЗДОРОВЬЕ", endurance: "ВЫНОСЛИВОСТЬ" };
+
 class BonfireScene extends Scene {
   constructor(game) {
     super(game);
@@ -2428,8 +2430,35 @@ class BonfireScene extends Scene {
     const [x, y, w, h] = g.cam;
     return [x + w / 2 - 120, y + h - 62, 240, 50];
   }
+  /** Название навыка у костра: без камеры — «СИЛА / ЗДОРОВЬЕ / ВЫНОСЛИВОСТЬ» (качаются нажатием). */
+  statName(st) {
+    return this.game.mode === "btn" ? BTN_STAT_NAMES[st] : STATS[st][0];
+  }
+  /** Без камеры навык качается сразу по нажатию — без повторений. */
+  levelNow(stat) {
+    const g = this.game, p = g.player;
+    if (!p.canLevel()) {
+      sfx.deny();
+      return this.say(`Нужно ${p.levelCost()} пепла, у вас ${p.souls}. Победите скелетов!`);
+    }
+    this.finishLevel(stat);
+  }
+  finishLevel(st) {
+    const g = this.game, p = g.player;
+    p.levelUp(st);
+    p.save();
+    g.recordProgress();
+    g.checkAch(); // упражнения и уровень
+    this.ritual = null;
+    const word = tr(this.statName(st)); // «ЗДОРОВЬЕ повышена» звучало бы криво — без камеры: «ЗДОРОВЬЕ: уровень 2»
+    this.say(g.mode === "btn" ? tf("{stat}: уровень {n}!", { stat: word, n: p[st] }) : tf("{stat} повышена до {n}!", { stat: STATS[st][0], n: p[st] }), 4);
+    this.embers.rate = 120;
+    sfx.level();
+    vibrate([60, 40, 120]);
+  }
   startRitual(stat, auto = false) {
     const p = this.game.player;
+    if (this.game.mode === "btn") return auto ? false : this.levelNow(stat);
     if (!p.canLevel()) {
       if (auto && this.game.time - this.denyAt < 2.5) return; // упражнение без пепла: сигнал не на каждый повтор
       this.denyAt = this.game.time;
@@ -2474,18 +2503,7 @@ class BonfireScene extends Scene {
           sfx.rep();
         }
       }
-      if (this.ritual.done >= this.ritual.need) {
-        const st = this.ritual.stat;
-        p.levelUp(st);
-        p.save();
-        g.recordProgress();
-        g.checkAch(); // упражнения и уровень
-        this.ritual = null;
-        this.say(tf("{stat} повышена до {n}!", { stat: STATS[st][0], n: p[st] }), 4);
-        this.embers.rate = 120;
-        sfx.level();
-        vibrate([60, 40, 120]);
-      }
+      if (this.ritual.done >= this.ritual.need) this.finishLevel(this.ritual.stat);
       return;
     }
     // с камерой: начал упражнение — сразу начинается прокачка навыка (как нажатие на навык),
@@ -2558,18 +2576,19 @@ class BonfireScene extends Scene {
     g.text(`Пепел: ${p.souls}`, 160, 46, 8, COL.gold);
     g.text(`Цена уровня: ${p.levelCost()} пепла`, 22, 62, 8, COL.dim);
     g.gems(310, 22, p, "right");
-    g.text("Нажмите на навык:", 22, 78, 8, COL.dim);
+    const btn = g.mode === "btn";
+    g.text(btn ? "Нажмите на навык, чтобы повысить:" : "Нажмите на навык:", 22, 78, 8, COL.dim);
     this.statRows().forEach(([st, r], i) => {
-      const [name, ex, desc] = STATS[st];
+      const [, ex, desc] = STATS[st];
       g.button(r, "", { selected: this.index === i });
-      g.text(`${name} ${p[st]}`, r[0] + 8, r[1] + 7, 8, this.index === i ? COL.gold : COL.text);
-      g.text(`${NAMES[ex]} x${p.repsNeeded(st)}: ${desc}`, r[0] + 8, r[1] + 21, 8, COL.dim);
+      g.text(`${tr(this.statName(st))} ${p[st]}`, r[0] + 8, r[1] + 7, 8, this.index === i ? COL.gold : COL.text);
+      g.text(btn ? tf("+1 за {n} пепла: {desc}", { n: p.levelCost(), desc: tr(desc) }) : `${NAMES[ex]} x${p.repsNeeded(st)}: ${desc}`, r[0] + 8, r[1] + 21, 8, COL.dim);
     });
     BONFIRE_BUTTONS.forEach(([r, label], j) => g.button(r, label, { selected: this.index === 3 + j, ...(j === 0 ? GO_STYLE : {}) }));
     this.chestBadge(BONFIRE_BUTTONS[2][0]);
     g.text(`Урон ${p.damage}  Здоровье ${p.maxHp}  Силы ${p.maxStamina}`, 22, 248, 8, COL.dim);
-    const tr = p.totalReps;
-    g.text(`Всего: отжим ${tr.pushup} присед ${tr.squat} звезда ${tr.jack}`, 22, 260, 8, COL.text);
+    const reps = p.totalReps;
+    g.text(`Всего: отжим ${reps.pushup} присед ${reps.squat} звезда ${reps.jack}`, 22, 260, 8, COL.text);
     if (!g.portrait && this.needsCamera) {
       g.cameraWidget();
       g.manualButtons();
@@ -2598,11 +2617,11 @@ class BonfireScene extends Scene {
     g.text(`Урон ${p.damage}  Здоровье ${p.maxHp}  Силы ${p.maxStamina}`, W - 18, 32, 8, COL.dim, "right");
     g.text(`Цена уровня: ${p.levelCost()} пепла`, W - 18, 48, 8, COL.dim, "right");
     this.statRows().forEach(([st, r], i) => {
-      const [name, ex, desc] = STATS[st];
+      const [, ex, desc] = STATS[st];
       const active = this.ritual ? this.ritual.stat === st : this.index === i;
       g.button(r, "", { selected: active, fill: active ? "rgba(70,40,30,0.85)" : "rgba(12,8,16,0.8)" });
-      g.text(`${name} ${p[st]}`, r[0] + 14, r[1] + 10, 24, active ? COL.gold : COL.text);
-      g.text(`${NAMES[ex]} x${p.repsNeeded(st)}`, r[0] + 14, r[1] + 42, 16, COL.text);
+      g.text(`${tr(this.statName(st))} ${p[st]}`, r[0] + 14, r[1] + 10, 24, active ? COL.gold : COL.text);
+      g.text(g.mode === "btn" ? tf("Нажмите: +1 за {n} пепла", { n: p.levelCost() }) : `${NAMES[ex]} x${p.repsNeeded(st)}`, r[0] + 14, r[1] + 42, 16, COL.text);
       g.text(desc, r[0] + 14, r[1] + 66, 12, COL.dim);
     });
     this.drawCamp(g.ctx, 424, 326);
@@ -3106,7 +3125,6 @@ class BattleScene extends Scene {
     this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.hitFx = new HitFx();
     this.victory = null;
-    if (this.enemy.kind === "kraken") this.startEmerge();
   }
   /** Кракен: сначала сцена появления — стих строка за строкой, качка, щупальца проламывают палубу, голова, глаза. */
   startEmerge() {
@@ -3480,6 +3498,10 @@ class BattleScene extends Scene {
   update(dt) {
     this.manual = !this.game.motion.ok; // с камерой бой — только движениями: кнопок ОТЖИМ/ПРИСЕД/ЗВЕЗДА нет
     const g = this.game, p = g.player, en = this.enemy;
+    if (this.emergeChecked === undefined) { // враг уже окончательный (Шпиль и дуэли подменяют его после конструктора)
+      this.emergeChecked = true;
+      if (en.kind === "kraken" && !this.bg) this.startEmerge();
+    }
     if (this.cinematic) this.updateEmerge(dt);
     this.torchL.update(dt);
     this.torchR.update(dt);
