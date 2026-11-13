@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Школа Жизни — ролик</title>
+<link rel="stylesheet" href="fonts/nunito.css">
+<style>
+  html,body{margin:0;padding:0;background:#000;}
+  #stage{position:relative;width:1080px;height:1920px;overflow:hidden;font-family:'Nunito',sans-serif;}
+  #art{position:absolute;inset:0;}
+  #caps{position:absolute;left:0;right:0;top:190px;display:flex;flex-direction:column;align-items:center;gap:22px;pointer-events:none;}
+  .main{background:#fff;color:#2B1D2E;font-weight:900;font-size:74px;line-height:1.08;padding:26px 46px 30px;border-radius:42px;
+        box-shadow:0 12px 0 rgba(60,30,20,.16);max-width:900px;text-align:center;transform-origin:50% 50%;}
+  .sub{color:#fff;font-weight:800;font-size:50px;line-height:1.1;padding:14px 36px 18px;border-radius:999px;max-width:900px;text-align:center;
+       box-shadow:0 8px 0 rgba(60,30,20,.16);transform-origin:50% 50%;}
+  svg text{font-family:'Nunito',sans-serif;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="art" width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="caps"></div>
+</div>
+<script>
+const TOTAL = 69;
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const eo=t=>1-Math.pow(1-clamp(t),3);
+const eio=t=>{t=clamp(t);return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2};
+const back=t=>{t=clamp(t);const c1=1.9,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2)};
+const pop=(lt,t0,d=.45)=>lt<t0?0:back((lt-t0)/d);
+const fade=(lt,t0,d=.3)=>clamp((lt-t0)/d);
+const rnd=(i)=>{const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x);};
+const S=Math.sin, C=Math.cos, PI=Math.PI;
+
+// ---------- palette ----------
+const P={ink:'#2B1D2E',orange:'#FF7A1A',coral:'#FF6B6B',teal:'#2EC4B6',yellow:'#FFC93C',purple:'#9B7EDE',
+  blue:'#3F6FD8',green:'#57B86B',pink:'#FF8FB1',navy:'#2F3E66',cream:'#FFF4E0'};
+const SK=['#F7CBA8','#E8B08A','#C98E66','#F2D2B6','#DDA27C'];
+
+// ---------- characters ----------
+function kid(o){
+  const d=Object.assign({x:0,y:0,s:1,skin:SK[0],hair:'#4A3428',hs:'short',shirt:P.teal,pants:'#3D405B',bag:false,
+    aL:12,aR:12,lL:0,lR:0,mouth:'smile',num:null,glasses:false,rot:0,blush:true},o);
+  const L=105; let g='';
+  const arm=(side,a)=>{const sx=side*52,sy=-218,r=a*PI/180;const ex=sx+side*S(r)*L,ey=sy+C(r)*L;
+    return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${d.shirt}" stroke-width="30" stroke-linecap="round"/><circle cx="${ex}" cy="${ey}" r="16" fill="${d.skin}"/>`};
+  const leg=(side,a)=>{const sx=side*26,sy=-112,r=a*PI/180;const ex=sx+S(r)*98,ey=sy+C(r)*98;
+    return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${d.pants}" stroke-width="34" stroke-linecap="round"/><ellipse cx="${ex+side*7}" cy="${ey+8}" rx="25" ry="13" fill="#2B2D42"/>`};
+  // back layers
+  if(d.bag) g+=`<rect x="-80" y="-240" width="160" height="132" rx="36" fill="${P.orange}"/><rect x="-30" y="-262" width="60" height="30" rx="15" fill="none" stroke="${P.orange}" stroke-width="10"/>`;
+  if(d.hs==='long') g+=`<rect x="-68" y="-336" width="136" height="128" rx="52" fill="${d.hair}"/>`;
+  if(d.hs==='tails') g+=`<circle cx="-70" cy="-296" r="24" fill="${d.hair}"/><circle cx="70" cy="-296" r="24" fill="${d.hair}"/>`;
+  g+=leg(-1,d.lL)+leg(1,d.lR);
+  g+=`<rect x="-62" y="-246" width="124" height="148" rx="44" fill="${d.shirt}"/>`;
+  g+=`<path d="M-24,-244 L0,-214 L24,-244Z" fill="#fff"/>`;
+  if(d.bag) g+=`<rect x="-48" y="-242" width="15" height="112" rx="7" fill="${P.orange}"/><rect x="33" y="-242" width="15" height="112" rx="7" fill="${P.orange}"/>`;
+  if(d.num!==null) g+=`<circle cx="0" cy="-160" r="30" fill="#fff"/><text x="0" y="-147" font-size="${String(d.num).length>1?30:36}" font-weight="900" text-anchor="middle" fill="${P.ink}">${d.num}</text>`;
+  g+=arm(-1,d.aL)+arm(1,d.aR);
+  g+=`<rect x="-14" y="-258" width="28" height="22" fill="${d.skin}"/>`;
+  g+=`<circle cx="0" cy="-300" r="58" fill="${d.skin}"/>`;
+  // hair on top
+  const cap=`<path d="M-63,-296 C-68,-376 68,-378 63,-296 C44,-326 -6,-334 -63,-296Z" fill="${d.hair}"/>`;
+  if(d.hs==='curly'){for(let i=0;i<7;i++){const a=PI*(1.05+i*0.15);g+=`<circle cx="${C(a)*52}" cy="${-306+S(a)*52}" r="22" fill="${d.hair}"/>`;}}
+  else g+=cap;
+  if(d.hs==='bun') g+=`<circle cx="0" cy="-370" r="26" fill="${d.hair}"/>`;
+  // face
+  g+=`<circle cx="-20" cy="-298" r="6.5" fill="${P.ink}"/><circle cx="20" cy="-298" r="6.5" fill="${P.ink}"/>`;
+  if(d.blush) g+=`<circle cx="-36" cy="-279" r="10" fill="#FF8A8A" opacity=".45"/><circle cx="36" cy="-279" r="10" fill="#FF8A8A" opacity=".45"/>`;
+  if(d.glasses) g+=`<g fill="none" stroke="${P.ink}" stroke-width="4"><circle cx="-21" cy="-298" r="15"/><circle cx="21" cy="-298" r="15"/><line x1="-6" y1="-298" x2="6" y2="-298"/></g>`;
+  if(d.mouth==='laugh') g+=`<path d="M-19,-276 Q0,-246 19,-276Z" fill="#B23A48"/>`;
+  else if(d.mouth==='o') g+=`<ellipse cx="0" cy="-268" rx="9" ry="12" fill="#B23A48"/>`;
+  else g+=`<path d="M-16,-276 Q0,-260 16,-276" fill="none" stroke="${P.ink}" stroke-width="5" stroke-linecap="round"/>`;
+  return `<g transform="translate(${d.x},${d.y}) scale(${d.s}) rotate(${d.rot})">${g}</g>`;
+}
+const HERO={bag:true,shirt:P.blue,pants:P.navy,hair:'#5A3B2A',hs:'short',skin:SK[0]};
+const hero=o=>kid(Object.assign({},HERO,o));
+function walk(t,sp=9,amp=22){const ph=t*sp;return {lL:S(ph)*amp,lR:-S(ph)*amp,aL:14+S(ph)*16,aR:14-S(ph)*16,bob:Math.abs(S(ph))*9};}
+
+// ---------- props ----------
+function bubble(x,y,text,k,col='#fff',fs=40,tc=P.ink){
+  if(k<=0) return '';
+  const w=text.length*fs*0.56+64,h=fs+44;
+  return `<g transform="translate(${x},${y}) scale(${k})"><g transform="translate(0,${-h-26})">
+   <rect x="${-w/2}" y="0" width="${w}" height="${h}" rx="${h/2}" fill="${col}"/>
+   <path d="M-18,${h-2} L0,${h+26} L18,${h-2}Z" fill="${col}"/>
+   <text x="0" y="${h/2+fs*0.36}" font-size="${fs}" font-weight="800" text-anchor="middle" fill="${tc}">${text}</text></g></g>`;
+}
+const heart=(x,y,s,col=P.coral,op=1)=>`<path transform="translate(${x},${y}) scale(${s})" opacity="${op}" fill="${col}" d="M0,-8 C-14,-34 -52,-22 -46,6 C-42,26 -16,40 0,56 C16,40 42,26 46,6 C52,-22 14,-34 0,-8Z"/>`;
+function star(x,y,r,col=P.yellow,rot=0){let p='';for(let i=0;i<10;i++){const a=rot+i*PI/5-PI/2,rr=i%2?r*.45:r;p+=`${x+C(a)*rr},${y+S(a)*rr} `;}return `<polygon points="${p}" fill="${col}"/>`;}
+function cloud(x,y,s){return `<g transform="translate(${x},${y}) scale(${s})" fill="#fff"><ellipse cx="0" cy="0" rx="90" ry="50"/><ellipse cx="-70" cy="18" rx="60" ry="38"/><ellipse cx="75" cy="16" rx="65" ry="40"/><ellipse cx="10" cy="-35" rx="55" ry="45"/></g>`;}
+function plant(x,y,s=1){return `<g transform="translate(${x},${y}) scale(${s})"><ellipse cx="-30" cy="-150" rx="26" ry="70" fill="#4FA35F" transform="rotate(-25 -30 -150)"/><ellipse cx="30" cy="-150" rx="26" ry="70" fill="#5DBB6E" transform="rotate(25 30 -150)"/><ellipse cx="0" cy="-175" rx="28" ry="80" fill="#6CCB7B"/><path d="M-55,-90 L55,-90 L40,0 L-40,0Z" fill="#E07A4F"/></g>`;}
+function windowArch(x,y,w,h,glass='#BFE6FF',frame='#fff'){return `<g><path d="M${x},${y+h} L${x},${y+w/2} A${w/2},${w/2} 0 0 1 ${x+w},${y+w/2} L${x+w},${y+h}Z" fill="${glass}" stroke="${frame}" stroke-width="14"/><line x1="${x+w/2}" y1="${y}" x2="${x+w/2}" y2="${y+h}" stroke="${frame}" stroke-width="10"/><line x1="${x}" y1="${y+h*.6}" x2="${x+w}" y2="${y+h*.6}" stroke="${frame}" stroke-width="10"/></g>`;}
+function playCard(x,y,rot,s=1,suit=0){const col=suit%2?P.ink:'#E0384A';const sym=suit%2?`<path d="M0,-14 L12,0 L0,14 L-12,0Z" fill="${col}"/>`:heart(0,-4,.32,col);
+  return `<g transform="translate(${x},${y}) rotate(${rot}) scale(${s})"><rect x="-26" y="-36" width="52" height="72" rx="8" fill="#fff" stroke="#E6D6C8" stroke-width="3"/>${sym}</g>`;}
+function bg(c1,c2){return `<defs><linearGradient id="g${c1.slice(1)}${c2.slice(1)}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g${c1.slice(1)}${c2.slice(1)})"/>`;}
+
+// ---------- scenes ----------
+const SCENES=[
+ {t0:0,   t1:6.5,  f:street},
+ {t0:6.5, t1:13.5, f:atrium},
+ {t0:13.5,t1:21.5, f:lesson},
+ {t0:21.5,t1:29.5, f:breakTime},
+ {t0:29.5,t1:36,   f:canteen},
+ {t0:36,  t1:44.5, f:volley},
+ {t0:44.5,t1:53.5, f:bday},
+ {t0:53.5,t1:57,   f:santa},
+ {t0:57,  t1:60.5, f:homework},
+ {t0:60.5,t1:69,   f:finale},
+];
+
+function street(lt){
+  let g=bg('#8FD3FF','#FFE7C2');
+  const sunY=lerp(1000,700,eo(lt/3));
+  let rays='';for(let i=0;i<12;i++){const a=i*PI/6+lt*.25;rays+=`<rect x="-10" y="-175" width="20" height="55" rx="10" fill="${P.yellow}" transform="rotate(${a*180/PI})"/>`;}
+  g+=`<g transform="translate(850,${sunY})">${rays}<circle r="95" fill="${P.yellow}"/></g>`;
+  g+=cloud(200+lt*14,640,.9)+cloud(760-lt*10,520,.7);
+  // building
+  g+=`<polygon points="110,880 540,660 970,880" fill="#E5604D"/>`;
+  g+=`<rect x="150" y="860" width="780" height="640" fill="#FFB37A"/>`;
+  g+=`<rect x="370" y="770" width="340" height="78" rx="22" fill="${P.teal}"/><text x="540" y="822" font-size="40" font-weight="900" fill="#fff" text-anchor="middle">ШКОЛА ЖИЗНИ</text>`;
+  const win=(x,y)=>`<rect x="${x}" y="${y}" width="150" height="150" rx="20" fill="#FFF2CF" stroke="#E58A4E" stroke-width="10"/><line x1="${x+75}" y1="${y}" x2="${x+75}" y2="${y+150}" stroke="#E58A4E" stroke-width="8"/><line x1="${x}" y1="${y+75}" x2="${x+150}" y2="${y+75}" stroke="#E58A4E" stroke-width="8"/>`;
+  g+=win(210,930)+win(465,930)+win(720,930)+win(210,1160)+win(720,1160);
+  g+=`<path d="M470,1500 L470,1250 A70,70 0 0 1 610,1250 L610,1500Z" fill="#A0613C"/><circle cx="590" cy="1390" r="8" fill="${P.yellow}"/>`;
+  // ground & trees
+  g+=`<rect x="0" y="1480" width="1080" height="440" fill="#8BD07A"/><polygon points="470,1490 610,1490 790,1920 290,1920" fill="#F6DDB4"/>`;
+  const tree=(x,y,s)=>`<g transform="translate(${x},${y}) scale(${s})"><rect x="-16" y="-120" width="32" height="130" rx="10" fill="#8C5A3C"/><circle cx="0" cy="-190" r="95" fill="#4FA35F"/><circle cx="-55" cy="-140" r="60" fill="#5DBB6E"/><circle cx="55" cy="-140" r="60" fill="#5DBB6E"/></g>`;
+  g+=tree(70,1500,1)+tree(1020,1500,1.1);
+  // flowers
+  for(let i=0;i<14;i++){const x=40+rnd(i)*1000,y=1560+rnd(i+30)*330;if(x>250&&x<830&&y<1900&&Math.abs(x-540)<(y-1490)*0.6+80)continue;g+=`<circle cx="${x}" cy="${y}" r="10" fill="${[P.yellow,P.pink,'#fff'][i%3]}"/>`;}
+  // hero walking in
+  const wt=clamp(lt/3.4); const x=lerp(-160,540,eio(wt));
+  let o={x,y:1790,s:1.3};
+  if(lt<3.4){const w=walk(lt);Object.assign(o,w);o.y-=w.bob;}
+  else{o.aR=150+S((lt-3.4)*10)*18;o.mouth='laugh';}
+  g+=`<ellipse cx="${x}" cy="1795" rx="90" ry="16" fill="#000" opacity=".1"/>`+hero(o);
+  return g;
+}
+
+function atrium(lt){
+  let g=bg('#FFEBCB','#FFE0B0');
+  // big glass wall
+  g+=`<rect x="110" y="540" width="860" height="820" rx="30" fill="#BFE6FF"/>`;
+  for(let i=1;i<6;i++) g+=`<rect x="${110+i*143-6}" y="540" width="12" height="820" fill="#fff"/>`;
+  g+=`<rect x="110" y="900" width="860" height="12" fill="#fff"/><rect x="110" y="540" width="860" height="820" rx="30" fill="none" stroke="#fff" stroke-width="18"/>`;
+  g+=cloud(300+lt*12,700,.6)+cloud(800+lt*8,820,.45);
+  // light beams
+  g+=`<polygon points="250,540 450,540 640,1920 260,1920" fill="#FFF6C8" opacity=".25"/><polygon points="640,540 820,540 1000,1920 700,1920" fill="#FFF6C8" opacity=".2"/>`;
+  g+=`<rect x="0" y="1360" width="1080" height="560" fill="#EBC497"/>`;
+  for(let i=0;i<6;i++) g+=`<line x1="${i*216}" y1="1360" x2="${i*216-200+i*80}" y2="1920" stroke="#DDB283" stroke-width="5"/>`;
+  g+=`<line x1="0" y1="1560" x2="1080" y2="1560" stroke="#DDB283" stroke-width="5"/>`;
+  g+=plant(100,1420,1.1)+plant(985,1420,1.1);
+  // back kids chatting
+  const bkW=lt>2.4?140+S(lt*9)*20:10;
+  g+=kid({x:270,y:1470,s:.82,hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1],mouth:S(lt*3)>0?'laugh':'smile'});
+  g+=kid({x:820,y:1470,s:.82,hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2],aL:bkW});
+  // hero & friend
+  const hx=lerp(180,430,eo(lt/1));
+  const fx=lerp(1200,690,eo(lt/1.3));
+  const hi=lt>1.5&&lt<2.6;
+  let ho={x:hx,y:1720,s:1.15,mouth:lt>1.5?'laugh':'smile'};
+  if(lt<1){Object.assign(ho,walk(lt));} else ho.aR=hi?158:(lt>2.6?20:20);
+  if(lt>3.5) ho.aR=40+S(lt*6)*10;
+  let fo={x:fx,y:1720,s:1.12,hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3],mouth:'laugh'};
+  if(lt<1.3) Object.assign(fo,walk(lt)); else fo.aL=hi?158:20;
+  g+=hero(ho)+kid(fo);
+  if(lt>1.6&&lt<2.6){const k=pop(lt,1.6,.3)*(1-fade(lt,2.3,.3));g+=`<g opacity="${clamp(k)}">${star(560,1335,70*k,P.yellow,lt)}${star(560,1335,34*k,'#fff',-lt)}</g>`;}
+  g+=bubble(800,1210,'Привет!',pop(lt,.9));
+  g+=bubble(850,1020,'Доброе утро!',pop(lt,2.6),'#fff',36);
+  g+=bubble(330,1200,'Как дела?',pop(lt,3.7));
+  return g;
+}
+
+function lesson(lt){
+  let g=bg('#DFF4EC','#CDEBDF');
+  g+=windowArch(70,660,210,400)+windowArch(800,660,210,400);
+  g+=`<rect x="0" y="1440" width="1080" height="480" fill="#D9AE85"/>`;
+  // board
+  g+=`<rect x="310" y="680" width="460" height="320" rx="20" fill="#fff" stroke="#6B9080" stroke-width="14"/>`;
+  const q=1-fade(lt,3.6,.4), ex=fade(lt,3.8,.4);
+  g+=`<text x="540" y="920" font-size="230" font-weight="900" text-anchor="middle" fill="${P.coral}" opacity="${q}">?</text>`;
+  g+=`<g transform="translate(540,840) scale(${pop(lt,3.8,.5)})" opacity="${ex}"><circle r="80" fill="${P.yellow}"/><rect x="-36" y="70" width="72" height="44" rx="10" fill="#B0B8C0"/>${[0,1,2,3,4,5,6,7].map(i=>{const a=i*PI/4;return `<line x1="${C(a)*100}" y1="${S(a)*100}" x2="${C(a)*130}" y2="${S(a)*130}" stroke="${P.yellow}" stroke-width="12" stroke-linecap="round"/>`}).join('')}<text x="0" y="28" font-size="90" font-weight="900" text-anchor="middle" fill="#fff">!</text></g>`;
+  // clock without bell
+  const ca=lt*90;
+  g+=`<g transform="translate(470,585)"><circle r="56" fill="#fff" stroke="${P.ink}" stroke-width="8"/><line x1="0" y1="0" x2="0" y2="-38" stroke="${P.ink}" stroke-width="7" stroke-linecap="round" transform="rotate(${ca})"/><line x1="0" y1="0" x2="0" y2="-26" stroke="${P.coral}" stroke-width="8" stroke-linecap="round" transform="rotate(${ca/12})"/><circle r="7" fill="${P.ink}"/></g>`;
+  const bk=pop(lt,3.1);
+  g+=`<g transform="translate(620,585) scale(${bk})"><path d="M-30,20 Q-30,-38 0,-40 Q30,-38 30,20 L40,30 L-40,30Z" fill="${P.yellow}"/><circle cx="0" cy="38" r="9" fill="${P.yellow}"/><circle r="56" fill="none" stroke="#E0384A" stroke-width="10"/><line x1="-40" y1="-40" x2="40" y2="40" stroke="#E0384A" stroke-width="10"/></g>`;
+  // teacher
+  g+=kid({x:880,y:1580,s:1.3,hs:'bun',hair:'#6B4B3A',shirt:P.purple,pants:'#4B3F72',skin:SK[3],glasses:true,aL:100+S(lt*3)*14,aR:15,mouth:lt>4?'laugh':'smile'});
+  // students
+  const st=[{x:200,c:{hs:'tails',hair:'#2E1F1A',shirt:P.coral,skin:SK[1]},raise:4.6},{x:440,hero:true,raise:5.0},{x:680,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]},raise:5.4}];
+  st.forEach((s,i)=>{const r=lt>s.raise?lerp(15,155,eo((lt-s.raise)/.3)):15;const o={x:s.x,y:1660,s:1,aR:r+(lt>s.raise?S(lt*8+i)*6:0),mouth:lt>s.raise?'laugh':'smile'};
+    g+=s.hero?hero(o):kid(Object.assign(o,s.c));});
+  st.forEach(s=>{g+=`<rect x="${s.x-125}" y="1490" width="250" height="34" rx="10" fill="#F0B46A"/><rect x="${s.x-110}" y="1524" width="220" height="56" fill="#E09D52"/><rect x="${s.x-60}" y="1478" width="80" height="14" rx="4" fill="#fff"/>`;
+    const k=pop(lt,s.raise+.5);if(k>0)g+=`<g transform="translate(${s.x},1185) scale(${k})"><circle r="38" fill="${P.yellow}"/><rect x="-16" y="32" width="32" height="20" rx="6" fill="#B0B8C0"/></g>`;});
+  return g;
+}
+
+function breakTime(lt){
+  let g=bg('#FFDCE5','#FFD0DC');
+  for(let i=0;i<3;i++) g+=`<rect x="${120+i*300}" y="640" width="220" height="300" rx="24" fill="#CFEFFF" stroke="#fff" stroke-width="14"/>`;
+  g+=`<rect x="0" y="1400" width="1080" height="520" fill="#F3C99D"/>`;
+  // runners in the back
+  for(let j=0;j<2;j++){const x=((lt*420+j*700)%1500)-220;const w=walk(lt+j,14,30);
+    g+=`<g opacity=".95">${[0,1,2].map(k=>`<line x1="${x-110-k*10}" y1="${1240+k*40}" x2="${x-170-k*10}" y2="${1240+k*40}" stroke="#fff" stroke-width="10" stroke-linecap="round"/>`).join('')}</g>`;
+    g+=kid(Object.assign({x,y:1430-w.bob,s:.75,mouth:'laugh',hs:j?'tails':'short',hair:j?'#2E1F1A':'#B5651D',shirt:j?P.yellow:P.teal,skin:SK[j+2]},w,{aL:60+S(lt*14+j)*40,aR:60-S(lt*14+j)*40}));}
+  // card table
+  const fam=lt>4;
+  const kids=[{x:270,num:9,c:{hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3]}},{x:540,num:10,hero:true},{x:810,num:11,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}}];
+  kids.forEach((k,i)=>{const o={x:k.x,y:1690,s:1.05,num:k.num,aL:i===0?70:30,aR:i===2?70:30,mouth:(S(lt*5+i*2)>-.3)?'laugh':'smile',rot:S(lt*6+i)*2};
+    if(i===1){o.aR=55+S(lt*5.2)*25;}
+    g+=k.hero?hero(o):kid(Object.assign(o,k.c));});
+  g+=`<ellipse cx="540" cy="1560" rx="380" ry="70" fill="#5FAF78"/><ellipse cx="540" cy="1548" rx="380" ry="66" fill="#7FCB98"/><rect x="380" y="1610" width="26" height="160" fill="#8C5A3C"/><rect x="674" y="1610" width="26" height="160" fill="#8C5A3C"/>`;
+  for(let i=0;i<5;i++) g+=playCard(470+i*36+rnd(i)*10,1545+rnd(i+5)*10,rnd(i+9)*60-30,.9,i);
+  // flying card
+  const ph=(lt%1.1)/1.1; const fx=lerp(620,520+((Math.floor(lt/1.1)%3)-1)*90,ph), fy=1360-S(ph*PI)*140+ph*170;
+  g+=playCard(fx,fy,ph*360,1,Math.floor(lt/1.1));
+  // hand cards
+  g+=playCard(330,1440,-20,.8,1)+playCard(350,1440,0,.8,2)+playCard(750,1440,0,.8,3)+playCard(770,1440,20,.8,0);
+  // laughter
+  ['ха-ха!','ура!','ха!'].forEach((t,i)=>{const t0=.5+i*1.1;const k=pop(lt%3.3,t0,.3)*(1-fade(lt%3.3,t0+1.2,.3));if(k>0)g+=`<text transform="translate(${[180,860,520][i]},${[1130,1110,1060][i]}) scale(${k}) rotate(${[-10,10,0][i]})" font-size="56" font-weight="900" text-anchor="middle" fill="${[P.coral,P.blue,P.purple][i]}">${t}</text>`;});
+  // family: hearts & link
+  if(fam){const k=eo((lt-4)/.6);
+    g+=`<path d="M270,1300 Q405,${1300-140*k} 540,1300 Q675,${1300-140*k} 810,1300" fill="none" stroke="${P.coral}" stroke-width="10" stroke-dasharray="20 18" opacity="${k}"/>`;
+    for(let i=0;i<6;i++){const tt=((lt-4)*0.7+i/6)%1;g+=heart(160+rnd(i)*760,1250-tt*560,.7+rnd(i+3)*.5,[P.coral,P.pink,'#FF4F7B'][i%3],k*(1-tt));}}
+  return g;
+}
+
+function canteen(lt){
+  let g=bg('#FFF1CC','#FFE6A8');
+  g+=`<rect x="0" y="1420" width="1080" height="500" fill="#E9B97F"/>`;
+  // tiles
+  const tiles=[['Завтрак',0],['Обед',1],['Полдник',2],['Ужин',3]];
+  tiles.forEach(([lab,i])=>{const cx=i%2?775:305, cy=i<2?690:990; const k=pop(lt,.5+i*.55);
+    if(k<=0)return; let ic='';
+    if(i===0) ic=`<rect x="-40" y="-40" width="80" height="80" rx="16" fill="${P.coral}"/><path d="M40,-20 Q72,-20 72,6 Q72,30 40,30" fill="none" stroke="${P.coral}" stroke-width="12"/>${[-18,8].map(x=>`<path d="M${x},-56 q-10,-14 0,-28 q10,-14 0,-28" fill="none" stroke="#C9B8A8" stroke-width="7" stroke-linecap="round" transform="translate(0,${S(lt*4+x)*3})"/>`).join('')}`;
+    if(i===1) ic=`<path d="M-80,-10 L80,-10 Q76,64 0,66 Q-76,64 -80,-10Z" fill="${P.teal}"/><ellipse cx="0" cy="-10" rx="80" ry="16" fill="#F4A261"/><rect x="40" y="-90" width="12" height="80" rx="6" fill="#B0B8C0" transform="rotate(30 46 -50)"/>`;
+    if(i===2) ic=`<circle cx="0" cy="10" r="58" fill="#FF5A5F"/><rect x="-5" y="-66" width="10" height="30" rx="5" fill="#8C5A3C"/><ellipse cx="22" cy="-52" rx="22" ry="11" fill="${P.green}" transform="rotate(-25 22 -52)"/>`;
+    if(i===3) ic=`<circle r="64" fill="#fff" stroke="#DDD" stroke-width="6"/><circle r="40" fill="#F4E8D8"/><path d="M68,-70 A34,34 0 1 0 98,-30 A26,26 0 1 1 68,-70Z" fill="${P.yellow}"/>`;
+    g+=`<g transform="translate(${cx},${cy}) scale(${k})"><rect x="-200" y="-130" width="400" height="260" rx="40" fill="#fff"/><g transform="translate(0,-20) scale(.9)">${ic}</g><text x="0" y="102" font-size="46" font-weight="900" text-anchor="middle" fill="${P.ink}">${lab}</text></g>`;});
+  // kids at table
+  const sp=S(lt*6);
+  g+=hero({x:380,y:1690,s:1.05,aR:lerp(30,110,(sp+1)/2),mouth:sp>0?'smile':'laugh'});
+  g+=kid({x:700,y:1690,s:1.05,hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1],aL:40,mouth:'laugh'});
+  g+=`<rect x="100" y="1500" width="880" height="44" rx="14" fill="#fff"/>`;
+  for(let i=0;i<11;i++) g+=`<rect x="${100+i*80}" y="1500" width="40" height="44" fill="${P.coral}" opacity=".35"/>`;
+  g+=`<rect x="130" y="1544" width="820" height="120" fill="#C7894F"/>`;
+  [380,700].forEach((x,j)=>{g+=`<path d="M${x-75},1478 L${x+75},1478 Q${x+70},1530 ${x},1532 Q${x-70},1530 ${x-75},1478Z" fill="${j?P.teal:P.yellow}"/>`;
+    for(let k=0;k<2;k++) g+=`<path d="M${x-15+k*30},1460 q-10,-15 0,-30 q10,-15 0,-30" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".8" transform="translate(${S(lt*4+k)*4},0)"/>`;});
+  return g;
+}
+
+function volley(lt){
+  let g=bg('#D3EAFF','#C1E0FF');
+  for(let i=0;i<3;i++) g+=`<rect x="${90+i*320}" y="760" width="260" height="380" rx="20" fill="#EAF6FF" stroke="#fff" stroke-width="14"/>`;
+  // plaque + sticky
+  g+=`<rect x="250" y="560" width="580" height="110" rx="24" fill="${P.navy}"/><text x="540" y="633" font-size="56" font-weight="900" text-anchor="middle" fill="#fff">НОВОЕ ЗДАНИЕ</text>`;
+  const sk=pop(lt,4.3,.4);
+  if(sk>0) g+=`<g transform="translate(800,700) rotate(-9) scale(${sk})"><rect x="-140" y="-60" width="280" height="140" fill="#FFE66D"/><rect x="-40" y="-72" width="80" height="26" fill="#fff" opacity=".7"/><text x="0" y="-4" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">давно</text><text x="0" y="48" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">не новое :)</text></g>`;
+  g+=`<rect x="0" y="1380" width="1080" height="540" fill="#EDBB78"/><line x1="0" y1="1560" x2="1080" y2="1560" stroke="#fff" stroke-width="8" opacity=".7"/>`;
+  for(let i=0;i<9;i++) g+=`<line x1="${i*135}" y1="1380" x2="${i*135-60}" y2="1920" stroke="#DDA865" stroke-width="4"/>`;
+  // ball path
+  const Pd=1.7, n=Math.floor(lt/Pd), p=(lt%Pd)/Pd, dir=n%2;
+  const xa=dir?800:290, xb=dir?290:800; const bx=lerp(xa,xb,p), by=1300-4*450*p*(1-p);
+  const jumpOf=(x)=>{const d=Math.abs(bx-x);return d<140&&by>1150?(1-d/140):0;};
+  const players=[{x:250,y:1730,s:1.05,hero:true},{x:420,y:1560,s:.86,c:{hs:'tails',hair:'#2E1F1A',shirt:P.coral,skin:SK[1]}},
+                 {x:680,y:1560,s:.86,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}},{x:840,y:1730,s:1.05,c:{hs:'long',hair:'#7A4A2A',shirt:P.purple,pants:'#4B3F72',skin:SK[3]}}];
+  // back players first, net, then front
+  const drawP=pl=>{const j=jumpOf(pl.x)*(pl.s>1?1:0);const o={x:pl.x,y:pl.y-j*70,s:pl.s,aL:j>0?160:30+S(lt*3+pl.x)*10,aR:j>0?160:30-S(lt*3+pl.x)*10,mouth:'laugh',lL:j*-15,lR:j*15};
+    return `<ellipse cx="${pl.x}" cy="${pl.y+4}" rx="${80*pl.s}" ry="14" fill="#000" opacity=".1"/>`+(pl.hero?hero(o):kid(Object.assign(o,pl.c)));};
+  g+=drawP(players[1])+drawP(players[2]);
+  g+=`<rect x="532" y="1060" width="16" height="420" rx="6" fill="#5A5A6E"/><rect x="380" y="1080" width="320" height="120" fill="none" stroke="#fff" stroke-width="5"/>`;
+  for(let i=1;i<8;i++) g+=`<line x1="${380+i*40}" y1="1080" x2="${380+i*40}" y2="1200" stroke="#fff" stroke-width="3"/>`;
+  for(let i=1;i<3;i++) g+=`<line x1="380" y1="${1080+i*40}" x2="700" y2="${1080+i*40}" stroke="#fff" stroke-width="3"/>`;
+  g+=`<rect x="375" y="1072" width="330" height="16" rx="6" fill="#fff"/>`;
+  g+=drawP(players[0])+drawP(players[3]);
+  g+=`<g transform="translate(${bx},${by}) rotate(${lt*400})"><circle r="38" fill="#fff" stroke="#D8D8E0" stroke-width="3"/><path d="M-38,0 Q0,-24 38,0" fill="none" stroke="${P.yellow}" stroke-width="9"/><path d="M-20,-32 Q10,0 -20,32" fill="none" stroke="${P.blue}" stroke-width="9"/></g>`;
+  return g;
+}
+
+function bday(lt){
+  let g=`<defs><radialGradient id="bdg" cx=".5" cy=".62" r=".7"><stop offset="0" stop-color="#FFF6D8"/><stop offset="1" stop-color="#FFBE98"/></radialGradient></defs><rect width="1080" height="1920" fill="url(#bdg)"/>`;
+  g+=`<ellipse cx="540" cy="1540" rx="480" ry="220" fill="#F7A97C" opacity=".5"/>`;
+  // glow & sparkles around birthday kid
+  g+=`<circle cx="540" cy="1240" r="${190+S(lt*3)*12}" fill="#FFE27A" opacity=".55"/>`;
+  for(let i=0;i<6;i++){const a=i*PI/3+lt*.8;g+=star(540+C(a)*230,1250+S(a)*200,18+S(lt*4+i)*6,'#fff',lt);}
+  const cx=540,cy=1340,rx=390,ry=150,N=8,gap=.5;
+  const people=[];
+  const cols=[P.coral,P.purple,P.green,P.yellow,P.teal,P.pink,'#F4A261',P.blue];
+  const hs=['tails','curly','long','short','bun','curly','long'];
+  for(let i=0;i<N;i++){const a=PI/2+gap+i*(2*PI-2*gap)/(N-1);const x=cx+C(a)*rx, y=cy+S(a)*ry+240;
+    const depth=(S(a)+1)/2; people.push({x,y,s:lerp(.72,1.02,depth),i,hero:i===0});}
+  people.push({x:540,y:1500,s:1.02,center:true});
+  people.sort((a,b)=>a.y-b.y);
+  people.forEach(p=>{
+    if(p.center){g+=kid({x:p.x,y:p.y-Math.max(0,S(lt*4))*14,s:p.s,hs:'tails',hair:'#B5651D',shirt:'#FF4F7B',skin:SK[0],aL:lt>3?150+S(lt*7)*12:40,aR:lt>3?150-S(lt*7)*12:40,mouth:'laugh'});return;}
+    const sway=S(lt*2.2+p.i)*3; const o={x:p.x,y:p.y,s:p.s,rot:sway,aL:55,aR:55,mouth:S(lt*2+p.i)>-.2?'laugh':'smile'};
+    g+=p.hero?hero(o):kid(Object.assign(o,{shirt:cols[p.i],hs:hs[p.i%hs.length],hair:['#2E1F1A','#3A2A1E','#7A4A2A','#5A3B2A','#6B4B3A'][p.i%5],skin:SK[p.i%5]}));});
+  // warm words
+  const words=[['С днём рождения!',300,1020,3.6],['Ты классный!',800,1110,4.6],['Спасибо, что ты с нами!',540,880,5.6],['Ты нам очень дорог!',330,1180,6.6]];
+  words.forEach(([t,x,y,t0],i)=>{const k=pop(lt,t0)*(1-fade(lt,t0+2.4,.3)*(i<words.length-1?1:0));g+=bubble(x,y,t,k,'#fff',38);});
+  if(lt>4){for(let i=0;i<8;i++){const tt=((lt-4)*.5+i/8)%1;g+=heart(160+rnd(i+20)*760,1500-tt*900,.5+rnd(i+7)*.5,[P.coral,'#FF4F7B',P.pink][i%3],clamp((lt-4)*2)*(1-tt));}}
+  return g;
+}
+
+function santa(lt){
+  let g=bg('#2F4B8F','#7FA3E6');
+  for(let i=0;i<70;i++){const x=(rnd(i)*1080+S(lt+i)*20), y=(rnd(i+100)*2000+lt*(90+rnd(i+50)*80))%2000-40;g+=`<circle cx="${x}" cy="${y}" r="${4+rnd(i+7)*7}" fill="#fff" opacity=".9"/>`;}
+  g+=`<path d="M0,1560 Q270,1480 540,1540 Q810,1600 1080,1520 L1080,1920 L0,1920Z" fill="#fff"/>`;
+  const tree=(x,y,s)=>`<g transform="translate(${x},${y}) scale(${s})"><polygon points="0,-300 -110,-60 110,-60" fill="#3E8E5A"/><polygon points="0,-220 -90,-30 90,-30" fill="#4FA35F"/><rect x="-16" y="-40" width="32" height="50" fill="#8C5A3C"/></g>`;
+  g+=tree(140,1580,1)+tree(950,1570,.9);
+  const k=pop(lt,.2,.5);
+  g+=hero({x:540,y:1820,s:1.2,aL:110,aR:110,mouth:lt>1.2?'laugh':'o'});
+  const wob=S(lt*9)*4*(lt<1.6?1:.3);
+  g+=`<g transform="translate(540,1665) rotate(${wob}) scale(${k*.78})"><rect x="-150" y="-110" width="300" height="230" rx="18" fill="${P.orange}"/><rect x="-162" y="-140" width="324" height="60" rx="14" fill="#FF9447"/><rect x="-22" y="-140" width="44" height="260" fill="${P.teal}"/>
+    <ellipse cx="-50" cy="-160" rx="54" ry="30" fill="${P.teal}" transform="rotate(-20 -50 -160)"/><ellipse cx="50" cy="-160" rx="54" ry="30" fill="${P.teal}" transform="rotate(20 50 -160)"/><circle cx="0" cy="-150" r="20" fill="#25A99C"/>
+    <g transform="rotate(${S(lt*3)*10} 80 -60)"><line x1="40" y1="-90" x2="140" y2="-20" stroke="#fff" stroke-width="5"/><rect x="110" y="-30" width="90" height="70" rx="12" fill="#fff"/><text x="155" y="27" font-size="64" font-weight="900" text-anchor="middle" fill="${P.coral}">?</text></g></g>`;
+  for(let i=0;i<5;i++){const a=i*PI*2/5+lt;g+=star(540+C(a)*270,1560+S(a)*140,16*k,P.yellow,lt*2);}
+  return g;
+}
+
+function homework(lt){
+  let g=bg('#FFE08A','#FFF3CF');
+  let rays='';for(let i=0;i<16;i++){const a=i*22.5+lt*8;rays+=`<polygon points="0,0 -60,-1400 60,-1400" fill="#fff" opacity=".18" transform="rotate(${a})"/>`;}
+  g+=`<g transform="translate(540,1150)">${rays}</g>`;
+  g+=`<rect x="0" y="1520" width="1080" height="400" fill="#8BD07A"/>`;
+  // notebook with heart, optional
+  const k=pop(lt,.4);
+  g+=`<g transform="translate(540,900) rotate(${S(lt*2)*4}) scale(${k})"><rect x="-170" y="-130" width="340" height="250" rx="22" fill="#fff"/><rect x="-6" y="-130" width="12" height="250" fill="#E6D6C8"/>
+    ${[0,1,2,3].map(i=>`<line x1="-140" y1="${-80+i*45}" x2="-30" y2="${-80+i*45}" stroke="#CFE3F5" stroke-width="7" stroke-linecap="round"/>`).join('')}${heart(85,-10,1.1,P.coral)}</g>`;
+  // relaxed hero + friend with notebook (по желанию)
+  g+=hero({x:370,y:1790,s:1.2,aL:165+S(lt*2)*4,aR:165-S(lt*2)*4,mouth:'laugh',rot:S(lt*2)*2});
+  g+=kid({x:730,y:1790,s:1.15,hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3],aL:30,aR:120,mouth:'smile'});
+  g+=`<g transform="translate(845,1505) rotate(-12)"><rect x="-38" y="-48" width="76" height="96" rx="10" fill="${P.teal}"/><rect x="-26" y="-34" width="52" height="10" rx="4" fill="#fff"/></g>`;
+  return g;
+}
+
+function finale(lt){
+  let g=bg('#FFB65C','#FF7E6B');
+  let rays='';for(let i=0;i<18;i++){const a=i*20+lt*6;rays+=`<polygon points="0,0 -70,-1500 70,-1500" fill="#fff" opacity=".13" transform="rotate(${a})"/>`;}
+  g+=`<g transform="translate(540,950)">${rays}</g>`;
+  // words
+  const W=[['интерес',300,640,P.teal],['жизнь',780,720,P.purple],['смех',360,850,P.coral],['доброта',740,940,P.blue],['близкие',320,1060,'#E58E00'],['свобода',750,1150,'#2E9E6A'],['как семья',540,1270,'#FF4F7B']];
+  const wf=1-fade(lt,3.9,.4);
+  W.forEach(([t,x,y,c],i)=>{const k=pop(lt,.2+i*.45);if(k<=0||wf<=0)return;const w=t.length*36+90;
+    g+=`<g opacity="${wf}" transform="translate(${x},${y+S(lt*2+i)*8}) scale(${k}) rotate(${(i%2?3:-3)})"><rect x="${-w/2}" y="-56" width="${w}" height="112" rx="56" fill="${c}"/><text x="0" y="22" font-size="64" font-weight="900" text-anchor="middle" fill="#fff">${t}</text></g>`;});
+  // title
+  const tk=pop(lt,6.1,.6);
+  if(tk>0){g+=`<g transform="translate(540,880) scale(${tk})"><text x="0" y="-40" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Школа</text><text x="0" y="150" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Жизни</text>${heart(0,260,1.4,'#fff')}</g>`;}
+  // line-up
+  const L=[{x:110,s:.9,c:{hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1]}},{x:270,s:.98,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}},{x:410,s:1.05,c:{hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3]}},
+    {x:670,s:1.05,c:{hs:'bun',hair:'#6B4B3A',shirt:P.yellow,skin:SK[4]}},{x:810,s:.98,c:{hs:'short',hair:'#B5651D',shirt:P.teal,skin:SK[0]}},{x:970,s:.9,c:{hs:'long',hair:'#2E1F1A',shirt:'#FF4F7B',skin:SK[1]}}];
+  L.forEach((k,i)=>{const j=Math.max(0,S(lt*5+i*1.3))*22;g+=kid(Object.assign({x:k.x,y:1830-j,s:k.s,aL:150+S(lt*8+i)*15,aR:i%2?150:30,mouth:'laugh'},k.c));});
+  const hj=Math.max(0,S(lt*5+.7))*26;
+  g+=hero({x:540,y:1870-hj,s:1.22,aL:155+S(lt*8)*12,aR:155-S(lt*8)*12,mouth:'laugh'});
+  return g;
+}
+
+// ---------- captions ----------
+const CAPS=[
+ [0.4,6.3,'main','Один день в Школе Жизни'],[1.3,6.3,'sub','глазами ученика',P.orange],
+ [6.8,13.3,'main','Утро. Атриум'],[8.4,13.3,'sub','здесь все знают друг друга по именам',P.coral],
+ [13.8,16.6,'main','Первый урок — в «замке»'],
+ [16.6,19.0,'main','Звонков нет'],[16.9,19.0,'sub','за временем следим сами',P.teal],
+ [19.0,21.4,'main','Учителя добрые'],[19.3,21.4,'sub','и объясняют понятно',P.purple],
+ [21.8,25.4,'main','Перемена!'],[22.1,25.4,'sub','шумно и весело',P.coral],
+ [25.4,29.4,'main','Все классы дружат'],[25.7,29.4,'sub','как одна семья','#FF4F7B'],
+ [29.8,35.9,'main','Столовая'],[30.1,35.9,'sub','4 раза в день',P.orange],
+ [36.3,40.4,'main','Любимое — волейбол!'],
+ [40.4,44.4,'main','Тренировки — в «новом» здании'],
+ [44.8,49.0,'main','День рождения — всей школой'],
+ [49.0,53.4,'main','В кругу — тёплые слова'],[49.3,53.4,'sub','каждый, кто хочет',P.coral],
+ [53.8,56.9,'main','Зимой — Тайный Санта'],
+ [57.3,60.4,'main','Домашка — только тем, кому нужна'],[57.6,60.4,'sub','без давления',P.teal],
+ [64.3,66.5,'main','Не стесняйся — тут все добрые'],
+];
+function renderCaps(t){
+  let h='';
+  CAPS.forEach(([t0,t1,cls,txt,col])=>{
+    if(t<t0||t>t1)return;
+    const k=back((t-t0)/.4), out=clamp((t1-t)/.25);
+    const style=`transform:scale(${k*(.9+.1*out)});opacity:${out};${col?`background:${col};`:''}`;
+    h+=`<div class="${cls}" style="${style}">${txt}</div>`;
+  });
+  document.getElementById('caps').innerHTML=h;
+}
+
+const XF=.45;
+window.renderFrame=function(t){
+  let out='';
+  SCENES.forEach((sc,i)=>{
+    const last=i===SCENES.length-1;
+    if(t<sc.t0||t>=(last?Infinity:sc.t1+XF))return;
+    const op=i===0?1:clamp((t-sc.t0)/XF);
+    out+=`<g opacity="${op}">${sc.f(t-sc.t0)}</g>`;
+  });
+  document.getElementById('art').innerHTML=out;
+  renderCaps(t);
+};
+window.TOTAL=TOTAL;
+const q=new URLSearchParams(location.search);
+renderFrame(parseFloat(q.get('t')||'2'));
+</script>
+</body>
+</html>
