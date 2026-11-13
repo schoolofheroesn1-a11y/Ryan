@@ -68,21 +68,24 @@ export function rewards(wave) {
 
 // --- Локации ---
 // После 3-го Костяного Рыцаря (раунд 15) открываются подступы к замку,
-// после 3-го Главы разбойников (раунд 30) — кладбище, после 3-го Короля-Призрака (раунд 45) — Алая Бездна
+// после 3-го Главы разбойников (раунд 30) — кладбище, после 3-го Короля-Призрака (раунд 45) — Алая Бездна,
+// после 3-го Алого Серафима (раунд 60) — Штормовое море (бой на палубе, босс — Кракен)
 export const LOCATIONS = {
   1: { name: "Склеп", bg: "arena_bg" },
   2: { name: "Подступы к замку", bg: "castle_bg" },
   3: { name: "Кладбище", bg: "graveyard_bg" },
   4: { name: "Алая Бездна", bg: "abyss_bg" },
+  5: { name: "Штормовое море", bg: "sea_bg" },
 };
-export const LAST_LOCATION = 4;
+export const LAST_LOCATION = 5;
 export const CASTLE_FROM_WAVE = 16;
 export const GRAVEYARD_FROM_WAVE = 31;
 export const ABYSS_FROM_WAVE = 46;
+export const SEA_FROM_WAVE = 61;
 export const locationFor = (wave) =>
-  (wave >= ABYSS_FROM_WAVE ? 4 : wave >= GRAVEYARD_FROM_WAVE ? 3 : wave >= CASTLE_FROM_WAVE ? 2 : 1);
+  (wave >= SEA_FROM_WAVE ? 5 : wave >= ABYSS_FROM_WAVE ? 4 : wave >= GRAVEYARD_FROM_WAVE ? 3 : wave >= CASTLE_FROM_WAVE ? 2 : 1);
 /** Первая волна локации. */
-export const locationStart = (loc) => ({ 1: 1, 2: CASTLE_FROM_WAVE, 3: GRAVEYARD_FROM_WAVE, 4: ABYSS_FROM_WAVE })[loc];
+export const locationStart = (loc) => ({ 1: 1, 2: CASTLE_FROM_WAVE, 3: GRAVEYARD_FROM_WAVE, 4: ABYSS_FROM_WAVE, 5: SEA_FROM_WAVE })[loc];
 
 /**
  * Кто ждёт на этой волне: skeleton / bandit / zombie / bat и боссы локаций —
@@ -100,6 +103,10 @@ export function enemyKind(wave) {
     if (isBossWave(wave)) return "wraith";
     return ["zombie", "bat", "skeleton"][wave % 3];
   }
-  if (isBossWave(wave)) return "seraph";
-  return ["husk", "imp", "hound"][wave % 3];
+  if (loc === 4) {
+    if (isBossWave(wave)) return "seraph";
+    return ["husk", "imp", "hound"][wave % 3];
+  }
+  if (isBossWave(wave)) return "kraken"; // Штормовое море: утопленники, крабы, наги и Кракен
+  return ["drowned", "crab", "naga"][wave % 3];
 }

@@ -1,21 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EMERGE_TIME, KRAKEN_RHYME, VOYAGE, emergeState, seaChest, seaReward, seaWave } from "../js/sea.js";
+import { EMERGE_TIME, KRAKEN_RHYME, emergeState } from "../js/sea.js";
+import { LAST_LOCATION, LOCATIONS, SEA_FROM_WAVE, enemyKind, locationFor, locationStart } from "../js/gear.js";
+import { chestFor } from "../js/chests.js";
 
-test("поход: пять стычек и Кракен в конце", () => {
-  assert.equal(VOYAGE.length, 6);
-  assert.equal(VOYAGE.at(-1), "kraken");
+test("Штормовое море — пятая земля приключения после Алой Бездны", () => {
+  assert.equal(LAST_LOCATION, 5);
+  assert.equal(LOCATIONS[5].bg, "sea_bg");
+  assert.deepEqual([locationFor(60), locationFor(61), locationFor(200)], [4, 5, 5]);
+  assert.equal(locationStart(5), SEA_FROM_WAVE);
+  assert.equal(enemyKind(60), "seraph");
+  assert.equal(enemyKind(65), "kraken");
+  const kinds = new Set([61, 62, 63, 64, 66, 67].map(enemyKind));
+  assert.deepEqual([...kinds].sort(), ["crab", "drowned", "naga"]);
+  assert.equal(chestFor(61), "sea");
+  assert.equal(chestFor(50), "abyss");
   assert.equal(KRAKEN_RHYME.length, 4);
-});
-
-test("сила от передовой, Кракен сильнее, награда за Кракена — синие камни и сундук", () => {
-  assert.equal(seaWave(0, 1), 8);
-  assert.equal(seaWave(0, 30), 30);
-  assert.ok(seaWave(5, 30) > seaWave(4, 30));
-  assert.equal(seaReward(5, 20)[2], 2);
-  assert.equal(seaChest(5, () => 0.99), "sea");
-  assert.equal(seaChest(0, () => 0.99), null);
-  assert.equal(seaChest(0, () => 0.01), "sea");
 });
 
 test("появление: строки по очереди, щупальца, потом голова и глаза", () => {

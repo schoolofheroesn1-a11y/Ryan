@@ -4,7 +4,7 @@
 import { BANK, DEFAULT_BANK, EX_NAMES, EX_SHORT, EX_TIPS, NAMES, cleanBank, mapBank, setBank } from "./exercises.js";
 import { Motion, isIOS } from "./motion.js";
 import {
-  ABYSS_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
+  ABYSS_FROM_WAVE, SEA_FROM_WAVE, BOSS_EVERY, CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, LAST_LOCATION, LOCATIONS, RELICS, SHOP_TABS, SWORDS, enemyKind, isBossWave, item,
   locationFor, locationStart, priceText, rewards,
 } from "./gear.js";
 import { ARMORS, PUMPKIN_HEAL, Player, STATS, TALISMANS, setSaveSlot } from "./player.js";
@@ -17,7 +17,7 @@ import { FLAME_TIERS, dayKey, shiftDay } from "./streak.js";
 import { CHESTS, CHEST_ORDER, RARITY, addChest, chestCount, chestState, isSkinKey, openChest, rollDrop } from "./chests.js";
 import { FLUFF_DRAIN, GAZE_REFLECT, GAZE_TIME, GIFT, START_ESTUS, applyGift, emptyMods, towerStats, floorChest, floorPlan, floorReward, floorWave, gazeEvery, offerGifts } from "./tower.js";
 import { BTN_GUARD, MOVES, buttonsScale, extraHits, pickMove, windFor } from "./moves.js";
-import { EMERGE_TIME, KRAKEN_RHYME, SEA_ESTUS, SEA_HEAL, VOYAGE, emergeState, seaChest, seaReward, seaWave } from "./sea.js";
+import { KRAKEN_RHYME, emergeState } from "./sea.js";
 import { ACH, ACHIEVEMENTS, ACH_CATS, achContext, achProgress, battleEvents, checkAchievements } from "./achievements.js";
 import { Store, TIPS } from "./store.js";
 import { loadJSON, saveJSON } from "./storage.js";
@@ -249,7 +249,7 @@ function drawAchIcon(c, cat, x, y, k, on = true) {
 const titleName = (id) => (id && ACH[id] ? tr(ACH[id].title) : "");
 
 /** Тема сцены: в бою — музыка земли, у костра (кузница, инвентарь) — тема костра, в меню — увертюра. */
-const LOCATION_MUSIC = { 1: "crypt", 2: "castle", 3: "grave", 4: "abyss" };
+const LOCATION_MUSIC = { 1: "crypt", 2: "castle", 3: "grave", 4: "abyss", 5: "castle" };
 function sceneMusic(scene) {
   if (scene.music) return scene.music; // у Шпиля Самайна — своя тема
   if (scene instanceof BattleScene) return LOCATION_MUSIC[scene.location] || "crypt";
@@ -1031,7 +1031,6 @@ class TitleScene extends Scene {
     this.items = [
       ["Карта приключений", () => g.change(new MapScene(g))],
       ["Шпиль Самайна", () => g.change(new SpireHallScene(g))],
-      ["Морской поход", () => g.change(new SeaPortScene(g))],
       ["Костёр: прокачка", () => g.change(new BonfireScene(g))],
       ["Лавка образов", () => g.change(new CosmeticsScene(g))],
       ["Мультиплеер", () => g.change(new MultiplayerScene(g))],
@@ -1083,7 +1082,7 @@ class TitleScene extends Scene {
       const y0 = top + Math.max(0, Math.floor((g.H - top - 16 - n * h - gap * (n - 1)) / 2));
       return this.items.map((_, i) => [40, y0 + i * (h + gap), W - 80, h]);
     }
-    return this.items.map((_, i) => [24, 80 + i * 32, 290, 28]);
+    return this.items.map((_, i) => [24, 84 + i * 36, 290, 31]);
   }
   textSize(r) {
     return this.game.portrait ? (r[3] >= 64 ? 24 : 16) : 12;
@@ -1271,7 +1270,7 @@ class TitleScene extends Scene {
 }
 
 // ------------------------------------------------------------------ Карта приключений
-const MAP_SLOTS = 8; // 4 земли открыты, ещё 4 — в будущих обновлениях («?»)
+const MAP_SLOTS = 8; // 5 земель открыто, ещё 3 — в будущих обновлениях («?»)
 const MAP_ROUNDS = 15; // раундов в земле: 3 по 5, каждый пятый — босс
 const MAP_W = 320, MAP_H = 180; // карта рисуется в пикселях мира и растягивается ×2
 // Сердца областей на материке: 1 Склеп, 2 Подступы к замку, 3 Кладбище, 4 Алая Бездна, 5–8 — неоткрытые земли
@@ -1282,14 +1281,16 @@ const MAP_BIOME = {
   2: { base: [70, 104, 54], dv: 16, deco: "tree" }, // Подступы: луга и рощи
   3: { base: [48, 70, 66], dv: 14, deco: "cross" }, // Кладбище: сырая земля, кресты
   4: { base: [70, 18, 20], dv: 18, deco: "lava" }, // Алая Бездна: выжженная земля и лава
+  5: { base: [40, 86, 110], dv: 14, deco: "wave" }, // Штормовое море: залитые берега и гребни волн
 };
 const MAP_GLYPH = { // ориентиры в сердце области (k — контур, остальные буквы — цвета ниже)
   1: ["...kkkkk...", "..kgggggk..", ".kgg...ggk.", "kgg.....ggk", "kg.......gk", "kg.......gk", "kkkkkkkkkkk"],
   2: ["k.k.....k.k", "kkk..r..kkk", "kgk.kkk.kgk", "kgkkgggkkgk", "kggggggggk.", "kgg.kkk.ggk", "kkkkkkkkkkk"],
   3: ["....kkk....", "...kwwwk...", "..kwwwwwk..", "..kwk.kwk..", "..kwwwwwk..", "..kwwwwwk..", ".kkkkkkkkk."],
   4: ["....rrr....", "..rroooorr.", ".roooyyooor", "rooyy..yyoo", ".rooyyyyoor", "..rroooorr.", "....rrr...."],
+  5: [".....k.....", "....kwk....", "...kwwk.p..", "..kwwwk.pp.", "kkkkkkkkkkk", ".kbbbbbbbk.", "..kkkkkkk..", "pp..bb..pp."], // корабль и щупальца
 };
-const GLYPH_COL = { k: [16, 12, 22], g: [150, 140, 130], w: [200, 204, 196], r: [170, 30, 28], o: [240, 110, 40], y: [255, 220, 120] };
+const GLYPH_COL = { k: [16, 12, 22], g: [150, 140, 130], w: [200, 204, 196], r: [170, 30, 28], o: [240, 110, 40], y: [255, 220, 120], b: [120, 80, 46], p: [150, 50, 100] };
 
 /** Детерминированный шум: одна и та же карта у всех игроков. */
 function mapHash(x, y, s = 0) {
@@ -1403,6 +1404,8 @@ function mapArt(openCount) {
       for (let yy = -3; yy <= 0; yy++) put(x, y + yy, [170, 176, 170]);
       put(x - 1, y - 2, [170, 176, 170]);
       put(x + 1, y - 2, [170, 176, 170]);
+    } else if (B.deco === "wave" && inside(-2, 2, 0, 0) && i % 2) { // гребни волн
+      for (let xx = -2; xx <= 2; xx++) put(x + xx, y - (Math.abs(xx) < 2 ? 1 : 0), xx < 1 ? [200, 230, 240] : [90, 150, 180]);
     } else if (B.deco === "lava" && i % 2 === 0) { // трещина: несколько шагов вбок
       let xx = x, yy = y;
       for (let k = 0; k < 6 && at(xx, yy) === r; k++) {
@@ -1413,7 +1416,7 @@ function mapArt(openCount) {
     }
   }
   // дорога героя: Склеп → Подступы → Кладбище → Бездна (дальше — к неоткрытым землям)
-  const road = [1, 2, 3, 4];
+  const road = [1, 2, 3, 4, 5];
   for (let i = 0; i + 1 < road.length; i++) {
     const [x0, y0] = centers[road[i]], [x1, y1] = centers[road[i + 1]], n = Math.round(Math.hypot(x1 - x0, y1 - y0));
     if (road[i + 1] > openCount) continue;
@@ -1567,7 +1570,7 @@ class MapScene extends Scene {
     const e = Math.ceil(v.k);
     for (const [x, y] of edges[cur]) c.fillRect(Math.floor(x * v.k), Math.floor(y * v.k), e, e);
     c.restore();
-    for (let loc = 1; loc <= Math.min(open, 4); loc++) { // ориентиры в сердцах земель — всегда стоят прямо
+    for (let loc = 1; loc <= Math.min(open, LAST_LOCATION); loc++) { // ориентиры в сердцах земель — всегда стоят прямо
       const [x, y] = this.toScreen(...centers[loc]), k = v.k;
       MAP_GLYPH[loc].forEach((row, yy) => [...row].forEach((ch, xx) => {
         if (ch === ".") return;
@@ -2082,7 +2085,7 @@ class InventoryScene extends Scene {
         if (!(p.chests[this.sel] > 0)) {
           sfx.deny();
           return this.say(CHESTS[this.sel].spire ? "Сундуки Самайна выпадают с боссов Шпиля Самайна"
-            : CHESTS[this.sel].sea ? "Сундуки Прилива выпадают с Кракена в Морском походе" : "Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда");
+            : CHESTS[this.sel].sea ? "Сундуки Прилива выпадают в Штормовом море, с Кракена — всегда" : "Таких сундуков нет: они выпадают с врагов этой земли, с босса — всегда");
         }
         return this.start(this.sel);
       }
@@ -2166,7 +2169,7 @@ class InventoryScene extends Scene {
   drawChests() {
     const g = this.game, c = g.ctx, P = g.portrait, p = this.player, t = g.time, front = locationFor(frontierOf(p));
     const known = (kind) => (CHESTS[kind].spire ? g.profile.tower.runs > 0 || g.profile.tower.best > 0
-      : CHESTS[kind].sea ? g.profile.sea.runs > 0 : CHESTS[kind].loc <= front) || (p.chests[kind] || 0) > 0;
+      : CHESTS[kind].loc <= front) || (p.chests[kind] || 0) > 0;
     // ячейки: маленькие квадраты с сундуком и числом
     for (const [kind, r] of this.slots()) {
       const [x, y, w, h] = r, n = p.chests[kind] || 0, sel = this.sel === kind, kn = known(kind);
@@ -3063,7 +3066,7 @@ class BattleScene extends Scene {
     if (game.hard) this.enemy.makeHard(); // хардкор (без камеры — всегда)
     if (game.mode === "btn") this.enemy.makeButtons(); // без камеры — враги злее и хитрее
     this.location = locationFor(p.wave);
-    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE].includes(p.wave) && p.wave === frontierOf(p); // первый бой на новой земле
+    this.newLand = [CASTLE_FROM_WAVE, GRAVEYARD_FROM_WAVE, ABYSS_FROM_WAVE, SEA_FROM_WAVE].includes(p.wave) && p.wave === frontierOf(p); // первый бой на новой земле
     this.auraT = 0; // аура Алого Серафима: урон герою раз в секунду
     this.burnT = 0;
     this.ghosts = []; // призрачное пламя Короля-Призрака
@@ -3103,6 +3106,49 @@ class BattleScene extends Scene {
     this.outfitFx = new OutfitFx(); // лепестки сакуры доспеха самурая
     this.hitFx = new HitFx();
     this.victory = null;
+    if (this.enemy.kind === "kraken") this.startEmerge();
+  }
+  /** Кракен: сначала сцена появления — стих строка за строкой, качка, щупальца проламывают палубу, голова, глаза. */
+  startEmerge() {
+    this.cinematic = true;
+    this.emergeT = 0;
+    this.emerge = emergeState(0);
+    this.bubbles = [];
+  }
+  updateEmerge(dt) {
+    const was = this.emerge;
+    this.emergeT += dt;
+    this.emerge = emergeState(this.emergeT);
+    const e = this.emerge;
+    this.game.shake = Math.max(this.game.shake, 0.04 + 0.12 * e.rock * (0.5 + 0.5 * Math.sin(this.emergeT * 3)));
+    e.lines.forEach((v, i) => { if (v > 0 && was.lines[i] === 0) sfx.dodge(); }); // всплеск на каждую строку
+    e.tentacles.forEach((v, i) => { if (v > 0 && was.tentacles[i] === 0) { sfx.hit(); this.game.shake = 0.3; } });
+    if (e.head > 0 && was.head === 0) sfx.thunder();
+    if (e.eyes && !was.eyes) { sfx.thunder(); sfx.alert(); this.game.shake = 0.8; vibrate([60, 40, 200]); }
+    if (Math.random() < dt * 30) this.bubbles.push({ x: rand(150, 300), y: 112, vy: -rand(10, 30), life: rand(0.4, 1) });
+    for (const b of this.bubbles) { b.y += b.vy * dt; b.life -= dt; }
+    this.bubbles = this.bubbles.filter((b) => b.life > 0);
+    if (e.done) this.endEmerge();
+  }
+  endEmerge() {
+    this.cinematic = false;
+    this.emerge = null;
+    this.enemy.set("idle", 1.2);
+    const sea = this.game.profile.sea;
+    if (!sea.seen) { sea.seen = true; this.game.profile.save(); }
+  }
+  /** Стих появления Кракена — над чудовищем, последняя строка крупно и красным. */
+  drawEmerge() {
+    const g = this.game, P = g.portrait, e = this.emerge, mid = P ? GAME_H + 30 : 22;
+    g.rect([0, mid - 12, W, 4 * (P ? 34 : 26) + 20], "rgba(4,10,20,0.55)");
+    KRAKEN_RHYME.forEach((ln, i) => {
+      const a = e.lines[i];
+      if (a <= 0) return;
+      const last = i === KRAKEN_RHYME.length - 1, fs = last ? (P ? 24 : 16) : P ? 16 : 12;
+      const col = last ? `rgba(255,${Math.round(90 + 60 * Math.sin(g.time * 8))},70,${a})` : `rgba(220,240,255,${a})`;
+      g.text(ln, W / 2, mid + i * (P ? 34 : 26) + (1 - a) * 8, fs, col, "center");
+    });
+    if (g.profile.sea.seen) g.text("Касание: пропустить", W / 2, g.gameH - (P ? 40 : 14), P ? 12 : 8, COL.dim, "center");
   }
   get needsCamera() {
     return true;
@@ -3364,8 +3410,14 @@ class BattleScene extends Scene {
       p.save();
       setTimeout(() => sfx.chestDrop(), 350);
     }
-    this.game.checkAch(battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind,
-      hard: this.game.hard, hour: new Date().getHours() }));
+    const ev = battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind,
+      hard: this.game.hard, hour: new Date().getHours() });
+    if (en.kind === "kraken") { // Гроза морей
+      ev.push("kraken");
+      this.game.profile.sea.krakens += 1;
+      this.game.profile.save();
+    }
+    this.game.checkAch(ev);
     const style = this.game.style("victory");
     if (style) { // купленное оформление победы
       this.victory = new VictoryFx(style);
@@ -3416,14 +3468,19 @@ class BattleScene extends Scene {
       }
       return;
     }
+    if (this.cinematic) { // появление Кракена: уже виденное можно пропустить касанием
+      if (this.game.profile.sea.seen && (g.taps.length || g.key("Enter", " ", "Escape"))) { g.taps.length = 0; this.endEmerge(); }
+      return;
+    }
     if (g.key("Escape") || g.tapped(this.backRect())) return this.leave();
-    if (this.ready > 0 || this.paused || this.cinematic) return;
+    if (this.ready > 0 || this.paused) return;
     for (const m of moves) if (m !== "squat") this.act(m); // в бою важен сам момент приседа
   }
 
   update(dt) {
     this.manual = !this.game.motion.ok; // с камерой бой — только движениями: кнопок ОТЖИМ/ПРИСЕД/ЗВЕЗДА нет
     const g = this.game, p = g.player, en = this.enemy;
+    if (this.cinematic) this.updateEmerge(dt);
     this.torchL.update(dt);
     this.torchR.update(dt);
     this.bladeEmbers.update(dt);
@@ -3944,6 +4001,10 @@ class BattleScene extends Scene {
         c.fillRect(Math.round(px), Math.round(py), 2, 1);
       }
     }
+    if (this.cinematic) for (const b of this.bubbles) { // пузыри из-под воды у борта
+      c.fillStyle = `rgba(200,240,255,${b.life})`;
+      c.fillRect(Math.round(b.x), Math.round(b.y), 2, 2);
+    }
   }
 
   /** Кольца щупальца вокруг героя — поверх героя. */
@@ -4017,6 +4078,7 @@ class BattleScene extends Scene {
   }
 
   drawUi() {
+    if (this.cinematic) return this.drawEmerge(); // появление Кракена — чистый кадр, без интерфейса боя
     const g = this.game, p = g.player, en = this.enemy;
     this.hitFx.drawFlash(g.ctx, W, g.gameH);
     if (this.auraHitT > 0) g.rect([0, 0, W, g.gameH], `rgba(255,30,20,${this.auraHitT * 0.5})`); // жар ауры — краснеет экран
@@ -4595,261 +4657,6 @@ class SpireHallScene extends Scene {
     const [go, back, top] = this.buttons();
     g.button(top, "РЕЙТИНГ", { size: P ? 16 : 8, color: "rgb(150,220,255)" });
     g.button(go, L ? "Снова в Шпиль" : "Начать восхождение", { selected: true, size: P ? 24 : 12, border: "rgb(255,150,60)", color: "rgb(255,170,80)" });
-    g.button(back, "< В меню", { size: P ? 16 : 8 });
-  }
-}
-
-// ------------------------------------------------------------------ Морской поход
-/** Новый поход: здоровье полное, три фляги; сила врагов — от передовой героя. */
-function newVoyage(game) {
-  const p = game.player;
-  p.mods = null;
-  return { step: 0, hp: p.maxHp, estus: SEA_ESTUS, frontier: frontierOf(p), earned: [0, 0, 0], chests: [] };
-}
-
-/** Поход окончен (победа над Кракеном, гибель или возвращение): итоги — в порту. */
-function endVoyage(game, voyage, outcome) {
-  game.profile.sea.runs += 1;
-  game.profile.save();
-  game.checkAch();
-  game.change(new SeaPortScene(game, { ...voyage, outcome }));
-}
-
-/** Бой на палубе. Последний — Кракен: сначала сцена появления со стихом, потом бой. */
-class SeaScene extends BattleScene {
-  constructor(game, voyage) {
-    super(game);
-    const p = game.player;
-    this.voyage = voyage;
-    this.kind = VOYAGE[voyage.step];
-    this.enemy = new Skeleton(seaWave(voyage.step, voyage.frontier), this.kind);
-    if (game.hard) this.enemy.makeHard();
-    if (game.mode === "btn") this.enemy.makeButtons();
-    this.foeNo = voyage.step + 1;
-    this.bg = "sea_bg";
-    this.music = this.kind === "kraken" ? "abyss" : "castle";
-    this.location = 0;
-    this.newLand = false;
-    this.hp = Math.min(voyage.hp, p.maxHp);
-    this.estus = Math.min(voyage.estus, SEA_ESTUS);
-    this.estusCap = SEA_ESTUS;
-    this.backLabel = "< В ПОРТ";
-    if (this.kind === "kraken") { // появление: строки стиха, качка, щупальца, голова — бой после
-      this.cinematic = true;
-      this.ready = 0;
-      this.emergeT = 0;
-      this.emerge = emergeState(0);
-      this.bubbles = [];
-    }
-  }
-  saveRun() {
-    this.voyage.hp = this.hp;
-    this.voyage.estus = this.estus;
-  }
-  update(dt) {
-    if (this.cinematic) {
-      const was = this.emerge;
-      this.emergeT += dt;
-      this.emerge = emergeState(this.emergeT);
-      const e = this.emerge;
-      this.game.shake = Math.max(this.game.shake, 0.04 + 0.12 * e.rock * (0.5 + 0.5 * Math.sin(this.emergeT * 3)));
-      e.lines.forEach((v, i) => { if (v > 0 && was.lines[i] === 0) sfx.dodge(); }); // всплеск на каждую строку
-      e.tentacles.forEach((v, i) => { if (v > 0 && was.tentacles[i] === 0) { sfx.hit(); this.game.shake = 0.3; } });
-      if (e.head > 0 && was.head === 0) sfx.thunder();
-      if (e.eyes && !was.eyes) { sfx.thunder(); sfx.alert(); this.game.shake = 0.8; vibrate([60, 40, 200]); }
-      if (Math.random() < dt * 30) this.bubbles.push({ x: rand(150, 300), y: 112, vy: -rand(10, 30), life: rand(0.4, 1) });
-      for (const b of this.bubbles) { b.y += b.vy * dt; b.life -= dt; }
-      this.bubbles = this.bubbles.filter((b) => b.life > 0);
-      if (e.done) {
-        this.cinematic = false;
-        this.emerge = null;
-        this.enemy.set("idle", 1.2);
-      }
-    }
-    super.update(dt);
-  }
-  draw(c) {
-    super.draw(c);
-    if (this.cinematic) for (const b of this.bubbles) { // пузыри из-под воды у борта
-      c.fillStyle = `rgba(200,240,255,${b.life})`;
-      c.fillRect(Math.round(b.x), Math.round(b.y), 2, 2);
-    }
-  }
-  win() {
-    const g = this.game, p = g.player, en = this.enemy, v = this.voyage;
-    en.set("dead", 0);
-    this.result = "won";
-    this.resultT = 0;
-    const [ash, red, blue] = seaReward(v.step, v.frontier);
-    p.souls += ash;
-    p.redGems += red;
-    p.blueGems += blue;
-    this.reward = [ash, red, blue];
-    v.earned = v.earned.map((x, i) => x + this.reward[i]);
-    const chest = seaChest(v.step);
-    this.drop = chest ? { kind: chest, t: 0 } : null;
-    if (chest) {
-      addChest(p, chest);
-      v.chests.push(chest);
-      setTimeout(() => sfx.chestDrop(), 350);
-    }
-    this.hp = Math.min(p.maxHp, this.hp + Math.round(p.maxHp * SEA_HEAL)); // передышка между стычками
-    this.pumpkinHeal(PUMPKIN_HEAL);
-    p.save();
-    this.saveRun();
-    const st = g.profile.streak, lit = st.award(en.boss);
-    this.streakLine = "";
-    if (lit.add) this.streakLine = tf(lit.fresh ? "Огонёк дня зажжён! +{n} · в серии {p}" : "Пламя разгорается! +{n} · в серии {p}", { n: lit.add, p: st.points });
-    if (en.kind === "kraken") g.profile.sea.krakens += 1;
-    g.profile.save();
-    const ev = battleEvents({ ...this.feat, hpFrac: this.hp / p.maxHp, boss: en.boss, kind: en.kind, hard: g.hard, hour: new Date().getHours() });
-    if (en.kind === "kraken") ev.push("kraken");
-    g.checkAch(ev);
-    en.kind === "kraken" ? sfx.fanfare() : sfx.win();
-    vibrate([40, 30, 40]);
-  }
-  die() {
-    this.result = "dead";
-    this.resultT = 0;
-    this.voyage.hp = 0;
-    sfx.die();
-  }
-  leave() {
-    this.saveRun();
-    endVoyage(this.game, this.voyage, "left");
-  }
-  handle(moves) {
-    const g = this.game;
-    if (!this.result) return super.handle(moves);
-    if (this.resultT < 1) return;
-    const go = g.taps.length || g.key("Enter", " ", "Escape") || moves.includes("jack") || moves.includes("pushup");
-    if (this.result === "won" && (go || this.resultT >= AUTO_BONFIRE)) {
-      g.taps.length = 0;
-      if (this.kind === "kraken") return endVoyage(g, this.voyage, "won");
-      return g.change(new SeaScene(g, { ...this.voyage, step: this.voyage.step + 1 }));
-    }
-    if (this.result === "dead" && go) {
-      g.taps.length = 0;
-      endVoyage(g, this.voyage, "dead");
-    }
-  }
-  drawUi() {
-    if (!this.cinematic) super.drawUi(); // появление Кракена — чистый кадр, без интерфейса боя
-    const g = this.game, P = g.portrait;
-    if (!this.result && !this.cinematic) {
-      const t = this.kind === "kraken" ? "МОРСКОЙ ПОХОД · КРАКЕН" : tf("МОРСКОЙ ПОХОД · СТЫЧКА {n}/{all}", { n: this.voyage.step + 1, all: VOYAGE.length - 1 });
-      g.text(t, W / 2, P ? 96 : 4, P ? 12 : 8, "rgb(120,210,240)", "center");
-    }
-    if (this.cinematic) { // стих появления — строка за строкой
-      const e = this.emerge, mid = P ? GAME_H + 30 : 22; // стих — над чудовищем
-      g.rect([0, mid - 12, W, 4 * (P ? 34 : 26) + 20], `rgba(4,10,20,${0.55})`);
-      KRAKEN_RHYME.forEach((ln, i) => {
-        const a = e.lines[i];
-        if (a <= 0) return;
-        const last = i === KRAKEN_RHYME.length - 1, fs = last ? (P ? 24 : 16) : P ? 16 : 12;
-        const col = last ? `rgba(255,${Math.round(90 + 60 * Math.sin(g.time * 8))},70,${a})` : `rgba(220,240,255,${a})`;
-        g.text(ln, W / 2, mid + i * (P ? 34 : 26) + (1 - a) * 8, fs, col, "center");
-      });
-    }
-  }
-  drawResult() {
-    const g = this.game, v = this.voyage, mid = g.gameH / 2;
-    g.rect([0, mid - 45, W, 90], `rgba(4,10,20,${Math.min(0.82, this.resultT * 1.2)})`);
-    if (this.result === "dead") {
-      g.text("МОРЕ ЗАБРАЛО ГЕРОЯ", W / 2, mid - 28, 24, "rgb(120,170,220)", "center");
-      g.text("Добыча похода остаётся у вас. Касание: в порт", W / 2, mid + 14, 8, COL.text, "center");
-      return;
-    }
-    const [ash, red, blue] = this.reward, kr = this.kind === "kraken";
-    g.text(kr ? "КРАКЕН ПОВЕРЖЕН!" : "ПАЛУБА ЧИСТА", W / 2, mid - 28, kr ? 32 : 24, kr ? COL.gold : "rgb(120,210,240)", "center");
-    g.text(`+${ash} пепла  +${red} алых${blue ? `  +${blue} синих` : ""}`, W / 2, mid + 10, 8, COL.gold, "center");
-    g.text(kr ? "Касание: в порт" : tf("Дальше по курсу через {n}", { n: Math.max(1, Math.ceil(AUTO_BONFIRE - this.resultT)) }), W / 2, mid + 24, 8, COL.text, "center");
-    if (this.streakLine) g.text(this.streakLine, W / 2, mid + 35, 8, "rgb(255,200,110)", "center");
-    if (this.drop && this.drop.t > 0.5) g.text(tf("Выпал сундук: {name}! Откройте в инвентаре у костра", { name: tr(CHESTS[this.drop.kind].name) }), W / 2, mid - 42, 8, "rgb(150,230,255)", "center");
-  }
-}
-
-/** Порт: правила похода в рамке, рекорды, итоги последнего похода. */
-class SeaPortScene extends Scene {
-  constructor(game, last = null) {
-    super(game);
-    this.last = last;
-    this.music = "castle";
-    game.player.mods = null;
-  }
-  get ownsPanel() {
-    return true;
-  }
-  buttons() {
-    const g = this.game;
-    if (g.portrait) return [[40, g.H - 220, W - 80, 90], [40, g.H - 116, W - 80, 80]];
-    return [[W / 2 - 150, GAME_H - 76, 300, 30], [W / 2 - 150, GAME_H - 40, 300, 26]];
-  }
-  handle() {
-    const g = this.game, [go, back] = this.buttons();
-    if (g.key("Escape") || g.tapped(back)) {
-      sfx.click();
-      return g.change(new TitleScene(g));
-    }
-    if (g.key("Enter", " ") || g.tapped(go)) {
-      sfx.click();
-      g.change(new SeaScene(g, newVoyage(g)));
-    }
-  }
-  draw(c) {
-    const g = this.game, t = g.time;
-    c.drawImage(IMG.sea_bg, 0, 0);
-    const p = g.player, hero = anim(`${heroSprite(p.sword, p.worn, g.skin, g.outfit)}_idle`, t, 1.5, 2);
-    c.drawImage(hero, 70, GROUND_ARENA - hero.height);
-  }
-  drawUi() {
-    const g = this.game, P = g.portrait, c = g.ctx, L = this.last, sea = g.profile.sea;
-    let y = P ? GAME_H + 10 : 12;
-    g.text("МОРСКОЙ ПОХОД", W / 2 + 2, y + 2, P ? 32 : 24, "rgb(10,30,50)", "center", false);
-    g.text("МОРСКОЙ ПОХОД", W / 2, y, P ? 32 : 24, "rgb(120,210,240)", "center", false);
-    y += P ? 44 : 30;
-    const fs = P ? 12 : 8, lh = P ? 19 : 11;
-    if (L) {
-      const head = L.outcome === "won" ? "КРАКЕН ПОВЕРЖЕН! Корабль спасён" : L.outcome === "dead" ? "Море забрало героя" : "Корабль вернулся в порт";
-      g.text(head, W / 2, y, P ? 16 : 12, L.outcome === "won" ? COL.gold : COL.text, "center");
-      y += P ? 24 : 16;
-      const [a, r, b] = L.earned;
-      g.text(tf("Добыто: {a} пепла, {r} алых, {b} синих, сундуков {c}", { a, r, b, c: L.chests.length }), W / 2, y, fs, COL.gold, "center");
-      y += lh * 1.6;
-    } else {
-      const rules = [
-        ["Пять стычек на палубе, затем из моря поднимается Кракен.", COL.text],
-        ["Здоровье и зелья переносятся, после победы +25% здоровья.", COL.text],
-        ["Хватка щупальца: бейте, чтобы вырваться.", "rgb(150,220,255)"],
-        ["Чернила слепят, волна бьёт по всей палубе.", "rgb(150,220,255)"],
-        ["Кракен даёт Сундук Прилива: Меч Прилива и облик «Новый пират».", "rgb(255,200,90)"],
-        ["Сила врагов растёт вместе с вашей передовой.", COL.dim],
-      ];
-      const lines = rules.flatMap(([r, col]) => (P ? g.wrap(r, 44) : [tr(r)]).map((l, i) => [l, col, i === 0]));
-      const pad = P ? 18 : 9, head = P ? 30 : 16;
-      const bw = P ? W - 48 : 470, bh = head + lines.length * lh + pad * 1.4, bx = (W - bw) / 2, by = y;
-      g.rect([bx, by, bw, bh], "rgba(4,14,26,0.9)");
-      c.strokeStyle = "rgb(196,150,70)";
-      c.lineWidth = P ? 3 : 2;
-      c.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
-      c.strokeStyle = "rgba(120,210,240,0.6)";
-      c.lineWidth = 1;
-      c.strokeRect(bx + (P ? 7 : 4) + 0.5, by + (P ? 7 : 4) + 0.5, bw - (P ? 14 : 8) - 1, bh - (P ? 14 : 8) - 1);
-      g.text("ПРАВИЛА", W / 2, by + (P ? 10 : 6), P ? 16 : 8, "rgb(120,210,240)", "center");
-      let ly = by + head + (P ? 4 : 1);
-      for (const [ln, col, first] of lines) {
-        if (first) {
-          c.fillStyle = "rgb(120,210,240)";
-          c.fillRect(bx + pad, ly + (P ? 4 : 2), P ? 6 : 3, P ? 6 : 3);
-        }
-        g.text(ln, bx + pad + (P ? 14 : 7), ly, fs, col);
-        ly += lh;
-      }
-      y = by + bh + (P ? 14 : 8);
-    }
-    g.text(tf("Походов: {r} · Кракенов повержено: {k}", { r: sea.runs, k: sea.krakens }), W / 2, y, P ? 12 : 8, "rgb(150,220,255)", "center");
-    const [go, back] = this.buttons();
-    g.button(go, L ? "Снова в море" : "Отплыть!", { selected: true, size: P ? 24 : 12, border: "rgb(120,210,240)", color: "rgb(160,230,255)" });
     g.button(back, "< В меню", { size: P ? 16 : 8 });
   }
 }
@@ -5936,7 +5743,7 @@ class CosmeticsScene extends Scene {
     if (this.busy) return;
     if (it.chest && !g.store.owns(it.id)) { // облик из сундука: купить нельзя
       sfx.deny();
-      const text = it.chest === "sea" ? tf("«{name}» нельзя купить: он выпадает из Сундука Прилива — награды за Кракена в Морском походе.", { name: it.name })
+      const text = it.chest === "sea" ? tf("«{name}» нельзя купить: он выпадает из Сундука Прилива — земля «Штормовое море», с Кракена — всегда.", { name: it.name })
         : tf("«{name}» нельзя купить: он выпадает из Сундука Самайна — награды за боссов Шпиля Самайна.", { name: it.name });
       await choiceDialog({ title: "ОБЛИК ИЗ СУНДУКА", text, buttons: [[null, "ПОНЯТНО", true]] });
       return;
@@ -6822,4 +6629,4 @@ export async function boot() {
   document.getElementById("start-manual").onclick = () => start(false);
 }
 
-export { BankScene, InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene, TowerScene, TowerGiftScene, SpireHallScene, SeaScene, SeaPortScene };
+export { BankScene, InventoryScene, MapScene, BattleScene, BonfireScene, ProfileScene, CameraScene, ChallengeScene, CosmeticsScene, DuelScene, LeaderboardScene, MultiplayerScene, SettingsScene, ShopScene, SupportScene, TitleScene, TutorialScene, TowerScene, TowerGiftScene, SpireHallScene };

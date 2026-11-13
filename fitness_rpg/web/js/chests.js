@@ -12,11 +12,11 @@ export const CHESTS = {
   // свои уникальные награды (Тыквенный амулет, облик «Клинок Нетопыря») — 25% и наверняка к 6-му сундуку,
   // легендарное оружие земель и талисманы — чаще, чем в обычных сундуках
   samhain: { loc: 0, spire: true, name: "Сундук Самайна", ex: "squat", reps: 25, uniques: ["pumpkin", "sword_bat"], chance: 0.25, pity: 6 },
-  // Морской поход: с Кракена — всегда, с команды — иногда; Меч Прилива и облик «Новый пират»
-  sea: { loc: 0, sea: true, name: "Сундук Прилива", ex: "pushup", reps: 20, uniques: ["tide", "armor_pirate"], chance: 0.2, pity: 8 },
+  // Штормовое море (5-я земля): с Кракена — всегда, с морских врагов — иногда; Меч Прилива и облик «Новый пират»
+  sea: { loc: 5, sea: true, name: "Сундук Прилива", ex: "pushup", reps: 20, uniques: ["tide", "armor_pirate"], chance: 0.2, pity: 8 },
 };
 export const CHEST_ORDER = ["crypt", "castle", "grave", "abyss", "samhain", "sea"];
-export const LAND_CHESTS = CHEST_ORDER.slice(0, 4);
+export const LAND_CHESTS = ["crypt", "castle", "grave", "abyss", "sea"]; // по номеру земли
 export const CHEST_DROP = 0.12; // шанс сундука с обычного врага
 const LOC_START = { 1: 1, 2: 16, 3: 31, 4: 46 };
 const TALISMANS = ["amulet", "windcharm", "fang"];
