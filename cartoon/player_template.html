@@ -1,0 +1,80 @@
+<title>Даня и Карта Возможностей</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,600;0,700;0,800;1,600&display=swap">
+<style>
+/* Кинозал: одна тёмная тема, кадр по центру, управление под ним. */
+:root{--bg:#0d1224;--panel:#161d36;--fg:#eef0f7;--muted:#9aa3c0;--gold:#f2b544;--line:#26304f;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:'Nunito','Trebuchet MS',sans-serif;
+ padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 32px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{margin:0;font-size:clamp(22px,3.4vw,32px);font-weight:800;text-wrap:balance}
+h1 span{color:var(--gold)}
+.sub{margin:0;color:var(--muted);font-size:15px}
+.screen{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+canvas{width:100%;height:100%;display:block}
+.big{position:absolute;inset:0;margin:auto;width:92px;height:92px;border-radius:50%;border:0;background:rgba(242,181,68,.95);color:#2a1a02;cursor:pointer;
+ display:grid;place-items:center;box-shadow:0 8px 30px rgba(0,0,0,.4);transition:transform .15s}
+.big:hover{transform:scale(1.06)}.big svg{width:38px;height:38px;margin-left:6px}
+.bar{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.btn{flex:none;width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:#1e2747;color:var(--fg);cursor:pointer;display:grid;place-items:center}
+.btn:hover{border-color:var(--gold)}.btn svg{width:18px;height:18px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
+.time{flex:none;font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px;min-width:84px;text-align:right}
+.note{color:var(--muted);font-size:13px;margin:0}
+</style>
+<div class="wrap">
+  <div>
+    <h1>Даня и <span>Карта Возможностей</span></h1>
+    <p class="sub">Мультфильм о нашей школе · 1 минута · звук включается кнопкой</p>
+  </div>
+  <div class="screen">
+    <canvas id="film" aria-label="Мультфильм"></canvas>
+    <button class="big" id="big" aria-label="Смотреть"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg></button>
+  </div>
+  <div class="bar">
+    <button class="btn" id="play" aria-label="Пауза или воспроизведение"><svg viewBox="0 0 24 24" fill="currentColor" id="ico"><path d="M6 4l14 8-14 8z"/></svg></button>
+    <button class="btn" id="restart" aria-label="С начала"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg></button>
+    <input type="range" id="seek" min="0" max="60" step="0.01" value="0" aria-label="Позиция">
+    <span class="time" id="time">0:00 / 1:00</span>
+  </div>
+  <p class="note">2D-анимация нарисована кодом прямо в браузере. Это та же минута, что и в файле danya_1min.mp4.</p>
+</div>
+<audio id="aud" preload="auto" src="data:audio/mpeg;base64,__AUDIO__"></audio>
+<script>__FILM__</script>
+<script>
+(function(){
+ const cv=document.getElementById('film'), aud=document.getElementById('aud'), big=document.getElementById('big');
+ const seek=document.getElementById('seek'), time=document.getElementById('time'), ico=document.getElementById('ico');
+ FILM.init(cv, Math.min(2, window.devicePixelRatio||1));
+ let playing=false, clock=0, last=0, useAudio=true;
+ const PLAY='<path d="M6 4l14 8-14 8z"/>', PAUSE='<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
+ const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+ function cur(){ return useAudio && !aud.paused ? aud.currentTime : clock; }
+ function draw(t){ FILM.render(t); seek.value=t; time.textContent=fmt(t)+' / 1:00'; }
+ function loop(now){
+   if(playing){
+     if(!(useAudio && !aud.paused)) clock+= (now-last)/1000;
+     last=now; let t=cur(); clock=t;
+     if(t>=60){ t=60; pause(); }
+     draw(t);
+   }
+   requestAnimationFrame(loop);
+ }
+ function play(){
+   if(clock>=59.95) clock=0;
+   playing=true; last=performance.now(); big.hidden=true; ico.innerHTML=PAUSE;
+   try{ aud.currentTime=clock; const p=aud.play(); if(p&&p.catch) p.catch(()=>{useAudio=false;}); }catch(e){useAudio=false;}
+ }
+ function pause(){ playing=false; ico.innerHTML=PLAY; try{aud.pause();}catch(e){} clock=Math.min(60,clock); }
+ big.onclick=play;
+ document.getElementById('play').onclick=()=>playing?pause():play();
+ document.getElementById('restart').onclick=()=>{clock=0; try{aud.currentTime=0;}catch(e){} draw(0); if(!playing) play();};
+ seek.oninput=()=>{clock=+seek.value; try{aud.currentTime=clock;}catch(e){} draw(clock);};
+ cv.onclick=()=>playing?pause():play();
+ const poster=()=>draw(clock=4.2);
+ (document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>{ if(!playing) poster(); });
+ poster(); requestAnimationFrame(loop);
+})();
+</script>
