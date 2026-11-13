@@ -39,41 +39,71 @@ const P={ink:'#2B1D2E',orange:'#FF7A1A',coral:'#FF6B6B',teal:'#2EC4B6',yellow:'#
 const SK=['#F7CBA8','#E8B08A','#C98E66','#F2D2B6','#DDA27C'];
 
 // ---------- characters ----------
+function shade(hex,f){const n=parseInt(hex.slice(1),16);let r=n>>16,g=(n>>8)&255,b=n&255;
+  const m=v=>Math.max(0,Math.min(255,Math.round(f<0?v*(1+f):v+(255-v)*f)));return '#'+[m(r),m(g),m(b)].map(v=>v.toString(16).padStart(2,'0')).join('');}
 function kid(o){
   const d=Object.assign({x:0,y:0,s:1,skin:SK[0],hair:'#4A3428',hs:'short',shirt:P.teal,pants:'#3D405B',bag:false,
-    aL:12,aR:12,lL:0,lR:0,mouth:'smile',num:null,glasses:false,rot:0,blush:true},o);
-  const L=105; let g='';
+    aL:12,aR:12,lL:0,lR:0,mouth:'smile',num:null,glasses:false,rot:0,blush:true,outfit:'tee',top:'#1E1E22',hood:'down',freckles:false},o);
+  const L=105; let g=''; const dk=shade(d.shirt,-.22), hd=shade(d.hair,-.25);
   const arm=(side,a)=>{const sx=side*52,sy=-218,r=a*PI/180;const ex=sx+side*S(r)*L,ey=sy+C(r)*L;
     return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${d.shirt}" stroke-width="30" stroke-linecap="round"/><circle cx="${ex}" cy="${ey}" r="16" fill="${d.skin}"/>`};
   const leg=(side,a)=>{const sx=side*26,sy=-112,r=a*PI/180;const ex=sx+S(r)*98,ey=sy+C(r)*98;
     return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${d.pants}" stroke-width="34" stroke-linecap="round"/><ellipse cx="${ex+side*7}" cy="${ey+8}" rx="25" ry="13" fill="#2B2D42"/>`};
-  // back layers
+  // ---- back layers
   if(d.bag) g+=`<rect x="-80" y="-240" width="160" height="132" rx="36" fill="${P.orange}"/><rect x="-30" y="-262" width="60" height="30" rx="15" fill="none" stroke="${P.orange}" stroke-width="10"/>`;
   if(d.hs==='long') g+=`<rect x="-68" y="-336" width="136" height="128" rx="52" fill="${d.hair}"/>`;
+  if(d.hs==='longstraight') g+=`<rect x="-72" y="-338" width="144" height="160" rx="54" fill="${d.hair}"/>`;
+  if(d.hs==='bob') g+=`<rect x="-70" y="-342" width="140" height="92" rx="42" fill="${d.hair}"/>`;
+  if(d.hs==='braid'){for(const [cx,cy,r] of [[-64,-282,24],[-70,-252,20],[64,-282,24]]) g+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${d.hair}"/>`;}
   if(d.hs==='tails') g+=`<circle cx="-70" cy="-296" r="24" fill="${d.hair}"/><circle cx="70" cy="-296" r="24" fill="${d.hair}"/>`;
+  if(d.hs==='hood') g+=`<circle cx="0" cy="-304" r="80" fill="${d.shirt}"/>`;
   g+=leg(-1,d.lL)+leg(1,d.lR);
   g+=`<rect x="-62" y="-246" width="124" height="148" rx="44" fill="${d.shirt}"/>`;
-  g+=`<path d="M-24,-244 L0,-214 L24,-244Z" fill="#fff"/>`;
+  // ---- outfit details
+  if(d.outfit==='uniform') g+=`<path d="M-24,-244 L0,-214 L24,-244Z" fill="#fff"/>`;
+  if(d.outfit==='tee') g+=`<path d="M-24,-246 Q0,-222 24,-246" fill="none" stroke="${dk}" stroke-width="7"/><rect x="-30" y="-196" width="60" height="40" rx="10" fill="${shade(d.shirt,.12)}"/>`;
+  if(d.outfit==='hoodie'){g+=`<rect x="-42" y="-168" width="84" height="44" rx="14" fill="${dk}"/><line x1="0" y1="-240" x2="0" y2="-104" stroke="${dk}" stroke-width="4"/>`;
+    if(d.hood==='down') g+=`<path d="M-50,-248 Q0,-226 50,-248 Q40,-262 0,-262 Q-40,-262 -50,-248Z" fill="${dk}"/>`;
+    g+=`<line x1="-12" y1="-238" x2="-15" y2="-196" stroke="#EEE" stroke-width="4" stroke-linecap="round"/><line x1="12" y1="-238" x2="15" y2="-196" stroke="#EEE" stroke-width="4" stroke-linecap="round"/>`;}
+  if(d.outfit==='zipopen') g+=`<path d="M-20,-246 L20,-246 L16,-100 L-16,-100Z" fill="${d.top}"/><line x1="-20" y1="-246" x2="-16" y2="-100" stroke="${dk}" stroke-width="5"/><line x1="20" y1="-246" x2="16" y2="-100" stroke="${dk}" stroke-width="5"/><rect x="-6" y="-200" width="12" height="3" fill="#ccc"/>`;
+  if(d.outfit==='jacket') g+=`<path d="M-40,-250 L-6,-246 L-2,-208Z" fill="${shade(d.shirt,.18)}"/><path d="M40,-250 L6,-246 L2,-208Z" fill="${shade(d.shirt,.18)}"/><line x1="0" y1="-210" x2="0" y2="-104" stroke="${shade(d.shirt,.25)}" stroke-width="4"/>`;
   if(d.bag) g+=`<rect x="-48" y="-242" width="15" height="112" rx="7" fill="${P.orange}"/><rect x="33" y="-242" width="15" height="112" rx="7" fill="${P.orange}"/>`;
   if(d.num!==null) g+=`<circle cx="0" cy="-160" r="30" fill="#fff"/><text x="0" y="-147" font-size="${String(d.num).length>1?30:36}" font-weight="900" text-anchor="middle" fill="${P.ink}">${d.num}</text>`;
   g+=arm(-1,d.aL)+arm(1,d.aR);
   g+=`<rect x="-14" y="-258" width="28" height="22" fill="${d.skin}"/>`;
   g+=`<circle cx="0" cy="-300" r="58" fill="${d.skin}"/>`;
-  // hair on top
+  // ---- hair on top
   const cap=`<path d="M-63,-296 C-68,-376 68,-378 63,-296 C44,-326 -6,-334 -63,-296Z" fill="${d.hair}"/>`;
   if(d.hs==='curly'){for(let i=0;i<7;i++){const a=PI*(1.05+i*0.15);g+=`<circle cx="${C(a)*52}" cy="${-306+S(a)*52}" r="22" fill="${d.hair}"/>`;}}
+  else if(d.hs==='longstraight') g+=`<path d="M-64,-290 C-70,-380 70,-380 64,-290 C52,-330 14,-346 2,-352 C-10,-346 -52,-330 -64,-290Z" fill="${d.hair}"/><path d="M-62,-300 L-74,-196 L-50,-196 L-50,-290Z" fill="${d.hair}"/><path d="M62,-300 L74,-196 L50,-196 L50,-290Z" fill="${d.hair}"/>`;
+  else if(d.hs==='braid'){for(let i=0;i<8;i++){const a=PI*(1.0+i*0.143);g+=`<circle cx="${C(a)*56}" cy="${-304+S(a)*56}" r="${i%2?22:25}" fill="${d.hair}"/>`;}
+    for(let i=0;i<6;i++) g+=`<ellipse cx="${44+i*3}" cy="${-252+i*24}" rx="17" ry="15" fill="${i%2?hd:d.hair}"/>`;
+    g+=`<path d="M-58,-300 q-10,30 4,52" fill="none" stroke="${d.hair}" stroke-width="6" stroke-linecap="round"/>`;}
+  else if(d.hs==='hood') g+=`<path d="M-48,-318 C-30,-352 30,-352 48,-318 C20,-330 -20,-330 -48,-318Z" fill="${d.hair}"/><path d="M-62,-282 C-74,-382 74,-382 62,-282" fill="none" stroke="${dk}" stroke-width="16" stroke-linecap="round"/>`;
+  else if(d.hs==='bob') g+=`<path d="M-66,-280 C-74,-384 74,-386 68,-276 L62,-258 C56,-300 30,-330 -24,-322 C-44,-316 -56,-300 -60,-262Z" fill="${d.hair}"/>`;
+  else if(d.hs==='shaggy') g+=`<path d="M-66,-296 C-74,-384 74,-386 66,-296 L60,-312 L52,-300 L42,-320 L30,-306 L18,-324 L6,-308 L-6,-326 L-18,-310 L-30,-326 L-42,-308 L-54,-320 L-60,-302Z" fill="${d.hair}"/><circle cx="-40" cy="-352" r="22" fill="${d.hair}"/><circle cx="36" cy="-354" r="24" fill="${d.hair}"/><circle cx="0" cy="-366" r="22" fill="${d.hair}"/>`;
   else g+=cap;
   if(d.hs==='bun') g+=`<circle cx="0" cy="-370" r="26" fill="${d.hair}"/>`;
-  // face
+  // ---- face
   g+=`<circle cx="-20" cy="-298" r="6.5" fill="${P.ink}"/><circle cx="20" cy="-298" r="6.5" fill="${P.ink}"/>`;
   if(d.blush) g+=`<circle cx="-36" cy="-279" r="10" fill="#FF8A8A" opacity=".45"/><circle cx="36" cy="-279" r="10" fill="#FF8A8A" opacity=".45"/>`;
-  if(d.glasses) g+=`<g fill="none" stroke="${P.ink}" stroke-width="4"><circle cx="-21" cy="-298" r="15"/><circle cx="21" cy="-298" r="15"/><line x1="-6" y1="-298" x2="6" y2="-298"/></g>`;
+  if(d.freckles) g+=[[-30,-286],[-24,-280],[-36,-282],[30,-286],[24,-280],[36,-282]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="2.2" fill="#B07850" opacity=".7"/>`).join('');
+  if(d.glasses) g+=`<g fill="none" stroke="${P.ink}" stroke-width="4"><circle cx="-21" cy="-298" r="16"/><circle cx="21" cy="-298" r="16"/><line x1="-5" y1="-300" x2="5" y2="-300"/></g>`;
   if(d.mouth==='laugh') g+=`<path d="M-19,-276 Q0,-246 19,-276Z" fill="#B23A48"/>`;
   else if(d.mouth==='o') g+=`<ellipse cx="0" cy="-268" rx="9" ry="12" fill="#B23A48"/>`;
   else g+=`<path d="M-16,-276 Q0,-260 16,-276" fill="none" stroke="${P.ink}" stroke-width="5" stroke-linecap="round"/>`;
   return `<g transform="translate(${d.x},${d.y}) scale(${d.s}) rotate(${d.rot})">${g}</g>`;
 }
-const HERO={bag:true,shirt:P.blue,pants:P.navy,hair:'#5A3B2A',hs:'short',skin:SK[0]};
+// Characters based on the real students' photos
+const KIDS={
+  A:{hs:'longstraight',hair:'#5B3A26',glasses:true,shirt:'#7B7A5A',outfit:'hoodie',hood:'down',pants:'#3D405B',skin:'#F6D2BA'},
+  B:{hs:'braid',hair:'#A9804F',shirt:'#7A2433',outfit:'zipopen',top:'#1E1E22',pants:'#2B2D42',skin:'#F3CDB3',freckles:true},
+  C:{hs:'hood',hair:'#3B2A22',shirt:'#A9ABAE',outfit:'hoodie',hood:'up',pants:'#3D405B',skin:'#F2C9AE'},
+  D:{hs:'bob',hair:'#C0612B',shirt:'#26262C',outfit:'jacket',pants:'#3D405B',skin:'#F8D7C4'},
+  E:{hs:'shaggy',hair:'#8A6440',shirt:'#3E3638',outfit:'tee',pants:'#3B4A6B',skin:'#F3C9AA',bag:true},
+};
+const K=(id,o)=>kid(Object.assign({},KIDS[id],o));
+const HERO=KIDS.E;
 const hero=o=>kid(Object.assign({},HERO,o));
 function walk(t,sp=9,amp=22){const ph=t*sp;return {lL:S(ph)*amp,lR:-S(ph)*amp,aL:14+S(ph)*16,aR:14-S(ph)*16,bob:Math.abs(S(ph))*9};}
 
@@ -152,8 +182,8 @@ function atrium(lt){
   g+=plant(100,1420,1.1)+plant(985,1420,1.1);
   // back kids chatting
   const bkW=lt>2.4?140+S(lt*9)*20:10;
-  g+=kid({x:270,y:1470,s:.82,hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1],mouth:S(lt*3)>0?'laugh':'smile'});
-  g+=kid({x:820,y:1470,s:.82,hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2],aL:bkW});
+  g+=K('B',{x:270,y:1470,s:.82,mouth:S(lt*3)>0?'laugh':'smile'});
+  g+=K('C',{x:820,y:1470,s:.82,aL:bkW});
   // hero & friend
   const hx=lerp(180,430,eo(lt/1));
   const fx=lerp(1200,690,eo(lt/1.3));
@@ -161,7 +191,7 @@ function atrium(lt){
   let ho={x:hx,y:1720,s:1.15,mouth:lt>1.5?'laugh':'smile'};
   if(lt<1){Object.assign(ho,walk(lt));} else ho.aR=hi?158:(lt>2.6?20:20);
   if(lt>3.5) ho.aR=40+S(lt*6)*10;
-  let fo={x:fx,y:1720,s:1.12,hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3],mouth:'laugh'};
+  let fo=Object.assign({},KIDS.A,{x:fx,y:1720,s:1.12,mouth:'laugh'});
   if(lt<1.3) Object.assign(fo,walk(lt)); else fo.aL=hi?158:20;
   g+=hero(ho)+kid(fo);
   if(lt>1.6&&lt<2.6){const k=pop(lt,1.6,.3)*(1-fade(lt,2.3,.3));g+=`<g opacity="${clamp(k)}">${star(560,1335,70*k,P.yellow,lt)}${star(560,1335,34*k,'#fff',-lt)}</g>`;}
@@ -188,9 +218,9 @@ function lesson(lt){
   // teacher
   g+=kid({x:880,y:1580,s:1.3,hs:'bun',hair:'#6B4B3A',shirt:P.purple,pants:'#4B3F72',skin:SK[3],glasses:true,aL:100+S(lt*3)*14,aR:15,mouth:lt>4?'laugh':'smile'});
   // students
-  const st=[{x:200,c:{hs:'tails',hair:'#2E1F1A',shirt:P.coral,skin:SK[1]},raise:4.6},{x:440,hero:true,raise:5.0},{x:680,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]},raise:5.4}];
+  const st=[{x:200,c:KIDS.B,raise:4.6},{x:440,hero:true,raise:5.0},{x:680,c:KIDS.D,raise:5.4}];
   st.forEach((s,i)=>{const r=lt>s.raise?lerp(15,155,eo((lt-s.raise)/.3)):15;const o={x:s.x,y:1660,s:1,aR:r+(lt>s.raise?S(lt*8+i)*6:0),mouth:lt>s.raise?'laugh':'smile'};
-    g+=s.hero?hero(o):kid(Object.assign(o,s.c));});
+    g+=s.hero?hero(o):kid(Object.assign({},s.c,o));});
   st.forEach(s=>{g+=`<rect x="${s.x-125}" y="1490" width="250" height="34" rx="10" fill="#F0B46A"/><rect x="${s.x-110}" y="1524" width="220" height="56" fill="#E09D52"/><rect x="${s.x-60}" y="1478" width="80" height="14" rx="4" fill="#fff"/>`;
     const k=pop(lt,s.raise+.5);if(k>0)g+=`<g transform="translate(${s.x},1185) scale(${k})"><circle r="38" fill="${P.yellow}"/><rect x="-16" y="32" width="32" height="20" rx="6" fill="#B0B8C0"/></g>`;});
   return g;
@@ -203,13 +233,13 @@ function breakTime(lt){
   // runners in the back
   for(let j=0;j<2;j++){const x=((lt*420+j*700)%1500)-220;const w=walk(lt+j,14,30);
     g+=`<g opacity=".95">${[0,1,2].map(k=>`<line x1="${x-110-k*10}" y1="${1240+k*40}" x2="${x-170-k*10}" y2="${1240+k*40}" stroke="#fff" stroke-width="10" stroke-linecap="round"/>`).join('')}</g>`;
-    g+=kid(Object.assign({x,y:1430-w.bob,s:.75,mouth:'laugh',hs:j?'tails':'short',hair:j?'#2E1F1A':'#B5651D',shirt:j?P.yellow:P.teal,skin:SK[j+2]},w,{aL:60+S(lt*14+j)*40,aR:60-S(lt*14+j)*40}));}
+    g+=kid(Object.assign({},j?KIDS.B:KIDS.C,{x,y:1430-w.bob,s:.75,mouth:'laugh'},w,{aL:60+S(lt*14+j)*40,aR:60-S(lt*14+j)*40}));}
   // card table
   const fam=lt>4;
-  const kids=[{x:270,num:9,c:{hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3]}},{x:540,num:10,hero:true},{x:810,num:11,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}}];
-  kids.forEach((k,i)=>{const o={x:k.x,y:1690,s:1.05,num:k.num,aL:i===0?70:30,aR:i===2?70:30,mouth:(S(lt*5+i*2)>-.3)?'laugh':'smile',rot:S(lt*6+i)*2};
+  const kids=[{x:270,c:KIDS.A},{x:540,hero:true},{x:810,c:KIDS.D}];
+  kids.forEach((k,i)=>{const o={x:k.x,y:1690,s:1.05,aL:i===0?70:30,aR:i===2?70:30,mouth:(S(lt*5+i*2)>-.3)?'laugh':'smile',rot:S(lt*6+i)*2};
     if(i===1){o.aR=55+S(lt*5.2)*25;}
-    g+=k.hero?hero(o):kid(Object.assign(o,k.c));});
+    g+=k.hero?hero(o):kid(Object.assign({},k.c,o));});
   g+=`<ellipse cx="540" cy="1560" rx="380" ry="70" fill="#5FAF78"/><ellipse cx="540" cy="1548" rx="380" ry="66" fill="#7FCB98"/><rect x="380" y="1610" width="26" height="160" fill="#8C5A3C"/><rect x="674" y="1610" width="26" height="160" fill="#8C5A3C"/>`;
   for(let i=0;i<5;i++) g+=playCard(470+i*36+rnd(i)*10,1545+rnd(i+5)*10,rnd(i+9)*60-30,.9,i);
   // flying card
@@ -241,7 +271,7 @@ function canteen(lt){
   // kids at table
   const sp=S(lt*6);
   g+=hero({x:380,y:1690,s:1.05,aR:lerp(30,110,(sp+1)/2),mouth:sp>0?'smile':'laugh'});
-  g+=kid({x:700,y:1690,s:1.05,hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1],aL:40,mouth:'laugh'});
+  g+=K('B',{x:700,y:1690,s:1.05,aL:40,mouth:'laugh'});
   g+=`<rect x="100" y="1500" width="880" height="44" rx="14" fill="#fff"/>`;
   for(let i=0;i<11;i++) g+=`<rect x="${100+i*80}" y="1500" width="40" height="44" fill="${P.coral}" opacity=".35"/>`;
   g+=`<rect x="130" y="1544" width="820" height="120" fill="#C7894F"/>`;
@@ -263,11 +293,11 @@ function volley(lt){
   const Pd=1.7, n=Math.floor(lt/Pd), p=(lt%Pd)/Pd, dir=n%2;
   const xa=dir?800:290, xb=dir?290:800; const bx=lerp(xa,xb,p), by=1300-4*450*p*(1-p);
   const jumpOf=(x)=>{const d=Math.abs(bx-x);return d<140&&by>1150?(1-d/140):0;};
-  const players=[{x:250,y:1730,s:1.05,hero:true},{x:420,y:1560,s:.86,c:{hs:'tails',hair:'#2E1F1A',shirt:P.coral,skin:SK[1]}},
-                 {x:680,y:1560,s:.86,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}},{x:840,y:1730,s:1.05,c:{hs:'long',hair:'#7A4A2A',shirt:P.purple,pants:'#4B3F72',skin:SK[3]}}];
+  const players=[{x:250,y:1730,s:1.05,hero:true},{x:420,y:1560,s:.86,c:KIDS.A},
+                 {x:680,y:1560,s:.86,c:KIDS.C},{x:840,y:1730,s:1.05,c:KIDS.D}];
   // back players first, net, then front
   const drawP=pl=>{const j=jumpOf(pl.x)*(pl.s>1?1:0);const o={x:pl.x,y:pl.y-j*70,s:pl.s,aL:j>0?160:30+S(lt*3+pl.x)*10,aR:j>0?160:30-S(lt*3+pl.x)*10,mouth:'laugh',lL:j*-15,lR:j*15};
-    return `<ellipse cx="${pl.x}" cy="${pl.y+4}" rx="${80*pl.s}" ry="14" fill="#000" opacity=".1"/>`+(pl.hero?hero(o):kid(Object.assign(o,pl.c)));};
+    return `<ellipse cx="${pl.x}" cy="${pl.y+4}" rx="${80*pl.s}" ry="14" fill="#000" opacity=".1"/>`+(pl.hero?hero(o):kid(Object.assign({},pl.c,o)));};
   g+=drawP(players[1])+drawP(players[2]);
   g+=`<rect x="532" y="1060" width="16" height="420" rx="6" fill="#5A5A6E"/><rect x="380" y="1080" width="320" height="120" fill="none" stroke="#fff" stroke-width="5"/>`;
   for(let i=1;i<8;i++) g+=`<line x1="${380+i*40}" y1="1080" x2="${380+i*40}" y2="1200" stroke="#fff" stroke-width="3"/>`;
@@ -295,6 +325,7 @@ function bday(lt){
   people.forEach(p=>{
     if(p.center){g+=kid({x:p.x,y:p.y-Math.max(0,S(lt*4))*14,s:p.s,hs:'tails',hair:'#B5651D',shirt:'#FF4F7B',skin:SK[0],aL:lt>3?150+S(lt*7)*12:40,aR:lt>3?150-S(lt*7)*12:40,mouth:'laugh'});return;}
     const sway=S(lt*2.2+p.i)*3; const o={x:p.x,y:p.y,s:p.s,rot:sway,aL:55,aR:55,mouth:S(lt*2+p.i)>-.2?'laugh':'smile'};
+    const real={1:'A',3:'B',5:'C',7:'D'}[p.i]; if(real){g+=K(real,o);return;}
     g+=p.hero?hero(o):kid(Object.assign(o,{shirt:cols[p.i],hs:hs[p.i%hs.length],hair:['#2E1F1A','#3A2A1E','#7A4A2A','#5A3B2A','#6B4B3A'][p.i%5],skin:SK[p.i%5]}));});
   // warm words
   const words=[['С днём рождения!',300,1020,3.6],['Ты классный!',800,1110,4.6],['Спасибо, что ты с нами!',540,880,5.6],['Ты нам очень дорог!',330,1180,6.6]];
@@ -330,7 +361,7 @@ function homework(lt){
     ${[0,1,2,3].map(i=>`<line x1="-140" y1="${-80+i*45}" x2="-30" y2="${-80+i*45}" stroke="#CFE3F5" stroke-width="7" stroke-linecap="round"/>`).join('')}${heart(85,-10,1.1,P.coral)}</g>`;
   // relaxed hero + friend with notebook (по желанию)
   g+=hero({x:370,y:1790,s:1.2,aL:165+S(lt*2)*4,aR:165-S(lt*2)*4,mouth:'laugh',rot:S(lt*2)*2});
-  g+=kid({x:730,y:1790,s:1.15,hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3],aL:30,aR:120,mouth:'smile'});
+  g+=K('A',{x:730,y:1790,s:1.15,aL:30,aR:120,mouth:'smile'});
   g+=`<g transform="translate(845,1505) rotate(-12)"><rect x="-38" y="-48" width="76" height="96" rx="10" fill="${P.teal}"/><rect x="-26" y="-34" width="52" height="10" rx="4" fill="#fff"/></g>`;
   return g;
 }
@@ -348,9 +379,9 @@ function finale(lt){
   const tk=pop(lt,6.1,.6);
   if(tk>0){g+=`<g transform="translate(540,880) scale(${tk})"><text x="0" y="-40" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Школа</text><text x="0" y="150" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Жизни</text>${heart(0,260,1.4,'#fff')}</g>`;}
   // line-up
-  const L=[{x:110,s:.9,c:{hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1]}},{x:270,s:.98,c:{hs:'curly',hair:'#3A2A1E',shirt:P.green,skin:SK[2]}},{x:410,s:1.05,c:{hs:'long',hair:'#7A4A2A',shirt:P.coral,pants:'#4B3F72',skin:SK[3]}},
-    {x:670,s:1.05,c:{hs:'bun',hair:'#6B4B3A',shirt:P.yellow,skin:SK[4]}},{x:810,s:.98,c:{hs:'short',hair:'#B5651D',shirt:P.teal,skin:SK[0]}},{x:970,s:.9,c:{hs:'long',hair:'#2E1F1A',shirt:'#FF4F7B',skin:SK[1]}}];
-  L.forEach((k,i)=>{const j=Math.max(0,S(lt*5+i*1.3))*22;g+=kid(Object.assign({x:k.x,y:1830-j,s:k.s,aL:150+S(lt*8+i)*15,aR:i%2?150:30,mouth:'laugh'},k.c));});
+  const L=[{x:110,s:.9,c:{hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1]}},{x:270,s:.98,c:KIDS.C},{x:410,s:1.05,c:KIDS.A},
+    {x:670,s:1.05,c:KIDS.B},{x:810,s:.98,c:KIDS.D},{x:970,s:.9,c:{hs:'long',hair:'#2E1F1A',shirt:'#FF4F7B',skin:SK[1]}}];
+  L.forEach((k,i)=>{const j=Math.max(0,S(lt*5+i*1.3))*22;g+=kid(Object.assign({},k.c,{x:k.x,y:1830-j,s:k.s,aL:150+S(lt*8+i)*15,aR:i%2?150:30,mouth:'laugh'}));});
   const hj=Math.max(0,S(lt*5+.7))*26;
   g+=hero({x:540,y:1870-hj,s:1.22,aL:155+S(lt*8)*12,aR:155-S(lt*8)*12,mouth:'laugh'});
   return g;
