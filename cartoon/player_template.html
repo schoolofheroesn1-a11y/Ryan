@@ -27,7 +27,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
 <div class="wrap">
   <div>
     <h1>Даня и <span>Карта Возможностей</span></h1>
-    <p class="sub">Мультфильм о нашей школе · 1 минута · звук включается кнопкой</p>
+    <p class="sub">Мультфильм о нашей школе · голос автора · звук включается кнопкой</p>
   </div>
   <div class="screen">
     <canvas id="film" aria-label="Мультфильм"></canvas>
@@ -36,12 +36,13 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
   <div class="bar">
     <button class="btn" id="play" aria-label="Пауза или воспроизведение"><svg viewBox="0 0 24 24" fill="currentColor" id="ico"><path d="M6 4l14 8-14 8z"/></svg></button>
     <button class="btn" id="restart" aria-label="С начала"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 3-6.2"/><path d="M4 4v5h5"/></svg></button>
-    <input type="range" id="seek" min="0" max="60" step="0.01" value="0" aria-label="Позиция">
-    <span class="time" id="time">0:00 / 1:00</span>
+    <input type="range" id="seek" min="0" max="__DUR__" step="0.01" value="0" aria-label="Позиция">
+    <span class="time" id="time">0:00 / __DURS__</span>
   </div>
-  <p class="note">2D-анимация нарисована кодом прямо в браузере. Это та же минута, что и в файле danya_1min.mp4.</p>
+  <p class="note">2D-анимация нарисована кодом прямо в браузере. Это то же видео, что и в файле danya_1min.mp4.</p>
 </div>
 <audio id="aud" preload="auto" src="data:audio/mpeg;base64,__AUDIO__"></audio>
+<script>__TIMELINE__</script>
 <script>__FILM__</script>
 <script>
 (function(){
@@ -52,28 +53,28 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
  const PLAY='<path d="M6 4l14 8-14 8z"/>', PAUSE='<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
  const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
  function cur(){ return useAudio && !aud.paused ? aud.currentTime : clock; }
- function draw(t){ FILM.render(t); seek.value=t; time.textContent=fmt(t)+' / 1:00'; }
+ function draw(t){ FILM.render(t); seek.value=t; time.textContent=fmt(t)+' / '+fmt(FILM.DUR); }
  function loop(now){
    if(playing){
      if(!(useAudio && !aud.paused)) clock+= (now-last)/1000;
      last=now; let t=cur(); clock=t;
-     if(t>=60){ t=60; pause(); }
+     if(t>=FILM.DUR){ t=FILM.DUR; pause(); }
      draw(t);
    }
    requestAnimationFrame(loop);
  }
  function play(){
-   if(clock>=59.95) clock=0;
+   if(clock>=FILM.DUR-0.05) clock=0;
    playing=true; last=performance.now(); big.hidden=true; ico.innerHTML=PAUSE;
    try{ aud.currentTime=clock; const p=aud.play(); if(p&&p.catch) p.catch(()=>{useAudio=false;}); }catch(e){useAudio=false;}
  }
- function pause(){ playing=false; ico.innerHTML=PLAY; try{aud.pause();}catch(e){} clock=Math.min(60,clock); }
+ function pause(){ playing=false; ico.innerHTML=PLAY; try{aud.pause();}catch(e){} clock=Math.min(FILM.DUR,clock); }
  big.onclick=play;
  document.getElementById('play').onclick=()=>playing?pause():play();
  document.getElementById('restart').onclick=()=>{clock=0; try{aud.currentTime=0;}catch(e){} draw(0); if(!playing) play();};
  seek.oninput=()=>{clock=+seek.value; try{aud.currentTime=clock;}catch(e){} draw(clock);};
  cv.onclick=()=>playing?pause():play();
- const poster=()=>draw(clock=4.2);
+ const poster=()=>draw(clock=7.8);
  (document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>{ if(!playing) poster(); });
  poster(); requestAnimationFrame(loop);
 })();

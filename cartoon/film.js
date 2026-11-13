@@ -1,7 +1,8 @@
 /* «Даня и Карта Возможностей» — минутный мультфильм.
    Весь кадр рисуется кодом на canvas: FILM.render(t) рисует кадр для времени t (сек). */
 (function () {
-  const W = 1280, H = 720, DUR = 60;
+  const TL = window.TIMELINE;
+  const W = 1280, H = 720, DUR = TL.dur;
   const TAU = Math.PI * 2;
   const FONT = "'Nunito','Trebuchet MS','DejaVu Sans',sans-serif";
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -466,15 +467,10 @@
     else if (type === 'brush') { c.moveTo(-9, 9); c.lineTo(4, -4); c.stroke(); c.beginPath(); c.ellipse(6, -6, 3, 6, 0.8, 0, TAU); c.fill(); }
     c.restore();
   }
-  const PINS = [
-    { t: 16.0, type: 'door', x: 50, y: 60 },
-    { t: 23.0, type: 'book', x: 82, y: 36 },
-    { t: 34.6, type: 'gamepad', x: 116, y: 50 },
-    { t: 44.6, type: 'paddle', x: 132, y: 92 },
-    { t: 50.4, type: 'people', x: 42, y: 90 },
-  ];
+  const PIN_XY = { door: [50, 60], book: [82, 36], gamepad: [116, 50], paddle: [132, 92], people: [42, 90] };
+  const PINS = TL.pins.map((p) => ({ t: p.t, type: p.type, x: PIN_XY[p.type][0], y: PIN_XY[p.type][1] }));
   function drawHud(c, t) {
-    const a = Math.min(seg(t, 15.3, 15.9), 1 - seg(t, 58.6, 59.3));
+    const a = Math.min(seg(t, TL.hud[0], TL.hud[0] + 0.6), 1 - seg(t, TL.hud[1] - 0.6, TL.hud[1]));
     if (a <= 0) return;
     const X = 1094, Y = 24, w = 160, h = 112;
     c.save(); c.globalAlpha = a; c.translate(X, Y);
@@ -487,7 +483,7 @@
     c.beginPath(); c.moveTo(35, 40); c.lineTo(51, 28); c.lineTo(67, 40); c.fillStyle = '#4d4f57'; c.fill();
     c.fillStyle = '#9b7a52'; c.fillRect(30, 84, 22, 4);
     [[100, 28], [124, 30], [20, 30], [140, 46]].forEach((p) => circ(c, p[0], p[1], 7, '#88b06c'));
-    const lineP = seg(t, 53, 55.6);
+    const lineP = seg(t, TL.hudLine[0], TL.hudLine[1]);
     if (lineP > 0) {
       c.save(); c.beginPath();
       const pts = PINS.map((p) => [p.x, p.y]);
@@ -517,27 +513,7 @@
   }
 
   /* ---------- субтитры ---------- */
-  const SUBS = [
-    [1.4, 5.2, '', 'У каждого человека есть место, где он открывает самого себя.'],
-    [5.4, 8.8, '', 'Для кого-то это мастерская, а для кого-то — целый мир возможностей.'],
-    [9.4, 12.5, '', 'Давайте посмотрим, как устроена наша школа.'],
-    [13.5, 14.3, 'Даня', 'Карта без отметок. Твоя?'],
-    [14.3, 15.0, 'Ворона', 'Карр!'],
-    [15.0, 16.6, 'Даня', 'Понял. Значит, будем отмечать сами.'],
-    [17.3, 19.3, '', 'Всё начинается с фундаментальных знаний.'],
-    [19.4, 20.9, 'Учительница', 'А если зайти с другой стороны?'],
-    [22.6, 23.6, 'Даня', 'Сходится!'],
-    [24.3, 26.6, '', 'А старшеклассники готовятся к ОГЭ и ЕГЭ.'],
-    [27.3, 30.0, '', 'Здесь идеи превращаются в настоящие проекты.'],
-    [30.2, 31.6, 'Одноклассница', 'Он опять проваливается сквозь пол!'],
-    [31.7, 33.3, 'Даня', 'Это не баг. Это… подземный уровень.'],
-    [34.7, 36.3, '', 'Главное — довести идею до результата.'],
-    [36.4, 39.1, '', 'Почему учёба должна заканчиваться у дверей класса?'],
-    [41.3, 42.8, 'Даня', 'Это была… разведка!'],
-    [43.6, 46.0, '', 'Можно учиться через собственный опыт.'],
-    [46.4, 49.9, '', 'Наша школа — это люди, которые учатся друг у друга.'],
-    [52.3, 56.0, '', 'Школа — это не только то, что ты знаешь сегодня. Это то, кем ты становишься завтра.'],
-  ];
+  const SUBS = TL.subs.slice(0, -1).map((k) => [k[0], k[1], '', k[2]]);
   function speaking(t, who) { return SUBS.some((s) => s[2] === who && t >= s[0] && t < s[1]); }
   function wrap(c, text, maxW) {
     const words = text.split(' '), lines = []; let cur = '';
@@ -964,12 +940,12 @@
       footL: [24, 0], footR: [-22, 0], elbow: 'out',
     }, t);
     c.restore();
-    const ta = seg(t, 56.3, 56.9);
+    const ta = seg(t, TL.title[0], TL.title[0] + 0.6);
     if (ta > 0) {
       c.fillStyle = 'rgba(10,14,40,' + 0.55 * ta + ')'; c.fillRect(0, 0, W, H);
       c.save(); c.textAlign = 'center'; c.textBaseline = 'middle';
       c.shadowColor = 'rgba(0,0,0,0.5)'; c.shadowBlur = 16;
-      const words = [['Наша школа.', 56.3], ['Твои возможности.', 57.0], ['Твоё будущее.', 57.7]];
+      const words = [['Наша школа.', TL.title[0]], ['Твои возможности.', TL.title[1]], ['Твоё будущее.', TL.title[2]]];
       words.forEach(([w, t0], i) => {
         const k = easeOut(seg(t, t0, t0 + 0.5));
         c.globalAlpha = k; c.font = '800 58px ' + FONT; c.fillStyle = i === 2 ? '#f2b544' : '#ffffff';
@@ -984,16 +960,136 @@
     return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
   }
 
+
+  /* ---------- КРЮЧОК: 10 000 часов ---------- */
+  const fmtNum = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const MEM = (() => { const r = rng(42), set = new Set(); while (set.size < 9) set.add(Math.floor(r() * 200)); return set; })();
+  function sHook(c, u) {
+    c.fillStyle = vgrad(c, 0, H, ['#0e152e', '#19234b', '#111936']); c.fillRect(0, 0, W, H);
+    const cx = 300, cy = 330, R = 150;
+    glow(c, cx, cy, 300, 'rgba(242,181,68,0.10)');
+    circ(c, cx, cy, R + 14, '#2b3563'); circ(c, cx, cy, R, '#f3eee3');
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * TAU, r0 = i % 5 ? R - 10 : R - 22;
+      poly(c, [[cx + Math.cos(a) * r0, cy + Math.sin(a) * r0], [cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)]], i % 5 ? 2 : 5, '#2b3150');
+    }
+    const spin = u < 5.4 ? u * u * 1.6 : 5.4 * 5.4 * 1.6 + (u - 5.4) * 2;
+    const mA = spin * 2.2 - Math.PI / 2, hA = spin * 0.18 - Math.PI / 2;
+    poly(c, [[cx, cy], [cx + Math.cos(hA) * 80, cy + Math.sin(hA) * 80]], 10, '#1d2440');
+    poly(c, [[cx, cy], [cx + Math.cos(mA) * 125, cy + Math.sin(mA) * 125]], 6, '#d9534f');
+    circ(c, cx, cy, 10, '#1d2440');
+    const k = easeOut(seg(u, 1.0, 5.2));
+    c.save(); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '800 118px ' + FONT; c.fillStyle = '#f2b544';
+    c.shadowColor = 'rgba(242,181,68,0.35)'; c.shadowBlur = 24;
+    c.fillText(fmtNum(Math.round(10000 * k)), 840, 150);
+    c.shadowBlur = 0; c.font = '700 30px ' + FONT; c.fillStyle = '#b9c1dc';
+    c.fillText('часов в школе', 840, 228);
+    c.restore();
+    const r = rng(77);
+    for (let i = 0; i < 200; i++) {
+      const col = i % 20, row = Math.floor(i / 20);
+      let x = 600 + col * 24.5, y = 280 + row * 23;
+      const appear = seg(u, 1.0 + (i / 200) * 4.0, 1.25 + (i / 200) * 4.0);
+      const fs = 6.3 + r() * 1.6, drift = (r() - 0.5) * 80;
+      if (appear <= 0) continue;
+      const mem = MEM.has(i);
+      let a = appear, fill = '#4a5688';
+      if (u > 6.2) {
+        if (mem) { fill = '#f2b544'; const g2 = seg(u, 6.4, 7.2); if (g2 > 0) glow(c, x + 10, y + 9, 30 * g2, 'rgba(242,181,68,0.5)'); }
+        else if (u > fs) { const d = u - fs; y += 700 * d * d; x += drift * d; a = Math.max(0, 1 - d * 0.9); fill = '#3a4166'; }
+      }
+      if (a <= 0) continue;
+      c.globalAlpha = a; rrect(c, x, y, 20, 18, 4); c.fillStyle = fill; c.fill(); c.globalAlpha = 1;
+    }
+  }
+
+  /* ---------- ПРОБЛЕМА: класс на 30 человек ---------- */
+  const KIDS = (() => {
+    const base = [RED, GLASSES, BUZZ], shirts = ['#5d6a7a', '#7b6a5a', '#4f6d63', '#6a5a78', '#8a7f6a', '#56657e'], hairs = ['#3a2a20', '#6b4a2e', '#1f1b18', '#8a6a3e', '#b65a2a'];
+    const r = rng(19), out = [];
+    for (let i = 0; i < 30; i++) {
+      const b = base[i % 3];
+      out.push(Object.assign({}, b, { shirt: shirts[Math.floor(r() * shirts.length)], hair: hairs[Math.floor(r() * hairs.length)], hairStyle: ['short', 'long', 'buzz', 'bob'][Math.floor(r() * 4)], glasses: r() < 0.2, stripes: false }));
+    }
+    return out;
+  })();
+  const ROWS = [{ y: 292, s: 0.36, n: 9 }, { y: 380, s: 0.46, n: 8 }, { y: 488, s: 0.6, n: 7 }, { y: 628, s: 0.76, n: 6 }];
+  function sProblem(c, u) {
+    const z = lerp(1.0, 1.16, easeIO(seg(u, 0, 12.5)));
+    c.save(); cam(c, z, 640, 470);
+    c.filter = 'saturate(0.18) brightness(0.95)';
+    c.fillStyle = '#c3c8bf'; c.fillRect(-100, -100, 1500, 900);
+    c.fillStyle = '#a9ae9f'; c.fillRect(-100, 250, 1500, 700);
+    c.fillStyle = '#6f6a5c'; c.fillRect(380, 30, 520, 190); c.fillStyle = '#3d4a40'; c.fillRect(392, 42, 496, 166);
+    const rr = rng(5);
+    for (let i = 0; i < 9; i++) { const y = 62 + i * 17; poly(c, [[410, y], [410 + 200 + rr() * 250, y]], 3, 'rgba(230,230,220,0.55)'); }
+    const ck = [1090, 105];
+    circ(c, ck[0], ck[1], 46, '#eee'); c.lineWidth = 4; c.strokeStyle = '#555'; c.beginPath(); c.arc(ck[0], ck[1], 46, 0, TAU); c.stroke();
+    const sp = u < 4.3 ? u * 0.5 : u < 7.6 ? 2.15 + (u - 4.3) * 7 : 25.25 + (u - 7.6) * 0.5;
+    poly(c, [ck, [ck[0] + Math.cos(sp - 1.57) * 36, ck[1] + Math.sin(sp - 1.57) * 36]], 4, '#333');
+    poly(c, [ck, [ck[0] + Math.cos(sp / 12 - 1.57) * 22, ck[1] + Math.sin(sp / 12 - 1.57) * 22]], 6, '#333');
+    const yr = clamp(1 + Math.floor(seg(u, 4.4, 7.4) * 10.99), 1, 11);
+    c.fillStyle = '#f2f2ee'; c.fillRect(120, 50, 130, 140); c.fillStyle = '#b54a3a'; c.fillRect(120, 50, 130, 30);
+    c.fillStyle = '#333'; c.font = '800 64px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(yr), 185, 132);
+    c.font = '700 18px ' + FONT; c.fillText('класс', 185, 176);
+    const flip = (u * 3.3) % 1;
+    if (u > 4.4 && u < 7.4) {
+      c.save(); c.translate(185, 50 + flip * 260); c.rotate(flip * 2.4); c.globalAlpha = 1 - flip;
+      c.fillStyle = '#f2f2ee'; c.fillRect(-65, 0, 130, 110); c.restore();
+    }
+    const ring = u > 4.3 && u < 5.4 ? Math.sin(u * 60) * 0.25 : 0;
+    c.save(); c.translate(1200, 230); c.rotate(ring); circ(c, 0, 0, 26, '#9a8a50'); circ(c, 0, 0, 8, '#555'); c.restore();
+    const bob = Math.sin(u * 4.2) * 3;
+    let ki = 0, dx = 0;
+    ROWS.forEach((row, ri) => {
+      const span = 1180, step = span / row.n, x0 = 640 - span / 2 + step / 2;
+      for (let j = 0; j < row.n; j++) {
+        const x = x0 + j * step;
+        const isD = ri === 2 && j === 3;
+        if (!isD) {
+          drawPerson(c, KIDS[ki++], x, row.y, row.s, { noLegs: true, bob, mouth: 'flat', look: 0, seed: ki * 0.37, handL: [48, -108 + bob], handR: [-48, -108 + bob], elbow: 'out', brow: -1 }, u);
+        } else dx = x;
+      }
+      if (ri === 2) {
+        c.filter = 'none';
+        const raise = Math.sin(seg(u, 7.9, 9.3) * Math.PI);
+        const sad = u > 10.2;
+        drawPerson(c, DANYA, dx, row.y, row.s, {
+          noLegs: true, seed: 0.3, rot: u < 7.9 ? 0.05 : 0,
+          handL: raise > 0.02 ? [40 + raise * 10, -150 - raise * 190] : u < 7.9 ? [12, -232] : [34, -132],
+          handR: [-30, -132], headDy: u < 7.9 ? 6 : 0, look: u < 7.9 ? 0.6 : 0,
+          mouth: sad ? 'flat' : u < 7.9 ? 'flat' : 'o', eyes: u < 7.9 && Math.sin(u * 1.3) > 0.85 ? 'closed' : 'open',
+          brow: sad ? 3 : 0, browTilt: sad ? -3 : 0,
+        }, u);
+        c.filter = 'saturate(0.18) brightness(0.95)';
+      }
+      const dy = row.y - 118 * row.s;
+      c.fillStyle = '#8c8776'; c.fillRect(-60, dy, 1400, 16 * row.s + 6);
+      c.fillStyle = '#76715f'; c.fillRect(-60, dy + 16 * row.s + 6, 1400, 120 * row.s);
+      if (ri === 2) {
+        const nb = Math.floor(seg(u, 5.4, 7.6) * 6.99);
+        for (let b = 0; b < nb; b++) { c.fillStyle = ['#7d7d8a', '#8f8a7a', '#6e7a72'][b % 3]; c.fillRect(dx + 60 - b * 2, dy - 10 - b * 11, 70, 10); }
+        if (u > 10.1) {
+          c.filter = 'none';
+          const kk = easeOut(seg(u, 10.1, 10.5));
+          c.save(); c.translate(dx - 50, dy - 2); c.rotate(-0.12); c.scale(kk, kk);
+          c.fillStyle = '#fbfaf5'; c.fillRect(-40, -52, 80, 56);
+          c.strokeStyle = '#d63a2f'; c.lineWidth = 4; c.beginPath(); c.arc(0, -24, 20, 0, TAU); c.stroke();
+          c.fillStyle = '#d63a2f'; c.font = '800 34px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('2', 0, -22);
+          c.restore();
+          c.filter = 'saturate(0.18) brightness(0.95)';
+        }
+      }
+    });
+    c.filter = 'none';
+    c.restore();
+    c.fillStyle = 'rgba(40,50,70,0.18)'; c.fillRect(0, 0, W, H);
+  }
+
   /* ---------- монтаж ---------- */
-  const SCENES = [
-    { a: 0, b: 9.3, draw: s1 },
-    { a: 8.8, b: 17.2, draw: s2 },
-    { a: 16.6, b: 27.3, draw: s3, tr: 'iris', ix: 526, iy: 560 },
-    { a: 26.8, b: 36.4, draw: s4 },
-    { a: 35.9, b: 46.4, draw: s5 },
-    { a: 45.9, b: 52.3, draw: s6 },
-    { a: 51.8, b: 60.01, draw: s7 },
-  ];
+  const DRAW = { hook: sHook, problem: sProblem, s1, s2, s3, s4, s5, s6, s7 };
+  const SCENES = TL.scenes.map((k) => ({ id: k.id, a: k.a, b: k.id === 's7' ? k.b + 0.01 : k.b, src: k.src, draw: DRAW[k.id] }));
 
   let ctx, buf, bctx, DPR = 1;
   function init(canvas, dpr) {
@@ -1006,7 +1102,9 @@
   function drawScene(c, sc, t) {
     c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0); c.globalAlpha = 1;
     c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-    sc.draw(c, t); c.restore();
+    if (sc.id === 's1') c.filter = 'saturate(' + lerp(0.2, 1, ease(seg(t, TL.turnSat[0], TL.turnSat[1]))).toFixed(3) + ')';
+    sc.draw(c, sc.src == null ? t - sc.a : sc.src + (t - sc.a));
+    c.filter = 'none'; c.restore();
   }
   function render(t) {
     t = clamp(t, 0, DUR);
@@ -1029,7 +1127,7 @@
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
     drawHud(ctx, t);
     drawSubs(ctx, t);
-    const fin = 1 - seg(t, 0, 0.8), fout = seg(t, 59.3, 60);
+    const fin = 1 - seg(t, 0, 0.8), fout = seg(t, DUR - 0.7, DUR);
     if (fin > 0) { ctx.fillStyle = 'rgba(8,12,28,' + fin + ')'; ctx.fillRect(0, 0, W, H); }
     if (fout > 0) { ctx.fillStyle = 'rgba(8,12,28,' + fout + ')'; ctx.fillRect(0, 0, W, H); }
     ctx.restore();
