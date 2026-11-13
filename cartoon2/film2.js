@@ -956,7 +956,7 @@
   }
 
   /* ---------- СЦЕНА 7: финал ---------- */
-  const RISERS = ['book', 'wrench', 'kart', 'laptop', 'people', 'brush', 'ball', 'paddle'];
+  const RISERS = ['book', 'gamepad', 'laptop', 'brush', 'people', 'wrench', 'ball', 'paddle'];
   function s7(c, t) {
     const dusk = seg(t, 52, 58);
     sky(c, [lerp3('#5b4a8f', '#232a5a', dusk), lerp3('#d97b74', '#7a4f7f', dusk), lerp3('#ffc27a', '#f08a5d', dusk)]);
@@ -1163,9 +1163,12 @@
     c.restore();
   }
   const SKETCH = (() => {
-    const p = [[-104, -30], [-94, -64], [-14, -64], [18, -47], [96, -47], [114, -30], [-104, -30], null, [-82, -52], [-82, -100], [-56, -100], [-56, -52], null, [10, -52], [-8, -88]];
-    [[-80, -20], [82, -20]].forEach((w) => { p.push(null); for (let i = 0; i <= 20; i++) p.push([w[0] + Math.cos((i / 20) * TAU) * 22, w[1] + Math.sin((i / 20) * TAU) * 22]); });
-    p.push(null, [30, -90], [80, -90], [70, -98], null, [80, -90], [70, -82]);
+    const p = [[-150, -100], [150, -100], [150, 90], [-150, 90], [-150, -100], null, [-20, 90], [-30, 118], [30, 118], [20, 90], null,
+      [-130, 60], [-40, 60], null, [-10, 30], [60, 30], null, [80, 0], [140, 0], null,
+      [-110, 60], [-110, 38], [-92, 38], [-92, 60], null];
+    for (let i = 0; i <= 12; i++) { const k = i / 12; p.push([lerp(-92, -5, k), 38 - Math.sin(k * Math.PI) * 40 - k * 10]); }
+    [[25, 12], [110, -18]].forEach((cc) => { p.push(null); for (let i = 0; i <= 12; i++) p.push([cc[0] + Math.cos((i / 12) * TAU) * 6, cc[1] + Math.sin((i / 12) * TAU) * 6]); });
+    p.push(null, [130, 0], [130, -40], [146, -33], [130, -26]);
     return p;
   })();
   function drawSketch(c, x, y, s, prog, col, w) {
@@ -1194,11 +1197,11 @@
     const gold = seg(u, LT('hook', 1) - 0.2, LT('hook', 1) + 0.6);
     const real = seg(u, LT('hook', 1) + 0.6, LT('hook', 1) + 1.6);
     const go = seg(u, D - 2.0, D - 0.3);
-    const kx = 640 + easeIO(go) * 900;
+    const kx = 640;
     if (real < 1) {
       c.save(); c.globalAlpha = 1 - real;
       if (gold > 0) { c.shadowColor = 'rgba(242,181,68,' + gold + ')'; c.shadowBlur = 18 * gold; }
-      const tip = drawSketch(c, 640, 400, 2.6, p, gold > 0 ? '#d79a22' : '#4a4a52', 3.2);
+      const tip = drawSketch(c, 640, 360, 2.35, p, gold > 0 ? '#d79a22' : '#4a4a52', 3.2);
       c.restore();
       if (tip && p < 1) {
         c.save(); c.translate(tip[0], tip[1]); c.rotate(-0.7);
@@ -1207,13 +1210,15 @@
         c.restore();
       }
       c.save(); c.globalAlpha = (1 - real) * seg(u, 2.6, 3.2); c.font = 'italic 600 30px ' + FONT; c.fillStyle = '#4a4a52';
-      c.fillText('v = ?', 860, 170); c.fillText('F = m·a', 220, 190); c.restore();
+      c.fillText('jump!', 1010, 180); c.fillText('уровень 1', 160, 150); c.restore();
     }
     if (real > 0) {
       c.save(); c.globalAlpha = real;
-      if (go > 0) for (let i = 0; i < 6; i++) poly(c, [[kx - 340 - i * 30, 260 + i * 34], [kx - 200 - i * 30, 260 + i * 34]], 4, 'rgba(120,120,140,' + 0.4 * go + ')');
+      
       c.shadowColor = 'rgba(0,0,0,0.18)'; c.shadowBlur = 20; c.shadowOffsetY = 12;
-      drawKart(c, kx, 400, 2.6, { spin: u * 12 * (0.2 + go * 3) });
+      rrect(c, 640 - 372, 360 - 252, 744, 474, 18); c.fillStyle = '#20263a'; c.fill();
+      c.fillStyle = '#20263a'; c.fillRect(600, 580, 80, 50); c.fillRect(560, 625, 160, 12);
+      gameScreen(c, 640 - 352, 360 - 232, 704, 430, u, { hero: heroAt(seg(u, LT('hook', 1) + 1.2, D - 0.2)), got: Math.floor(seg(u, LT('hook', 1) + 1.2, D - 0.2) * 3.2) });
       c.restore();
     }
     c.restore();
@@ -1260,7 +1265,7 @@
         if (a > 0) {
           c.save(); c.globalAlpha = a; c.shadowColor = 'rgba(242,181,68,0.9)'; c.shadowBlur = 10;
           drawSketch(c, hx, dy - 40 - Math.sin(u * 2) * 3, 0.16, 1, '#f2b544', 1.6);
-          drawSketch(c, hx + 34, dy - 70 - Math.sin(u * 2 + 1) * 3, 0.1, 1, '#f2b544', 1.3);
+          drawIcon(c, 'gamepad', hx + 36, dy - 72 - Math.sin(u * 2 + 1) * 3, 22, '#f2b544', 2.4);
           c.restore();
         }
         if (fade < 1 && fade > 0) { c.save(); c.globalAlpha = 1 - fade; drawSketch(c, hx, dy - 40, 0.16, 1, 'rgba(120,120,120,0.5)', 1.4); c.restore(); }
@@ -1290,15 +1295,15 @@
     const chalk = 'rgba(240,240,228,0.92)';
     const bp = seg(u, l2, l2 + 2.6);
     if (bp > 0) {
-      drawSketch(c, 560, 330, 1.25, bp, chalk, 3);
-      const ap = seg(u, l2 + 1.2, l2 + 2.2);
+      drawSketch(c, 560, 290, 1.05, bp, chalk, 3);
+      const ap = 0;
       if (ap > 0) {
         poly(c, [[380, 300], [380 + 110 * ap, 300]], 4, '#ffd76a');
         poly(c, [[490, 300], [478, 292]], 4, ap > 0.95 ? '#ffd76a' : 'transparent');
         poly(c, [[490, 300], [478, 308]], 4, ap > 0.95 ? '#ffd76a' : 'transparent');
       }
       c.save(); c.globalAlpha = seg(u, l2 + 1.6, l2 + 2.4); c.font = '700 40px ' + FONT; c.fillStyle = chalk; c.textAlign = 'left'; c.textBaseline = 'middle';
-      c.fillText('F = m·a', 760, 170); c.fillText('v = s / t', 760, 230); c.restore();
+      c.fillText('y = v·t − g·t²/2', 735, 330); c.fillText('if (jump) vy = −8', 735, 390); c.restore();
     } else {
       [[150, 380], [200, 300], [250, 420]].forEach(([y, w]) => poly(c, [[370, y], [370 + w, y]], 3, 'rgba(240,240,228,0.5)'));
     }
@@ -1361,6 +1366,98 @@
     [[520, '#e9e2d6'], [760, '#7cc1d6']].forEach(([mx, col]) => { rrect(c, mx - 14, 600, 28, 34, 5); c.fillStyle = col; c.fill(); });
     c.save(); c.translate(640, 630); c.rotate(0.04); c.fillStyle = '#fbfaf3'; c.fillRect(-60, -12, 120, 18); drawSketch(c, 0, -2, 0.18, 1, '#4a4a52', 1.2); c.restore();
     c.restore();
+  }
+
+  /* ===== игра ученика ===== */
+  const LEVEL = { plats: [[0, 360, 230], [290, 330, 150], [500, 290, 130], [680, 250, 120]], coins: [[340, 290], [560, 250], [720, 200]], flag: [760, 250] };
+  function heroAt(k, bug) {
+    const pts = [[40, 360], [200, 360], [330, 330], [540, 290], [740, 250]];
+    const f = clamp(k) * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)), r = f - i;
+    let x = lerp(pts[i][0], pts[i + 1][0], r), y = lerp(pts[i][1], pts[i + 1][1], r) - Math.sin(r * Math.PI) * (i > 0 ? 70 : 0);
+    if (bug != null && k > bug) { const d = (k - bug) * 6; x = lerp(pts[2][0], pts[2][0] + 20, Math.min(1, d)); y = pts[2][1] + d * d * 260; }
+    return [x, y];
+  }
+  function gameScreen(c, x, y, w, h, t, o = {}) {
+    const tiles = o.tiles == null ? 1 : o.tiles;
+    c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip(); c.translate(x, y); c.scale(w / 800, h / 450);
+    c.fillStyle = vgrad(c, 0, 450, ['#5fb7ff', '#b4e1ff']); c.fillRect(0, 0, 800, 450);
+    for (let i = 0; i < 4; i++) { const cx = ((i * 230 + t * 18) % 960) - 80; c.fillStyle = '#ffffff'; c.fillRect(cx, 50 + i * 20, 70, 18); c.fillRect(cx + 16, 34 + i * 20, 40, 18); }
+    LEVEL.plats.forEach((p, i) => {
+      const k = clamp(tiles * 4 - i);
+      if (k <= 0) return;
+      c.globalAlpha = k; c.fillStyle = '#5bb34a'; c.fillRect(p[0], p[1], p[2] * k, 14); c.fillStyle = '#8b5a33'; c.fillRect(p[0], p[1] + 14, p[2] * k, 120);
+      if (o.bugPlat && i === 1) { c.fillStyle = 'rgba(255,60,90,0.45)'; c.fillRect(p[0] + 40, p[1], 50, 134); }
+      c.globalAlpha = 1;
+    });
+    if (tiles >= 0.95) {
+      LEVEL.coins.forEach((cn, i) => { if (o.got && o.got > i) return; const b = Math.sin(t * 4 + i) * 4; circ(c, cn[0], cn[1] + b, 11, '#ffd23f'); circ(c, cn[0] - 3, cn[1] + b - 3, 3, '#fff3b0'); });
+      c.fillStyle = '#ffffff'; c.fillRect(LEVEL.flag[0], LEVEL.flag[1] - 90, 5, 90); c.fillStyle = '#ff5a5f'; c.beginPath(); c.moveTo(LEVEL.flag[0] + 5, LEVEL.flag[1] - 88); c.lineTo(LEVEL.flag[0] + 34, LEVEL.flag[1] - 76); c.lineTo(LEVEL.flag[0] + 5, LEVEL.flag[1] - 64); c.fill();
+    }
+    if (o.hero) {
+      const [hx, hy] = o.hero, sp = o.sprite == null ? 1 : o.sprite;
+      c.globalAlpha = sp; c.fillStyle = o.glitch ? 'rgba(255,90,140,0.9)' : '#ffcf3f'; c.fillRect(hx - 13, hy - 30, 26, 30);
+      c.fillStyle = '#9a7247'; c.fillRect(hx - 14, hy - 34, 28, 10); c.fillStyle = '#20202a'; c.fillRect(hx + 4, hy - 22, 4, 6); c.globalAlpha = 1;
+    }
+    if (o.label) {
+      c.fillStyle = 'rgba(20,20,40,0.6)'; c.fillRect(300, 24, 200, 52); c.fillStyle = '#ff6b8a'; c.font = '800 32px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(o.label, 400, 51);
+    }
+    if (o.win) { const r = rng(3); for (let i = 0; i < 46; i++) { c.fillStyle = ['#ff5a5f', '#ffd23f', '#3ec1d3', '#7bd389'][i % 4]; c.fillRect(r() * 800, (r() * 0.4 + o.win * 0.8) * 450, 8, 12); } }
+    c.restore();
+  }
+  function sStudio(c, u) {
+    const D = TL.sceneDur.garage;
+    c.fillStyle = vgrad(c, 0, H, ['#16213f', '#1f2d52', '#2a2f4f']); c.fillRect(0, 0, W, H);
+    c.save(); cam(c, lerp(1.0, 1.06, easeIO(seg(u, 0, D))), 640, 360);
+    glow(c, 640, 220, 560, 'rgba(90,170,255,0.22)');
+    rrect(c, 226, 46, 828, 348, 14); c.fillStyle = '#0d1222'; c.fill();
+    const tiles = seg(u, 0.4, D - 1.6), spr = seg(u, 1.2, D - 1.2);
+    gameScreen(c, 240, 60, 800, 320, u, { tiles, hero: [120, 360], sprite: spr });
+    c.save(); c.globalAlpha = 0.35 * (1 - tiles); c.strokeStyle = '#9fd1ff'; c.lineWidth = 1;
+    for (let x = 240; x < 1040; x += 40) { c.beginPath(); c.moveTo(x, 60); c.lineTo(x, 380); c.stroke(); }
+    for (let y = 60; y < 380; y += 40) { c.beginPath(); c.moveTo(240, y); c.lineTo(1040, y); c.stroke(); }
+    c.restore();
+    const typing = u < D - 1.3;
+    drawPerson(c, HERO, 500, 712, 1.0, {
+      noLegs: true, seed: 0.4, swept: true, look: 0.2, lookUp: typing ? 0.6 : 0,
+      handL: typing ? [40 + Math.sin(u * 38) * 6, -122] : [66, -330], handR: typing ? [-40 + Math.cos(u * 40) * 6, -122] : [-46, -114], elbow: 'out',
+      mouth: typing ? 'grin' : 'laugh', eyes: typing ? 'open' : 'happy',
+    }, u);
+    drawPerson(c, RED, 820, 712, 0.95, {
+      noLegs: true, seed: 1.2, look: -0.4, lookUp: -0.6, handL: [30 + Math.sin(u * 6) * 10, -128], handR: [-40, -120], elbow: 'out', mouth: typing ? 'grin' : 'laugh',
+    }, u);
+    c.fillStyle = '#6b4c34'; c.fillRect(160, 612, 960, 26); c.fillStyle = '#4e3626'; c.fillRect(160, 638, 960, 120);
+    c.fillStyle = '#c9ccd4'; c.beginPath(); c.moveTo(440, 612); c.lineTo(560, 612); c.lineTo(548, 566); c.lineTo(452, 566); c.closePath(); c.fill();
+    rrect(c, 760, 590, 120, 22, 5); c.fillStyle = '#2b2f3a'; c.fill(); rrect(c, 770, 593, 100, 15, 3); c.fillStyle = '#3ec1d3'; c.fill();
+    if (typing) for (let i = 0; i < 5; i++) { const yy = 520 - ((u * 60 + i * 30) % 120); c.fillStyle = 'rgba(160,220,255,' + (0.6 - (520 - yy) / 240) + ')'; c.font = '700 16px ' + FONT; c.textAlign = 'center'; c.fillText(['{ }', 'jump()', 'x += v', 'if', '< >'][i], 500 + (i - 2) * 40, yy); }
+    c.restore();
+    c.fillStyle = 'rgba(90,150,255,0.08)'; c.fillRect(0, 0, W, H);
+  }
+  function sPlay(c, u) {
+    const D = TL.sceneDur.test;
+    c.fillStyle = vgrad(c, 0, H, ['#1d2547', '#2b335a', '#30355a']); c.fillRect(0, 0, W, H);
+    c.save(); cam(c, lerp(1.02, 1.08, easeIO(seg(u, 0, D))), 640, 360);
+    glow(c, 640, 220, 600, 'rgba(255,200,120,0.12)');
+    rrect(c, 226, 46, 828, 348, 14); c.fillStyle = '#0d1222'; c.fill();
+    const run1 = u < 3.0;
+    let opt;
+    if (run1) { const k = seg(u, 0.2, 2.6); opt = { hero: heroAt(k * 0.7, 0.45), bugPlat: k > 0.6, glitch: k * 0.7 > 0.45, label: k * 0.7 > 0.5 ? 'БАГ!' : null }; }
+    else { const k = seg(u, 3.3, D - 1.0); opt = { hero: heroAt(k), got: Math.floor(k * 3.2), win: seg(u, D - 1.1, D) || 0 }; }
+    gameScreen(c, 240, 60, 800, 320, u, opt);
+    const laugh = run1 && u > 2.0, fixing = u > 2.5 && u < 3.3, cheer = !run1 && u > D - 1.2;
+    const sh = laugh ? Math.sin(u * 28) * 2 : 0;
+    drawPerson(c, GLASSES, 330, 712, 0.92, { noLegs: true, seed: 2.7, bob: sh, look: 0.4, lookUp: 0.8, handL: cheer ? [60, -330] : [30, -130], handR: cheer ? [-60, -330] : [-30, -130], elbow: 'out', mouth: laugh || cheer ? 'laugh' : 'o', eyes: laugh ? 'happy' : 'open' }, u);
+    drawPerson(c, BUZZ, 950, 712, 0.92, { noLegs: true, seed: 2.2, bob: sh, look: -0.4, lookUp: 0.8, handL: cheer ? [60, -330] : [30, -130], handR: cheer ? [-60, -330] : [-30, -130], elbow: 'out', mouth: laugh || cheer ? 'laugh' : 'grin', eyes: laugh ? 'happy' : 'open' }, u);
+    drawPerson(c, HERO, 640, 712, 1.0, {
+      noLegs: true, seed: 0.4, swept: true, bob: sh, look: 0, lookUp: fixing ? -0.6 : 0.8,
+      handL: cheer ? [66, -340] : fixing ? [40 + Math.sin(u * 40) * 6, -122] : [52, -116], handR: cheer ? [-66, -340] : fixing ? [-40, -122] : [-52, -116], elbow: 'out',
+      mouth: laugh || cheer ? 'laugh' : fixing ? 'flat' : u > 1.6 && run1 ? 'o' : 'grin', eyes: laugh || cheer ? 'happy' : 'open', brow: run1 && u > 1.6 ? 4 : 0,
+    }, u);
+    c.fillStyle = '#6b4c34'; c.fillRect(160, 612, 960, 26); c.fillStyle = '#4e3626'; c.fillRect(160, 638, 960, 120);
+    [[330, 580], [950, 580]].forEach(([gx, gy]) => { rrect(c, gx - 34, gy, 68, 26, 12); c.fillStyle = '#2b2f3a'; c.fill(); circ(c, gx + 16, gy + 10, 4, '#ff5a5f'); });
+    c.fillStyle = '#c9ccd4'; c.beginPath(); c.moveTo(580, 612); c.lineTo(700, 612); c.lineTo(688, 566); c.lineTo(592, 566); c.closePath(); c.fill();
+    c.restore();
+    const flash = Math.max(0, 1 - Math.abs(u - 3.15) / 0.25);
+    if (flash > 0) { c.fillStyle = 'rgba(255,255,255,' + flash * 0.8 + ')'; c.fillRect(0, 0, W, H); }
   }
 
   function sGarage(c, u) {
@@ -1435,7 +1532,7 @@
   }
   const easeIn2 = (t) => t * t * (1.6 - 0.6 * t);
 
-  const STEPS = ['Идея', 'План', 'Деталь', 'Тест'];
+  const STEPS = ['Идея', 'План', 'Код', 'Тест'];
   function drawSteps(c, t) {
     const a = Math.min(seg(t, TL.stepsShow[0], TL.stepsShow[0] + 0.6), 1 - seg(t, TL.stepsShow[1] - 0.6, TL.stepsShow[1]));
     if (a <= 0) return;
@@ -1453,7 +1550,7 @@
   }
 
   /* ---------- монтаж ---------- */
-  const DRAW = { hook: sHookK, problem: sProblem2, s1, cls: sClass2, tutor: sTutor2, garage: sGarage, test: sTest, s7 };
+  const DRAW = { hook: sHookK, problem: sProblem2, s1, cls: sClass2, tutor: sTutor2, garage: sStudio, test: sPlay, s7 };
   const SCENES = TL.scenes.map((k) => ({ id: k.id, a: k.a, b: k.id === 's7' ? k.b + 0.01 : k.b, src: k.src, draw: DRAW[k.id] }));
 
   let ctx, buf, bctx, tmp, tctx, DPR = 1;

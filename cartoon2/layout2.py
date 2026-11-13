@@ -35,8 +35,8 @@ s7=scenes[-1]; t13=vo[-1]['t']
 title=[round(s7['src']+(t13+o-s7['a']),3) for o in (0.0,1.79,3.85)]
 TL={'dur':DUR,'scenes':[{k:v for k,v in s_.items() if k!='L'} for s_ in scenes],'subs':[[v['t']-0.1,v['t']+v['d']+0.35,v['text']] for v in vo],
     'L':{s_['id']:s_['L'] for s_ in scenes},'sceneDur':{s_['id']:round(s_['b']-s_['a'],3) for s_ in scenes},
-    'title':title,'titleText':'Из тетради — в реальность','turnSat':[S['s1']['a'],S['s1']['a']+1.8],
-    'steps':[S['cls']['a']+2.6,S['tutor']['a']+0.9,S['garage']['b']-1.9,S['test']['a']+4.2],'stepsShow':[S['cls']['a']+0.3,S['s7']['a']+2.0]}
+    'title':title,'titleText':'Из тетради — в игру','turnSat':[S['s1']['a'],S['s1']['a']+1.8],
+    'steps':[S['cls']['a']+2.6,S['tutor']['a']+0.9,S['garage']['b']-1.9,S['test']['b']-1.2],'stepsShow':[S['cls']['a']+0.3,S['s7']['a']+2.0]}
 open('timeline.js','w').write('window.TIMELINE='+json.dumps(TL,ensure_ascii=False)+';\n')
 print(json.dumps({'dur':DUR,'scenes':[(s['id'],s['a'],s['b']) for s in scenes],'title':title,'steps':TL['steps']},ensure_ascii=False))
 
@@ -65,7 +65,7 @@ def kick(vel=0.45):
     n=int(SR*0.3); tt=np.arange(n)/SR; f=50+90*np.exp(-tt*30); return np.sin(2*np.pi*np.cumsum(f)/SR)*np.exp(-tt*12)*vel
 def shaker(vel=0.05): n=int(SR*0.08); return rng.standard_normal(n)*np.exp(-np.arange(n)/SR*60)*vel
 def tick(vel=0.12):
-    n=int(SR*0.05); tt=np.arange(n)/SR; return (rng.standard_normal(n)*0.5+np.sin(2*np.pi*2500*tt))*np.exp(-tt*120)*vel
+    n=int(SR*0.04); tt=np.arange(n)/SR; return np.sin(2*np.pi*1500*tt)*np.exp(-tt*160)*vel*0.7
 def chime(m,vel=0.26):
     n=int(SR*1.8); tt=np.arange(n)/SR; f=mtof(m)
     return (np.sin(2*np.pi*f*tt)+0.5*np.sin(2*np.pi*f*2.76*tt)*np.exp(-tt*4)+0.3*np.sin(2*np.pi*f*5.4*tt)*np.exp(-tt*8))*env(n,0.002,0.6)*vel
@@ -75,7 +75,6 @@ def bell(vel=0.12):
     return s*np.minimum(1,tt/0.01)*np.minimum(1,(1.6-tt)/0.3)*vel
 # 1) крючок: тикание и тёмный пэд
 h=S['hook']; add(pad([45,52,57],h['b']-h['a']+0.4,0.10),h['a'])
-for k in np.arange(h['a']+0.3,h['b'],0.5): add(tick(0.10),k,0.3)
 # 2) проблема: минор, тикание часов, звонок
 p=S['problem']; beat=0.6
 TL['bells']=[]
@@ -115,23 +114,25 @@ def noise(dur,lp):
     n=int(SR*dur); nz=rng.standard_normal(n); y=np.zeros(n); acc=0; a_=np.exp(-1/(SR*lp))
     for i in range(n): acc=a_*acc+(1-a_)*nz[i]; y[i]=acc
     return y
-h=S['hook']; sc=noise(2.6,0.00008)
-mod=(0.5+0.5*np.sign(np.sin(2*np.pi*7*np.arange(len(sc))/SR)))
-add(sc*mod*0.35,h['a']+0.4+0.0,0.2)
-add(sc[:int(SR*1.2)]*0.3,h['a']+3.0,0.2)
-gg=S['garage']
-for k in np.arange(gg['a']+0.4,gg['b']-1.4,0.31): add(tick(0.16),k,-0.2); add(tick(0.10),k+0.08,-0.2)
-tt_=S['test']
-def engine(dur,f0,f1,vel):
+def blip(f0,f1,dur,vel):
     n=int(SR*dur); x=np.arange(n)/SR; f=np.linspace(f0,f1,n); ph=np.cumsum(f)/SR
-    s_=(2*(ph%1)-1)*0.6+np.sin(2*np.pi*ph*0.5)*0.4; return s_*np.minimum(1,x/0.1)*np.minimum(1,(dur-x)/0.2)*vel
-add(engine(2.0,55,75,0.10),tt_['a']+0.0,-0.3)
-n=int(SR*0.6); x=np.arange(n)/SR; add(np.sin(2*np.pi*np.cumsum(300+500*np.exp(-x*8)*np.abs(np.sin(x*40)))/SR)*np.exp(-x*5)*0.12,tt_['a']+1.9,0.3)
-add(engine(3.2,60,110,0.12),tt_['a']+3.3,0.0)
+    return np.sign(np.sin(2*np.pi*ph))*np.exp(-x*6)*vel
+def click(vel):
+    n=int(SR*0.025); x=np.arange(n)/SR; return np.sin(2*np.pi*1800*x)*np.exp(-x*300)*vel
+hk=S['hook']; L1=TL['L']['hook'][1] if len(TL['L']['hook'])>1 else 4
+for j,tt in enumerate([1.4,2.3,3.1]): add(blip(420,880,0.18,0.05),hk['a']+L1+tt,0.2)
+add(blip(500,1000,0.25,0.05),hk['a']+L1+3.6,0.2)
+gg=S['garage']
+for k in np.arange(gg['a']+0.4,gg['b']-1.4,0.09): add(click(0.035*(0.6+0.4*rng.random())),k+rng.random()*0.03,-0.2)
+tt_=S['test']
+for j in (0.6,1.2): add(blip(420,880,0.18,0.05),tt_['a']+j,0.2)
+add(blip(900,120,0.8,0.06),tt_['a']+1.5,0.2)
+for j in (3.6,4.2,4.8): add(blip(420,880,0.18,0.05),tt_['a']+j,0.2)
+for i,m in enumerate([72,76,79,84]): add(blip(mtof(m),mtof(m),0.14,0.05),tt_['b']-1.2+i*0.1,0.2)
 n=int(SR*2.0); ap=np.zeros(n)
 for _ in range(180):
     q=int(rng.uniform(0,n-2000)); ap[q:q+600]+=rng.standard_normal(600)*np.exp(-np.arange(600)/80)
-add(ap*np.minimum(1,np.arange(n)/(SR*0.2))*np.minimum(1,(n-np.arange(n))/(SR*0.5))*0.11,tt_['a']+4.2)
+add(ap*np.minimum(1,np.arange(n)/(SR*0.2))*np.minimum(1,(n-np.arange(n))/(SR*0.5))*0.11,tt_['b']-1.2)
 # приглушение музыки под голосом
 duck=np.ones(N)
 for v in vo:
