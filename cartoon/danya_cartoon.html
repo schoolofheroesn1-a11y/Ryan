@@ -1051,6 +1051,14 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
   }
 
   /* ---------- ПРОБЛЕМА: класс на 30 человек ---------- */
+  function greyC(hex, k = 0.18) {
+    if (!hex || hex[0] !== '#') return hex;
+    const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    const y = 0.3 * r + 0.59 * g + 0.11 * b;
+    const f = (v) => Math.round((y + (v - y) * k) * 0.95);
+    return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+  }
+  function greyP(P) { const o = {}; for (const k in P) o[k] = typeof P[k] === 'string' ? greyC(P[k]) : P[k]; return o; }
   const KIDS = (() => {
     const base = [RED, GLASSES, BUZZ], shirts = ['#5d6a7a', '#7b6a5a', '#4f6d63', '#6a5a78', '#8a7f6a', '#56657e'], hairs = ['#3a2a20', '#6b4a2e', '#1f1b18', '#8a6a3e', '#b65a2a'];
     const r = rng(19), out = [];
@@ -1058,13 +1066,12 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
       const b = base[i % 3];
       out.push(Object.assign({}, b, { shirt: shirts[Math.floor(r() * shirts.length)], hair: hairs[Math.floor(r() * hairs.length)], hairStyle: ['short', 'long', 'buzz', 'bob'][Math.floor(r() * 4)], glasses: r() < 0.2, stripes: false }));
     }
-    return out;
+    return out.map(greyP);
   })();
   const ROWS = [{ y: 292, s: 0.36, n: 9 }, { y: 380, s: 0.46, n: 8 }, { y: 488, s: 0.6, n: 7 }, { y: 628, s: 0.76, n: 6 }];
   function sProblem(c, u) {
     const z = lerp(1.0, 1.16, easeIO(seg(u, 0, 12.5)));
     c.save(); cam(c, z, 640, 470);
-    c.filter = 'saturate(0.18) brightness(0.95)';
     c.fillStyle = '#c3c8bf'; c.fillRect(-100, -100, 1500, 900);
     c.fillStyle = '#a9ae9f'; c.fillRect(-100, 250, 1500, 700);
     c.fillStyle = '#6f6a5c'; c.fillRect(380, 30, 520, 190); c.fillStyle = '#3d4a40'; c.fillRect(392, 42, 496, 166);
@@ -1076,7 +1083,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
     poly(c, [ck, [ck[0] + Math.cos(sp - 1.57) * 36, ck[1] + Math.sin(sp - 1.57) * 36]], 4, '#333');
     poly(c, [ck, [ck[0] + Math.cos(sp / 12 - 1.57) * 22, ck[1] + Math.sin(sp / 12 - 1.57) * 22]], 6, '#333');
     const yr = clamp(1 + Math.floor(seg(u, 4.4, 7.4) * 10.99), 1, 11);
-    c.fillStyle = '#f2f2ee'; c.fillRect(120, 50, 130, 140); c.fillStyle = '#b54a3a'; c.fillRect(120, 50, 130, 30);
+    c.fillStyle = '#f2f2ee'; c.fillRect(120, 50, 130, 140); c.fillStyle = '#7d7472'; c.fillRect(120, 50, 130, 30);
     c.fillStyle = '#333'; c.font = '800 64px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(yr), 185, 132);
     c.font = '700 18px ' + FONT; c.fillText('класс', 185, 176);
     const flip = (u * 3.3) % 1;
@@ -1085,7 +1092,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
       c.fillStyle = '#f2f2ee'; c.fillRect(-65, 0, 130, 110); c.restore();
     }
     const ring = u > 4.3 && u < 5.4 ? Math.sin(u * 60) * 0.25 : 0;
-    c.save(); c.translate(1200, 230); c.rotate(ring); circ(c, 0, 0, 26, '#9a8a50'); circ(c, 0, 0, 8, '#555'); c.restore();
+    c.save(); c.translate(1200, 230); c.rotate(ring); circ(c, 0, 0, 26, '#8d8a80'); circ(c, 0, 0, 8, '#555'); c.restore();
     const bob = Math.sin(u * 4.2) * 3;
     let ki = 0, dx = 0;
     ROWS.forEach((row, ri) => {
@@ -1098,7 +1105,6 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
         } else dx = x;
       }
       if (ri === 2) {
-        c.filter = 'none';
         const raise = Math.sin(seg(u, 7.9, 9.3) * Math.PI);
         const sad = u > 10.2;
         drawPerson(c, DANYA, dx, row.y, row.s, {
@@ -1108,27 +1114,23 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
           mouth: sad ? 'flat' : u < 7.9 ? 'flat' : 'o', eyes: u < 7.9 && Math.sin(u * 1.3) > 0.85 ? 'closed' : 'open',
           brow: sad ? 3 : 0, browTilt: sad ? -3 : 0,
         }, u);
-        c.filter = 'saturate(0.18) brightness(0.95)';
       }
       const dy = row.y - 118 * row.s;
       c.fillStyle = '#8c8776'; c.fillRect(-60, dy, 1400, 16 * row.s + 6);
       c.fillStyle = '#76715f'; c.fillRect(-60, dy + 16 * row.s + 6, 1400, 120 * row.s);
       if (ri === 2) {
         const nb = Math.floor(seg(u, 5.4, 7.6) * 6.99);
-        for (let b = 0; b < nb; b++) { c.fillStyle = ['#7d7d8a', '#8f8a7a', '#6e7a72'][b % 3]; c.fillRect(dx + 60 - b * 2, dy - 10 - b * 11, 70, 10); }
+        for (let b = 0; b < nb; b++) { c.fillStyle = ['#7d7d80', '#8a8984', '#73766f'][b % 3]; c.fillRect(dx + 60 - b * 2, dy - 10 - b * 11, 70, 10); }
         if (u > 10.1) {
-          c.filter = 'none';
           const kk = easeOut(seg(u, 10.1, 10.5));
           c.save(); c.translate(dx - 50, dy - 2); c.rotate(-0.12); c.scale(kk, kk);
           c.fillStyle = '#fbfaf5'; c.fillRect(-40, -52, 80, 56);
           c.strokeStyle = '#d63a2f'; c.lineWidth = 4; c.beginPath(); c.arc(0, -24, 20, 0, TAU); c.stroke();
           c.fillStyle = '#d63a2f'; c.font = '800 34px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('2', 0, -22);
           c.restore();
-          c.filter = 'saturate(0.18) brightness(0.95)';
         }
       }
     });
-    c.filter = 'none';
     c.restore();
     c.fillStyle = 'rgba(40,50,70,0.18)'; c.fillRect(0, 0, W, H);
   }
@@ -1137,20 +1139,25 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--gold)}
   const DRAW = { hook: sHook, problem: sProblem, s1, s2, s3, s4, s5, s6, s7 };
   const SCENES = TL.scenes.map((k) => ({ id: k.id, a: k.a, b: k.id === 's7' ? k.b + 0.01 : k.b, src: k.src, draw: DRAW[k.id] }));
 
-  let ctx, buf, bctx, DPR = 1;
+  let ctx, buf, bctx, tmp, tctx, DPR = 1;
   function init(canvas, dpr) {
     DPR = dpr || 1;
     canvas.width = W * DPR; canvas.height = H * DPR;
     ctx = canvas.getContext('2d');
     buf = document.createElement('canvas'); buf.width = W * DPR; buf.height = H * DPR; bctx = buf.getContext('2d');
+    tmp = document.createElement('canvas'); tmp.width = W * DPR; tmp.height = H * DPR; tctx = tmp.getContext('2d');
     if (!SCHOOL_DAY) { SCHOOL_DAY = makeSchool(false); SCHOOL_NIGHT = makeSchool(true); }
   }
   function drawScene(c, sc, t) {
     c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0); c.globalAlpha = 1;
     c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-    if (sc.id === 's1') c.filter = 'saturate(' + lerp(0.2, 1, ease(seg(t, TL.turnSat[0], TL.turnSat[1]))).toFixed(3) + ')';
-    sc.draw(c, sc.src == null ? t - sc.a : sc.src + (t - sc.a));
-    c.filter = 'none'; c.restore();
+    const lt = sc.src == null ? t - sc.a : sc.src + (t - sc.a);
+    const sat = sc.id === 's1' ? lerp(0.2, 1, ease(seg(t, TL.turnSat[0], TL.turnSat[1]))) : 1;
+    if (sat < 0.999) {
+      tctx.save(); tctx.setTransform(DPR, 0, 0, DPR, 0, 0); tctx.fillStyle = '#000'; tctx.fillRect(0, 0, W, H); sc.draw(tctx, lt); tctx.restore();
+      c.filter = 'saturate(' + sat.toFixed(3) + ')'; c.drawImage(tmp, 0, 0, W, H); c.filter = 'none';
+    } else sc.draw(c, lt);
+    c.restore();
   }
   function render(t) {
     t = clamp(t, 0, DUR);
