@@ -18,6 +18,15 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()[:8]
 
 
+# Если кэш хостинга запомнил старый файл под новым адресом (файл залили позже, чем открыли сайт),
+# добавьте сюда имя файла с новой меткой: адрес сменится, и кэш хостинга его не узнает.
+RESALT = {"motion.js": "r2"}
+
+
+def token(name, text):
+    return digest((text + RESALT.get(name, "")).encode())
+
+
 def main(site, previous=None):
     site = Path(site)
     texts = {f.name: f.read_text(encoding="utf-8") for f in list(site.glob("*.js")) + [site / "index.html"] if f.name != "sw.js"}
@@ -33,7 +42,7 @@ def main(site, previous=None):
             return texts[name]
         busy.add(name)
         s = texts[name]
-        s = IMP.sub(lambda m: m.group(1) + m.group(2) + "?v=" + digest(final(m.group(3)).encode()) + m.group(4)
+        s = IMP.sub(lambda m: m.group(1) + m.group(2) + "?v=" + token(m.group(3), final(m.group(3))) + m.group(4)
                     if m.group(3) in texts else m.group(0), s)
         s = ASSET.sub(lambda m: f'"{m.group(1)}?v={assets[m.group(1)]}"' if m.group(1) in assets else m.group(0), s)
         busy.discard(name)
