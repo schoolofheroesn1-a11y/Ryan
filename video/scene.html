@@ -22,7 +22,7 @@
   <div id="caps"></div>
 </div>
 <script>
-const TOTAL = 65;
+const TOTAL = 67.6;
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const eo=t=>1-Math.pow(1-clamp(t),3);
@@ -127,16 +127,16 @@ function bg(c1,c2){return `<defs><linearGradient id="g${c1.slice(1)}${c2.slice(1
 
 // ---------- scenes ----------
 const SCENES=[
- {t0:0,   t1:6.5,  f:street},
- {t0:6.5, t1:13.5, f:atrium},
- {t0:13.5,t1:21.5, f:lesson},
- {t0:21.5,t1:32,   f:breakTime},
- {t0:32,  t1:36.3, f:canteen},
- {t0:36.3,t1:43,   f:volley},
- {t0:43,  t1:49.3, f:bday},
- {t0:49.3,t1:53,   f:santa},
- {t0:53,  t1:56.5, f:homework},
- {t0:56.5,t1:65,   f:finale},
+ {t0:0,   t1:5.5,  f:street},
+ {t0:5.5, t1:11,   f:atrium},
+ {t0:11,  t1:19.3, f:lesson},
+ {t0:19.3,t1:29.8, f:breakTime},
+ {t0:29.8,t1:34.1, f:canteen},
+ {t0:34.1,t1:40.8, f:volley},
+ {t0:40.8,t1:47.1, f:bday},
+ {t0:47.1,t1:50.8, f:santa},
+ {t0:50.8,t1:57.6, f:homework},
+ {t0:57.6,t1:67.6, f:finale},
 ];
 
 function street(lt){
@@ -207,18 +207,18 @@ function lesson(lt){
   g+=`<rect x="0" y="1440" width="1080" height="480" fill="#D9AE85"/>`;
   // board
   g+=`<rect x="310" y="680" width="460" height="320" rx="20" fill="#fff" stroke="#6B9080" stroke-width="14"/>`;
-  const q=1-fade(lt,3.6,.4), ex=fade(lt,3.8,.4);
+  const q=1-fade(lt,4.5,.4), ex=fade(lt,4.7,.4);
   g+=`<text x="540" y="920" font-size="230" font-weight="900" text-anchor="middle" fill="${P.coral}" opacity="${q}">?</text>`;
-  g+=`<g transform="translate(540,840) scale(${pop(lt,3.8,.5)})" opacity="${ex}"><circle r="80" fill="${P.yellow}"/><rect x="-36" y="70" width="72" height="44" rx="10" fill="#B0B8C0"/>${[0,1,2,3,4,5,6,7].map(i=>{const a=i*PI/4;return `<line x1="${C(a)*100}" y1="${S(a)*100}" x2="${C(a)*130}" y2="${S(a)*130}" stroke="${P.yellow}" stroke-width="12" stroke-linecap="round"/>`}).join('')}<text x="0" y="28" font-size="90" font-weight="900" text-anchor="middle" fill="#fff">!</text></g>`;
+  g+=`<g transform="translate(540,840) scale(${pop(lt,4.7,.5)})" opacity="${ex}"><circle r="80" fill="${P.yellow}"/><rect x="-36" y="70" width="72" height="44" rx="10" fill="#B0B8C0"/>${[0,1,2,3,4,5,6,7].map(i=>{const a=i*PI/4;return `<line x1="${C(a)*100}" y1="${S(a)*100}" x2="${C(a)*130}" y2="${S(a)*130}" stroke="${P.yellow}" stroke-width="12" stroke-linecap="round"/>`}).join('')}<text x="0" y="28" font-size="90" font-weight="900" text-anchor="middle" fill="#fff">!</text></g>`;
   // clock without bell
   const ca=lt*90;
   g+=`<g transform="translate(470,585)"><circle r="56" fill="#fff" stroke="${P.ink}" stroke-width="8"/><line x1="0" y1="0" x2="0" y2="-38" stroke="${P.ink}" stroke-width="7" stroke-linecap="round" transform="rotate(${ca})"/><line x1="0" y1="0" x2="0" y2="-26" stroke="${P.coral}" stroke-width="8" stroke-linecap="round" transform="rotate(${ca/12})"/><circle r="7" fill="${P.ink}"/></g>`;
-  const bk=pop(lt,3.1);
+  const bk=pop(lt,2.9);
   g+=`<g transform="translate(620,585) scale(${bk})"><path d="M-30,20 Q-30,-38 0,-40 Q30,-38 30,20 L40,30 L-40,30Z" fill="${P.yellow}"/><circle cx="0" cy="38" r="9" fill="${P.yellow}"/><circle r="56" fill="none" stroke="#E0384A" stroke-width="10"/><line x1="-40" y1="-40" x2="40" y2="40" stroke="#E0384A" stroke-width="10"/></g>`;
   // teacher
-  g+=kid({x:880,y:1580,s:1.3,hs:'bun',hair:'#6B4B3A',shirt:P.purple,pants:'#4B3F72',skin:SK[3],glasses:true,aL:100+S(lt*3)*14,aR:15,mouth:lt>4?'laugh':'smile'});
+  g+=kid({x:880,y:1580,s:1.3,hs:'bun',hair:'#6B4B3A',shirt:P.purple,pants:'#4B3F72',skin:SK[3],glasses:true,aL:100+S(lt*3)*14,aR:15,mouth:lt>4.7?'laugh':'smile'});
   // students
-  const st=[{x:200,c:KIDS.B,raise:4.6},{x:440,hero:true,raise:5.0},{x:680,c:KIDS.D,raise:5.4}];
+  const st=[{x:200,c:KIDS.B,raise:5.3},{x:440,hero:true,raise:5.8},{x:680,c:KIDS.D,raise:6.3}];
   st.forEach((s,i)=>{const r=lt>s.raise?lerp(15,155,eo((lt-s.raise)/.3)):15;const o={x:s.x,y:1660,s:1,aR:r+(lt>s.raise?S(lt*8+i)*6:0),mouth:lt>s.raise?'laugh':'smile'};
     g+=s.hero?hero(o):kid(Object.assign({},s.c,o));});
   st.forEach(s=>{g+=`<rect x="${s.x-125}" y="1490" width="250" height="34" rx="10" fill="#F0B46A"/><rect x="${s.x-110}" y="1524" width="220" height="56" fill="#E09D52"/><rect x="${s.x-60}" y="1478" width="80" height="14" rx="4" fill="#fff"/>`;
@@ -371,12 +371,12 @@ function finale(lt){
   let rays='';for(let i=0;i<18;i++){const a=i*20+lt*6;rays+=`<polygon points="0,0 -70,-1500 70,-1500" fill="#fff" opacity=".13" transform="rotate(${a})"/>`;}
   g+=`<g transform="translate(540,950)">${rays}</g>`;
   // words
-  const W=[['интерес',300,640,P.teal],['жизнь',780,720,P.purple],['смех',360,850,P.coral],['доброта',740,940,P.blue],['близкие',320,1060,'#E58E00'],['свобода',750,1150,'#2E9E6A'],['как семья',540,1270,'#FF4F7B']];
-  const wf=1-fade(lt,3.9,.4);
-  W.forEach(([t,x,y,c],i)=>{const k=pop(lt,.2+i*.45);if(k<=0||wf<=0)return;const w=t.length*36+90;
+  const W=[['интерес',300,640,P.teal,1.4],['смех',780,720,P.coral,2.3],['доброта',360,850,P.blue,2.85],['свобода',740,940,'#2E9E6A',3.55],['близкие',320,1060,'#E58E00',4.25],['жизнь',750,1150,P.purple,4.6],['как семья',540,1270,'#FF4F7B',4.9]];
+  const wf=1-fade(lt,5.4,.4);
+  W.forEach(([t,x,y,c,t0],i)=>{const k=pop(lt,t0);if(k<=0||wf<=0)return;const w=t.length*36+90;
     g+=`<g opacity="${wf}" transform="translate(${x},${y+S(lt*2+i)*8}) scale(${k}) rotate(${(i%2?3:-3)})"><rect x="${-w/2}" y="-56" width="${w}" height="112" rx="56" fill="${c}"/><text x="0" y="22" font-size="64" font-weight="900" text-anchor="middle" fill="#fff">${t}</text></g>`;});
   // title
-  const tk=pop(lt,6.1,.6);
+  const tk=pop(lt,7.5,.6);
   if(tk>0){g+=`<g transform="translate(540,880) scale(${tk})"><text x="0" y="-40" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Школа</text><text x="0" y="150" font-size="190" font-weight="900" text-anchor="middle" fill="#fff" stroke="${P.ink}" stroke-opacity=".12" stroke-width="10" paint-order="stroke">Жизни</text>${heart(0,260,1.4,'#fff')}</g>`;}
   // line-up
   const L=[{x:110,s:.9,c:{hs:'tails',hair:'#2E1F1A',shirt:P.purple,skin:SK[1]}},{x:270,s:.98,c:KIDS.C},{x:410,s:1.05,c:KIDS.A},
@@ -389,21 +389,21 @@ function finale(lt){
 
 // ---------- captions ----------
 const CAPS=[
- [0.4,6.3,'main','Один день в Школе Жизни'],[1.3,6.3,'sub','глазами ученика',P.orange],
- [6.8,13.3,'main','Утро. Атриум'],[8.4,13.3,'sub','здесь все знают друг друга по именам',P.coral],
- [13.8,16.6,'main','Первый урок — в «замке»'],
- [16.6,19.0,'main','Звонков нет'],[16.9,19.0,'sub','за временем следим сами',P.teal],
- [19.0,21.4,'main','Учителя добрые'],[19.3,21.4,'sub','и объясняют понятно',P.purple],
- [21.8,26.5,'main','Перемена!'],[22.1,26.5,'sub','шумно и весело',P.coral],
- [26.5,31.9,'main','Все классы дружат'],[26.8,31.9,'sub','как одна семья','#FF4F7B'],
- [32.3,36.2,'main','Столовая'],[32.6,36.2,'sub','4 раза в день',P.orange],
- [36.5,39.3,'main','Любимое — волейбол!'],
- [39.3,42.9,'main','Тренировки — в «новом» здании'],
- [43.3,46.6,'main','День рождения — всей школой'],
- [46.6,49.2,'main','В кругу — тёплые слова'],[46.9,49.2,'sub','каждый, кто хочет',P.coral],
- [49.6,52.9,'main','Зимой — Тайный Санта'],[50.6,52.9,'sub','а ещё Новый год, 9 мая, иногда Хэллоуин',P.teal],
- [53.3,56.4,'main','Домашка — только тем, кому нужна'],[53.6,56.4,'sub','без давления',P.teal],
- [60.3,62.5,'main','Не стесняйся — тут все добрые'],
+ [0.4,5.4,'main','Один день в Школе Жизни'],[2.2,5.4,'sub','все знают друг друга по именам',P.orange],
+ [5.8,10.8,'main','Утро. Атриум'],[7.4,10.8,'sub','сначала друзья, потом завтрак',P.coral],
+ [11.3,13.8,'main','Первый урок — в «замке»'],
+ [13.8,15.5,'main','Звонков нет'],[14.0,15.5,'sub','за временем следим сами',P.teal],
+ [15.5,19.2,'main','Учителя добрые'],[15.8,19.2,'sub','и объясняют понятно',P.purple],
+ [19.6,24.3,'main','Перемена!'],[19.9,24.3,'sub','шумно и весело',P.coral],
+ [24.3,29.7,'main','Все классы дружат'],[24.6,29.7,'sub','как одна семья','#FF4F7B'],
+ [30.1,34.0,'main','Столовая'],[30.4,34.0,'sub','4 раза в день',P.orange],
+ [34.3,37.1,'main','Любимое — волейбол!'],
+ [37.1,40.7,'main','Тренировки — в «новом» здании'],
+ [41.1,44.4,'main','День рождения — всей школой'],
+ [44.4,47.0,'main','В кругу — тёплые слова'],[44.7,47.0,'sub','каждый, кто хочет',P.coral],
+ [47.4,50.7,'main','Зимой — Тайный Санта'],[48.4,50.7,'sub','а ещё Новый год, 9 мая, иногда Хэллоуин',P.teal],
+ [51.1,57.5,'main','Домашка — только тем, кому нужна'],[54.2,57.5,'sub','без давления, только интерес',P.teal],
+ [62.9,64.9,'main','Не стесняйся — тут все добрые'],
 ];
 function renderCaps(t){
   let h='';
