@@ -514,7 +514,7 @@
     c.restore();
   }
   const PIN_XY = { door: [50, 60], book: [82, 36], gamepad: [116, 50], paddle: [132, 92], people: [42, 90] };
-  const PINS = TL.pins.map((p) => ({ t: p.t, type: p.type, x: PIN_XY[p.type][0], y: PIN_XY[p.type][1] }));
+  const PINS = (TL.pins || []).map((p) => ({ t: p.t, type: p.type, x: PIN_XY[p.type][0], y: PIN_XY[p.type][1] }));
   function drawHud(c, t) {
     const a = Math.min(seg(t, TL.hud[0], TL.hud[0] + 0.6), 1 - seg(t, TL.hud[1] - 0.6, TL.hud[1]));
     if (a <= 0) return;
@@ -1305,7 +1305,7 @@
     [[RED, 860, 0.7, 1.2], [BUZZ, 1010, 0.72, 2.2]].forEach(([P, x, s, sd]) => drawPerson(c, P, x, 650, s, { noLegs: true, seed: sd, look: -0.6, lookUp: 0.6, mouth: 'grin', handL: [40, -120], handR: [-40, -120] }, u));
     c.fillStyle = '#9b7148'; c.fillRect(780, 572, 300, 16); c.fillStyle = '#7f5b38'; c.fillRect(780, 588, 300, 80);
     const walk = seg(u, 0.4, 2.2);
-    let tx = lerp(1060, 700, easeIO(walk)), tO = { seed: 0.6, flip: true, look: 1 };
+    let tx = lerp(1060, 690, easeIO(walk)), tO = { seed: 0.6, flip: true, look: 1 };
     if (walk > 0 && walk < 1) {
       const ph = u * 8;
       tO.footL = [5 + 26 * Math.sin(ph), -10 * Math.max(0, Math.cos(ph))]; tO.footR = [-5 - 26 * Math.sin(ph), -10 * Math.max(0, -Math.cos(ph))];
@@ -1316,13 +1316,13 @@
     }
     drawPerson(c, TEACHER, tx, 712, 1.0, tO, u);
     const noticed = u > 2.4;
-    drawPerson(c, HERO, 470, 790, 1.08, {
+    drawPerson(c, HERO, 440, 745, 1.05, {
       noLegs: true, seed: 0.4, look: noticed ? 0.9 : 0, lookUp: noticed ? 1 : -1, headDy: noticed ? 0 : 6,
-      handL: noticed ? [36, -150] : [30 + Math.sin(u * 9) * 8, -158], handR: [-30, -150],
+      handL: noticed ? [54, -116] : [44 + Math.sin(u * 9) * 8, -120], handR: [-52, -116], elbow: 'out',
       mouth: noticed ? (u > 3.2 ? 'smile' : 'o') : 'grin', brow: noticed && u < 3.2 ? 4 : 0, eyes: 'open',
     }, u);
     c.fillStyle = '#9b7148'; c.fillRect(250, 618, 470, 20); c.fillStyle = '#7f5b38'; c.fillRect(250, 638, 470, 90);
-    c.fillStyle = '#fbfaf3'; c.save(); c.translate(470, 612); c.rotate(-0.05); c.fillRect(-70, -10, 140, 14); c.restore();
+    c.fillStyle = '#fbfaf3'; c.save(); c.translate(445, 612); c.rotate(-0.05); c.fillRect(-70, -10, 140, 14); c.restore();
     c.restore();
   }
 
@@ -1355,7 +1355,7 @@
     }, u);
     drawPerson(c, HERO, 880, 800, 1.05, {
       noLegs: true, seed: 0.4, swept: true, look: -0.8, lookUp: 0.4, headDy: Math.max(0, Math.sin(u * 5)) * 3 * seg(u, 2.5, 3),
-      mouth: u > 2.6 ? 'smile' : 'grin', handL: [40, -140], handR: [-60, -150],
+      mouth: u > 2.6 ? 'smile' : 'grin', handL: [52, -116], handR: [-52, -116], elbow: 'out',
     }, u);
     ell(c, 640, 650, 420, 70, '#9b7148'); ell(c, 640, 640, 410, 60, '#b8895a');
     [[520, '#e9e2d6'], [760, '#7cc1d6']].forEach(([mx, col]) => { rrect(c, mx - 14, 600, 28, 34, 5); c.fillStyle = col; c.fill(); });
@@ -1390,7 +1390,7 @@
     drawPerson(c, BUZZ, 360, 712, 0.95, { seed: 2.2, look: 1, handL: [70, -150], handR: [40, -160], goggles: true, mouth: u > D - 1.4 ? 'laugh' : 'grin' }, u);
     drawPerson(c, HERO, 905, 712, 1.0, {
       flip: true, seed: 0.4, swept: true, goggles: true, apron: true, bob: working ? 24 : 0, rot: working ? -0.18 : 0,
-      handL: working ? [150 + hb, -95] : [60, -320], handR: working ? [120, -80] : [-44, -112], look: 0.6, lookUp: working ? -1 : 0,
+      handL: working ? [150 + hb, -95] : [60, -320], handR: working ? [70, -70] : [-44, -112], look: 0.6, lookUp: working ? -1 : 0,
       mouth: working ? 'flat' : 'laugh', eyes: working ? 'open' : 'happy', footL: [26, 0], footR: [-20, 0],
     }, u);
     if (working && Math.sin(u * 10) > 0.6) for (let i = 0; i < 6; i++) { const a = -1.2 + i * 0.25; poly(c, [[kx + 127, ky - 31], [kx + 127 + Math.cos(a) * 26, ky - 31 + Math.sin(a) * 26]], 2.5, '#ffd76a'); }
@@ -1418,14 +1418,14 @@
     if (run1) {
       const k = seg(u, 0, 2.6); kx = lerp(-180, 640, easeOut(k)); spin = kx / 22;
       if (u > 1.9) { lost = true; tilt = 0.14 * seg(u, 1.9, 2.2); face = 'o'; }
-      if (lost) { const wk = u - 1.9; wheel(c, 640 + 82 * 0.9 + wk * 380, 610 - 18 * 0.9 - Math.abs(Math.sin(wk * 7)) * 50 * Math.exp(-wk), wk * 18, 20); }
+      if (lost) { const wk = u - 1.9; wheel(c, 640 + 82 * 1.25 + wk * 380, 622 - 20 * 1.25 - Math.abs(Math.sin(wk * 7)) * 50 * Math.exp(-wk), wk * 18, 20); }
     } else { kx = lerp(-200, 1480, easeIn2(ph2)); spin = kx / 22; face = 'laugh'; }
-    const ky = 615, ks = 0.9;
+    const ky = 622, ks = 1.25;
     if (!run1) for (let i = 0; i < 5; i++) poly(c, [[kx - 150 - i * 22, 560 + i * 12], [kx - 260 - i * 22, 560 + i * 12]], 3, 'rgba(255,255,255,0.7)');
     c.save(); c.translate(kx, ky); c.rotate(tilt); c.translate(-kx, -ky);
     drawKart(c, kx, ky, ks, { spin, lostFront: lost });
-    drawPerson(c, HERO, kx - 64 * ks, ky - 66 * ks + 120 * 0.72, 0.72, {
-      noLegs: true, seed: 0.4, swept: true, goggles: !run1, look: 1, handL: [90, -150], handR: [70, -140],
+    drawPerson(c, HERO, kx - 69 * ks, ky - 58 * ks + 120 * 0.6, 0.6, {
+      noLegs: true, seed: 0.4, swept: true, goggles: !run1, look: 1, handL: [96, -122], handR: [70, -112], elbow: 'out',
       mouth: face, eyes: face === 'laugh' ? 'happy' : 'open', brow: face === 'o' ? 5 : 0,
     }, u);
     kartCowl(c, kx, ky, ks);

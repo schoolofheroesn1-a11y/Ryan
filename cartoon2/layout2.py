@@ -109,7 +109,7 @@ ts=S['s7']['a']+2.0
 add(pad([48,55,60,64,67,72],DUR-ts+0.2,0.20),ts)
 for i,m in enumerate([60,64,67,72,76]): add(piano(m,3.5,0.18),ts+i*0.12)
 for i,m in enumerate(theme): add(piano(m,2.0,0.14),DUR-3.0+i*0.33)
-for i in range(5): add(chime(84+[0,4,7,12,16][i],0.10),TL['hudLine'][0]+i*0.4,0.2)
+for i in range(5): add(chime(84+[0,4,7,12,16][i],0.10),S['s7']['a']+0.6+i*0.4,0.2)
 for st in TL['steps']: add(chime(86,0.24),st,0.3); add(chime(93,0.12),st+0.06,0.3)
 def noise(dur,lp):
     n=int(SR*dur); nz=rng.standard_normal(n); y=np.zeros(n); acc=0; a_=np.exp(-1/(SR*lp))
