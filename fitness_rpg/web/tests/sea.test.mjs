@@ -26,3 +26,15 @@ test("появление: строки по очереди, щупальца, п
   assert.ok(s2.head === 1 && s2.eyes && s2.lines.every((x) => x === 1));
   assert.ok(!s2.done && emergeState(EMERGE_TIME).done);
 });
+
+test("в сундуках с уникальными наградами нет пустых предметов (у Сундука Прилива нет оружия земли)", async () => {
+  const { rollLoot } = await import("../js/chests.js");
+  for (const kind of ["samhain", "sea"]) {
+    for (let i = 0; i < 300; i++) {
+      const p = { owned: [], chests: {}, chestPity: {} };
+      let s = i + 1;
+      const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+      for (const it of rollLoot(p, kind, rnd)) if (it.kind === "item" || it.kind === "skin") assert.ok(it.key, `${kind}: пустой предмет`);
+    }
+  }
+});

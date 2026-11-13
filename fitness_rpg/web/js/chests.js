@@ -103,7 +103,7 @@ function rollUniqueLoot(p, kind, C, rnd, ownsSkin) {
       p.chestPity[kind] = pity;
     }
   }
-  const legends = LAND_CHESTS.map((k) => CHESTS[k].weapon).filter((k) => !owned.includes(k));
+  const legends = LAND_CHESTS.map((k) => CHESTS[k].weapon).filter((k) => k && !owned.includes(k)); // у Сундука Прилива нет оружия земли
   if (legends.length && rnd() < 0.08) loot.push({ kind: "item", key: legends[Math.floor(rnd() * legends.length)], rarity: "legendary" });
   const tal = TALISMANS.filter((k) => !owned.includes(k));
   if (tal.length && rnd() < 0.15) loot.push({ kind: "item", key: tal[Math.floor(rnd() * tal.length)], rarity: "epic" });
