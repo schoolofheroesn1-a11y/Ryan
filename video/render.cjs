@@ -12,7 +12,7 @@ const FPS=30;
   const args=['-y','-loglevel','error','-f','image2pipe','-framerate',String(FPS),'-c:v','mjpeg','-i','-'];
   if(music) args.push('-i',music);
   if(voice) args.push('-i',voice);
-  if(music&&voice) args.push('-filter_complex','[1:a]volume=0.35[m];[2:a]volume=1.0[v];[m][v]sidechaincompress=threshold=0.05:ratio=6:release=400[md];[md][v]amix=inputs=2:normalize=0[a]','-map','0:v','-map','[a]');
+  if(music&&voice) args.push('-filter_complex','[1:a]volume=0.9[m];[2:a]asplit=2[v1][v2];[m][v1]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=500[md];[md][v2]amix=inputs=2:normalize=0,alimiter=limit=0.95[a]','-map','0:v','-map','[a]');
   args.push('-c:v','libx264','-preset','medium','-crf','18','-pix_fmt','yuv420p','-r',String(FPS));
   if(music) args.push('-c:a','aac','-b:a','192k');
   args.push('-t',String(total),'-movflags','+faststart',out);

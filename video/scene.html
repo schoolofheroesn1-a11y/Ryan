@@ -22,7 +22,7 @@
   <div id="caps"></div>
 </div>
 <script>
-const TOTAL = 69;
+const TOTAL = 68;
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const eo=t=>1-Math.pow(1-clamp(t),3);
@@ -130,13 +130,13 @@ const SCENES=[
  {t0:0,   t1:6.5,  f:street},
  {t0:6.5, t1:13.5, f:atrium},
  {t0:13.5,t1:21.5, f:lesson},
- {t0:21.5,t1:29.5, f:breakTime},
- {t0:29.5,t1:36,   f:canteen},
- {t0:36,  t1:44.5, f:volley},
- {t0:44.5,t1:53.5, f:bday},
- {t0:53.5,t1:57,   f:santa},
- {t0:57,  t1:60.5, f:homework},
- {t0:60.5,t1:69,   f:finale},
+ {t0:21.5,t1:32,   f:breakTime},
+ {t0:32,  t1:37.5, f:canteen},
+ {t0:37.5,t1:45,   f:volley},
+ {t0:45,  t1:53.5, f:bday},
+ {t0:53.5,t1:56.5, f:santa},
+ {t0:56.5,t1:59.5, f:homework},
+ {t0:59.5,t1:68,   f:finale},
 ];
 
 function street(lt){
@@ -235,7 +235,7 @@ function breakTime(lt){
     g+=`<g opacity=".95">${[0,1,2].map(k=>`<line x1="${x-110-k*10}" y1="${1240+k*40}" x2="${x-170-k*10}" y2="${1240+k*40}" stroke="#fff" stroke-width="10" stroke-linecap="round"/>`).join('')}</g>`;
     g+=kid(Object.assign({},j?KIDS.B:KIDS.C,{x,y:1430-w.bob,s:.75,mouth:'laugh'},w,{aL:60+S(lt*14+j)*40,aR:60-S(lt*14+j)*40}));}
   // card table
-  const fam=lt>4;
+  const fam=lt>5;
   const kids=[{x:270,c:KIDS.A},{x:540,hero:true},{x:810,c:KIDS.D}];
   kids.forEach((k,i)=>{const o={x:k.x,y:1690,s:1.05,aL:i===0?70:30,aR:i===2?70:30,mouth:(S(lt*5+i*2)>-.3)?'laugh':'smile',rot:S(lt*6+i)*2};
     if(i===1){o.aR=55+S(lt*5.2)*25;}
@@ -250,9 +250,9 @@ function breakTime(lt){
   // laughter
   ['ха-ха!','ура!','ха!'].forEach((t,i)=>{const t0=.5+i*1.1;const k=pop(lt%3.3,t0,.3)*(1-fade(lt%3.3,t0+1.2,.3));if(k>0)g+=`<text transform="translate(${[180,860,520][i]},${[1130,1110,1060][i]}) scale(${k}) rotate(${[-10,10,0][i]})" font-size="56" font-weight="900" text-anchor="middle" fill="${[P.coral,P.blue,P.purple][i]}">${t}</text>`;});
   // family: hearts & link
-  if(fam){const k=eo((lt-4)/.6);
+  if(fam){const k=eo((lt-5)/.6);
     g+=`<path d="M270,1300 Q405,${1300-140*k} 540,1300 Q675,${1300-140*k} 810,1300" fill="none" stroke="${P.coral}" stroke-width="10" stroke-dasharray="20 18" opacity="${k}"/>`;
-    for(let i=0;i<6;i++){const tt=((lt-4)*0.7+i/6)%1;g+=heart(160+rnd(i)*760,1250-tt*560,.7+rnd(i+3)*.5,[P.coral,P.pink,'#FF4F7B'][i%3],k*(1-tt));}}
+    for(let i=0;i<6;i++){const tt=((lt-5)*0.7+i/6)%1;g+=heart(160+rnd(i)*760,1250-tt*560,.7+rnd(i+3)*.5,[P.coral,P.pink,'#FF4F7B'][i%3],k*(1-tt));}}
   return g;
 }
 
@@ -285,7 +285,7 @@ function volley(lt){
   for(let i=0;i<3;i++) g+=`<rect x="${90+i*320}" y="760" width="260" height="380" rx="20" fill="#EAF6FF" stroke="#fff" stroke-width="14"/>`;
   // plaque + sticky
   g+=`<rect x="250" y="560" width="580" height="110" rx="24" fill="${P.navy}"/><text x="540" y="633" font-size="56" font-weight="900" text-anchor="middle" fill="#fff">НОВОЕ ЗДАНИЕ</text>`;
-  const sk=pop(lt,4.3,.4);
+  const sk=pop(lt,4.1,.4);
   if(sk>0) g+=`<g transform="translate(800,700) rotate(-9) scale(${sk})"><rect x="-140" y="-60" width="280" height="140" fill="#FFE66D"/><rect x="-40" y="-72" width="80" height="26" fill="#fff" opacity=".7"/><text x="0" y="-4" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">давно</text><text x="0" y="48" font-size="42" font-weight="900" text-anchor="middle" fill="${P.ink}">не новое :)</text></g>`;
   g+=`<rect x="0" y="1380" width="1080" height="540" fill="#EDBB78"/><line x1="0" y1="1560" x2="1080" y2="1560" stroke="#fff" stroke-width="8" opacity=".7"/>`;
   for(let i=0;i<9;i++) g+=`<line x1="${i*135}" y1="1380" x2="${i*135-60}" y2="1920" stroke="#DDA865" stroke-width="4"/>`;
@@ -394,16 +394,16 @@ const CAPS=[
  [13.8,16.6,'main','Первый урок — в «замке»'],
  [16.6,19.0,'main','Звонков нет'],[16.9,19.0,'sub','за временем следим сами',P.teal],
  [19.0,21.4,'main','Учителя добрые'],[19.3,21.4,'sub','и объясняют понятно',P.purple],
- [21.8,25.4,'main','Перемена!'],[22.1,25.4,'sub','шумно и весело',P.coral],
- [25.4,29.4,'main','Все классы дружат'],[25.7,29.4,'sub','как одна семья','#FF4F7B'],
- [29.8,35.9,'main','Столовая'],[30.1,35.9,'sub','4 раза в день',P.orange],
- [36.3,40.4,'main','Любимое — волейбол!'],
- [40.4,44.4,'main','Тренировки — в «новом» здании'],
- [44.8,49.0,'main','День рождения — всей школой'],
- [49.0,53.4,'main','В кругу — тёплые слова'],[49.3,53.4,'sub','каждый, кто хочет',P.coral],
- [53.8,56.9,'main','Зимой — Тайный Санта'],
- [57.3,60.4,'main','Домашка — только тем, кому нужна'],[57.6,60.4,'sub','без давления',P.teal],
- [64.3,66.5,'main','Не стесняйся — тут все добрые'],
+ [21.8,26.5,'main','Перемена!'],[22.1,26.5,'sub','шумно и весело',P.coral],
+ [26.5,31.9,'main','Все классы дружат'],[26.8,31.9,'sub','как одна семья','#FF4F7B'],
+ [32.3,37.4,'main','Столовая'],[32.6,37.4,'sub','4 раза в день',P.orange],
+ [37.8,41.5,'main','Любимое — волейбол!'],
+ [41.5,44.9,'main','Тренировки — в «новом» здании'],
+ [45.3,49.5,'main','День рождения — всей школой'],
+ [49.5,53.4,'main','В кругу — тёплые слова'],[49.8,53.4,'sub','каждый, кто хочет',P.coral],
+ [53.8,56.4,'main','Зимой — Тайный Санта'],
+ [56.8,59.4,'main','Домашка — только тем, кому нужна'],[57.1,59.4,'sub','без давления',P.teal],
+ [63.3,65.5,'main','Не стесняйся — тут все добрые'],
 ];
 function renderCaps(t){
   let h='';

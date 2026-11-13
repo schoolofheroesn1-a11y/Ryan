@@ -1,8 +1,8 @@
-"""Generate a warm, upbeat background track (69 s) as music.wav. No samples, pure synthesis."""
+"""Generate a warm, upbeat background track (68 s by default) as music.wav. No samples, pure synthesis."""
 import numpy as np, wave, sys
 
 SR = 44100
-DUR = 69.0
+DUR = float(sys.argv[2]) if len(sys.argv) > 2 else 68.0
 BPM = 100
 BEAT = 60 / BPM
 N = int(SR * DUR)
@@ -62,7 +62,7 @@ for b in range(nbars):
     t0 = b * bar
     root, ch = CH[b % 4]
     notes = ch + [ch[0] + 12]
-    final = t0 >= 65.5
+    final = t0 >= DUR - 3.6
     if final:  # sustained ending chord
         if b == nbars - 1 or t0 < DUR:
             add(pad([midi(n) for n in [60, 64, 67, 72]], DUR - t0), t0, 0, .10)
