@@ -2667,7 +2667,7 @@ class Skeleton {
     zombie: "Зомби", bat: "Летучая мышь", wraith: "Король-Призрак",
     imp: "Бес", hound: "Адская гончая", husk: "Пустой", seraph: "Алый Серафим",
     fluff: "Пухоглот", eyequeen: "Королева Тринадцатого Ока", vampire: "Граф Пепельной Крови", pumpkin: "Тыквоголов", stalker: "Полуночный Охотник",
-    drowned: "Утопленник", crab: "Краб-громила", kraken: "Кракен",
+    drowned: "Утопленник", crab: "Краб-громила", naga: "Нага", kraken: "Кракен",
   };
   static BOSSES = ["knight", "chief", "wraith", "seraph", "eyequeen", "vampire", "stalker", "kraken"];
   static FLYING = ["bat", "imp"]; // висят в воздухе и пикируют при атаке
@@ -2800,6 +2800,12 @@ class Skeleton {
       this.damage = Math.floor(baseDmg * 1.05);
       this.maxPoise = 4;
       this.homeX = 180;
+    } else if (this.kind === "naga") { // Нага: трезубец, змеиный бросок и песня сирены
+      this.maxHp = Math.floor(baseHp * 1.2);
+      this.damage = Math.floor(baseDmg * 1.05);
+      this.maxPoise = 3;
+      this.comboChance = 0.25;
+      this.homeX = 172;
     } else if (this.kind === "kraken") { // Кракен: щупальца, хватка, чернила и волна
       this.maxHp = Math.floor(baseHp * 2.4);
       this.damage = Math.floor(baseDmg * 1.1);
@@ -2868,7 +2874,7 @@ class Skeleton {
   }
   /** Есть ли у врага свои приёмы (вампир, тыквоголов) или режим без камеры. */
   get hasMoves() {
-    return this.btn || ["vampire", "pumpkin", "stalker", "drowned", "crab", "kraken"].includes(this.kind);
+    return this.btn || ["vampire", "pumpkin", "stalker", "drowned", "crab", "naga", "kraken"].includes(this.kind);
   }
   /** Длина очередного замаха: в хардкоре — то короче, то длиннее (не подстроиться под ритм). */
   nextWindup(base = this.windupTime) {
@@ -2887,8 +2893,8 @@ const TRANSFORM_TIME = 2.2; // перерождение Серафима во в
 const REVIVE_TIME = 2.5; // Король-Призрак встаёт после первой смерти
 const STUN_TIME = 2.0; // ошеломление гигантским мечом (враг открыт для крита)
 const BURN_EVERY = 1; // жар Радиатора: урон раз в секунду
-const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 34, pumpkin: 14, stalker: 40, drowned: 15, crab: 14, kraken: 56 }; // центр врага для эффектов и «!»
-const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 92, pumpkin: 48, stalker: 100, drowned: 44, crab: 32, kraken: 92 };
+const HIT_X = { knight: 30, chief: 28, wraith: 31, seraph: 42, hound: 12, husk: 10, fluff: 14, eyequeen: 24, vampire: 34, pumpkin: 14, stalker: 40, drowned: 15, crab: 40, naga: 26, kraken: 56 }; // центр врага для эффектов и «!»
+const HEAD_Y = { knight: 58, chief: 56, wraith: 64, bat: 56, imp: 56, seraph: 96, hound: 30, husk: 40, fluff: 36, eyequeen: 80, vampire: 92, pumpkin: 48, stalker: 100, drowned: 44, crab: 40, naga: 62, kraken: 92 };
 const SERAPH_HOVER = 12; // Серафим парит над землёй
 /** Высота «центра» врага над землёй для эффектов удара. */
 const hitY = (en) => (en.boss ? (en.kind === "seraph" ? 66 : en.kind === "eyequeen" ? 38 : en.kind === "vampire" ? 46 : en.kind === "stalker" ? 52 : en.kind === "kraken" ? 46 : 24) : Skeleton.FLYING.includes(en.kind) ? 34 : en.kind === "hound" ? 10 : 18);
@@ -2899,34 +2905,139 @@ const DODGE_GUARD = 1.0; // присед защищает столько сек�
 const RECOVER_TIME = 1.6; // окно для удара после атаки скелета
 const ABSENT_PAUSE = 1.0; // пауза, если игрока нет в кадре дольше этого
 
-/** Щупальце Кракена: кубическая кривая по точкам pts, толщина от основания к кончику, присоски снизу. */
-function drawTentacle(c, pts, r0, fury) {
-  const [p0, p1, p2, p3] = pts, N = 28;
-  const at = (u) => {
-    const v = 1 - u;
+/** Точки кубической кривой Безье (для щупалец в ударе и хватке). */
+function bezierPts(p0, p1, p2, p3, n = 30) {
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const u = i / n, v = 1 - u;
     return [v * v * v * p0[0] + 3 * v * v * u * p1[0] + 3 * v * u * u * p2[0] + u * u * u * p3[0],
       v * v * v * p0[1] + 3 * v * v * u * p1[1] + 3 * v * u * u * p2[1] + u * u * u * p3[1]];
-  };
-  const body = fury ? "rgb(150,24,40)" : "rgb(104,30,60)", light = fury ? "rgb(210,60,70)" : "rgb(160,60,92)";
-  for (const [col, extra] of [["rgb(26,6,22)", 1], [body, 0]]) { // контур, потом тело
-    c.fillStyle = col;
-    for (let i = 0; i <= N; i++) {
-      const [x, y] = at(i / N), r = r0 * (1 - i / N * 0.8) + extra;
-      c.beginPath();
-      c.arc(x, y, r, 0, Math.PI * 2);
-      c.fill();
-    }
+  });
+}
+
+/**
+ * Живое щупальце из пролома: растёт вверх из (x, y) на длину len, гнётся волной и закручивает кончик.
+ * phase — сдвиг волны, curl — куда закручен кончик (±1).
+ */
+function tentacleSpine(x, y, len, t, phase, curl, n = 34) {
+  const pts = [[x, y]];
+  let a = -Math.PI / 2, px = x, py = y;
+  const step = len / n;
+  for (let i = 1; i <= n; i++) {
+    const u = i / n;
+    a += (Math.sin(u * 3.2 + t * 1.6 + phase) * 0.09 + curl * Math.pow(u, 3) * 0.55) * (0.4 + u);
+    px += Math.cos(a) * step;
+    py += Math.sin(a) * step;
+    pts.push([px, py]);
   }
-  for (let i = 0; i <= N; i++) { // блик по верху и присоски по низу
-    const [x, y] = at(i / N), r = r0 * (1 - i / N * 0.8);
-    c.fillStyle = light;
-    c.fillRect(Math.round(x - r * 0.4), Math.round(y - r * 0.7), 2, 1);
-    if (i % 3 === 0 && i < N - 2) {
-      c.fillStyle = "rgb(240,190,200)";
-      c.fillRect(Math.round(x + r * 0.3), Math.round(y + r * 0.5), 1, 1);
-    }
+  return pts;
+}
+
+/**
+ * Щупальце Кракена по ломаной pts: контур, тело со светотенью, блик по спине, присоски по внутренней
+ * стороне (светлые кольца с тёмной серединой), кончик тонкий. side — сторона присосок (±1).
+ */
+function drawTentacle(c, pts, r0, fury, side = 1) {
+  const N = pts.length - 1;
+  const dark = fury ? "rgb(70,8,18)" : "rgb(44,8,34)", body = fury ? "rgb(150,24,40)" : "rgb(104,30,64)";
+  const light = fury ? "rgb(220,80,80)" : "rgb(170,70,110)", belly = fury ? "rgb(240,150,140)" : "rgb(226,150,170)";
+  const R = (i) => Math.max(1, r0 * (1 - (i / N) * 0.86));
+  const nrm = (i) => {
+    const [ax, ay] = pts[Math.max(0, i - 1)], [bx, by] = pts[Math.min(N, i + 1)];
+    const l = Math.hypot(bx - ax, by - ay) || 1;
+    return [-(by - ay) / l, (bx - ax) / l];
+  };
+  const disc = (x, y, r, col) => {
+    c.fillStyle = col;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+  };
+  for (let i = 0; i <= N; i++) disc(pts[i][0], pts[i][1], R(i) + 1, "rgb(16,2,12)"); // контур
+  for (let i = 0; i <= N; i++) disc(pts[i][0], pts[i][1], R(i), body);
+  for (let i = 0; i <= N; i++) { // тень по стороне присосок, блик по спине
+    const [nx, ny] = nrm(i), r = R(i);
+    disc(pts[i][0] + nx * side * r * 0.45, pts[i][1] + ny * side * r * 0.45, r * 0.55, dark);
+  }
+  for (let i = 0; i <= N; i++) {
+    const [nx, ny] = nrm(i), r = R(i);
+    if (r > 1.6) disc(pts[i][0] - nx * side * r * 0.4, pts[i][1] - ny * side * r * 0.4, r * 0.35, light);
+  }
+  for (let i = 2; i < N - 3; i += 3) { // присоски
+    const [nx, ny] = nrm(i), r = R(i);
+    const sx = pts[i][0] + nx * side * r * 0.7, sy = pts[i][1] + ny * side * r * 0.7, sr = Math.max(1, r * 0.32);
+    disc(sx, sy, sr, belly);
+    c.fillStyle = dark;
+    c.fillRect(Math.round(sx), Math.round(sy), 1, 1);
+  }
+  for (let i = 0; i <= N; i += 5) { // влажные искры
+    const [nx, ny] = nrm(i), r = R(i);
+    c.fillStyle = "rgba(255,230,240,0.8)";
+    c.fillRect(Math.round(pts[i][0] - nx * side * r * 0.6), Math.round(pts[i][1] - ny * side * r * 0.6), 1, 1);
   }
 }
+
+/** Пролом в палубе: тёмная дыра с отблеском воды, рваный край досок, обломки торчат вверх. half: "back" | "front". */
+function drawDeckHole(c, h, k, t, half) {
+  const r = h.r * Math.min(1, k * 1.6), ry = r * 0.45;
+  if (r < 1) return;
+  if (half === "back") {
+    c.fillStyle = "rgb(20,10,6)";
+    c.beginPath();
+    c.ellipse(h.x, h.y, r + 2, ry + 2, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "rgb(4,8,14)";
+    c.beginPath();
+    c.ellipse(h.x, h.y, r, ry, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `rgba(60,140,170,${0.35 + 0.15 * Math.sin(t * 3 + h.x)})`; // вода внизу плещется
+    c.beginPath();
+    c.ellipse(h.x + Math.sin(t * 2 + h.x) * 2, h.y + ry * 0.35, r * 0.6, ry * 0.35, 0, 0, Math.PI * 2);
+    c.fill();
+    // дальние обломки досок — торчат вверх за дырой
+    for (let j = 0; j < 4; j++) {
+      const a = Math.PI + (j + 0.5) * (Math.PI / 4), bx = h.x + Math.cos(a) * r, by = h.y + Math.sin(a) * ry;
+      c.fillStyle = "rgb(60,38,22)";
+      c.fillRect(Math.round(bx - 1), Math.round(by - 4 - (j % 2) * 3), 3, 5 + (j % 2) * 3);
+      c.fillStyle = "rgb(170,124,76)";
+      c.fillRect(Math.round(bx - 1), Math.round(by - 4 - (j % 2) * 3), 1, 4 + (j % 2) * 3);
+    }
+    return;
+  }
+  // ближний рваный край: зубцы светлой расщеплённой древесины
+  for (let j = 0; j <= 12; j++) {
+    const a = (j / 12) * Math.PI, bx = h.x + Math.cos(a) * (r + 1), by = h.y + Math.sin(a) * (ry + 1);
+    const tall = (j * 7 + h.x) % 3;
+    c.fillStyle = "rgb(84,54,30)";
+    c.fillRect(Math.round(bx - 1), Math.round(by - 1 - tall), 3, 2 + tall);
+    c.fillStyle = "rgb(214,170,112)";
+    c.fillRect(Math.round(bx), Math.round(by - 1 - tall), 1, 1 + tall);
+  }
+  // пара выломанных досок, задранных над дырой
+  for (const [dx, ang] of [[-0.75, -0.6], [0.6, 0.5]]) {
+    const bx = h.x + dx * r, by = h.y + ry * 0.7;
+    c.save();
+    c.translate(Math.round(bx), Math.round(by));
+    c.rotate(ang);
+    c.fillStyle = "rgb(30,18,10)";
+    c.fillRect(-3, -9, 6, 11);
+    c.fillStyle = "rgb(122,82,48)";
+    c.fillRect(-2, -8, 4, 9);
+    c.fillStyle = "rgb(200,150,96)";
+    c.fillRect(-2, -8, 1, 9);
+    c.fillStyle = "rgb(230,196,140)";
+    c.fillRect(-2, -9, 1, 1);
+    c.fillRect(1, -10, 1, 2);
+    c.restore();
+  }
+}
+
+/** Проломы в палубе, из которых лезут щупальца: x, y — центр, r — радиус, len — длина щупальца, curl — куда закручен кончик. */
+const KRAKEN_HOLES = [
+  { x: 154, y: 154, r: 18, len: 66, curl: -1 },
+  { x: 210, y: 166, r: 18, len: 72, curl: 1 },
+  { x: 262, y: 149, r: 16, len: 60, curl: -1 },
+  { x: 302, y: 168, r: 15, len: 70, curl: 1 },
+];
 
 /** Волна по палубе: стена воды с пеной; hero — от героя к врагу (Меч Прилива), иначе — от Кракена к герою. */
 function drawWave(c, fx, heroX, enemyX) {
@@ -3730,6 +3841,7 @@ class BattleScene extends Scene {
       this.bladeEmbers.draw(c);
     }
 
+    if (en.kind === "kraken") this.drawKrakenFront(c, en, t);
     if (this.waveFx) drawWave(c, this.waveFx, this.HERO_X, en.x); // волна: Меч Прилива или Кракен
     if (this.inkT > 0) { // чернила Кракена: чёрные кляксы поверх палубы, тают
       const a = Math.min(1, this.inkT / 1.2);
@@ -3770,8 +3882,8 @@ class BattleScene extends Scene {
   }
 
   /**
-   * Кракен: голова поднимается из-за дальнего борта (низ прячется за фальшбортом), четыре щупальца
-   * вцепились в поручень. На ударе ближнее щупальце бьёт по палубе к герою, в хватке — обвивает его.
+   * Кракен: голова поднимается из-за дальнего борта (низ прячется за фальшбортом), а щупальца проламывают
+   * палубу и лезут из дыр. Ближнее щупальце (из пролома у героя) замахивается, хлещет по палубе и хватает.
    * this.emerge (0..1 у каждой части) задаёт сцена появления.
    */
   drawKraken(c, en, spr, t) {
@@ -3779,38 +3891,75 @@ class BattleScene extends Scene {
     const x = Math.round(en.homeX), rise = (1 - em.head) * 96;
     const lunge = en.state === "attack" ? -8 : en.state === "windup" ? -3 : 0;
     const img = !em.eyes && em.head > 0 ? IMG.kraken_idle_0 : spr;
-    if (em.head > 0) c.drawImage(img, x, 50 + rise + lunge + Math.round(Math.sin(t * 1.3) * 2));
+    const hy = 50 + rise + lunge + Math.round(Math.sin(t * 1.3) * 2);
+    if (em.head > 0) {
+      c.save();
+      c.beginPath();
+      c.rect(0, 0, CW, 112); // голова — только над бортом: снизу её прячет море
+      c.clip();
+      c.drawImage(img, x, hy);
+      if (em.eyes && en.state !== "dead") for (const [dx, dy] of [[30, 14], [48, 7], [66, 9], [83, 17], [39, 27], [75, 28], [57, 19], [24, 30], [90, 31]]) {
+        const a = 0.45 + 0.45 * Math.sin(t * 2.4 + dx * 0.3); // светящиеся пятна глубины
+        c.fillStyle = en.enraged ? `rgba(255,140,90,${a})` : `rgba(110,240,255,${a})`;
+        c.fillRect(x + dx, hy + dy, 2, 2);
+        c.fillStyle = `rgba(255,255,255,${a * 0.8})`;
+        c.fillRect(x + dx, hy + dy, 1, 1);
+      }
+      for (let j = 0; j < 6; j++) { // вода стекает с мантии
+        const sx = x + 14 + j * 17, sy = hy + 30 + ((t * 46 + j * 23) % 40);
+        c.fillStyle = "rgba(170,225,245,0.75)";
+        c.fillRect(sx, Math.round(sy), 1, 3);
+      }
+      c.restore();
+    }
     c.drawImage(IMG.sea_bg, 0, 106, CW, 28, 0, 106, CW, 28); // фальшборт поверх головы — она за бортом
-    const anchors = [x - 22, x + 8, x + 98, x + 124];
-    anchors.forEach((ax, i) => {
-      const k = em.tentacles[i];
-      if (k <= 0) return;
-      const sway = Math.sin(t * 1.7 + i * 1.3) * 4;
+    if (em.head > 0 && em.head < 1) for (let j = 0; j < 30; j++) { // пена и брызги у борта, пока голова встаёт
+      const fx = x + 6 + ((j * 37) % 100), fy = 104 - ((t * 60 + j * 11) % 18) * (1 - em.head);
+      c.fillStyle = `rgba(230,245,255,${0.9 * (1 - em.head)})`;
+      c.fillRect(fx, Math.round(fy), 2, 1);
+    }
+    const holes = KRAKEN_HOLES.map((h, i) => ({ ...h, i, k: em.tentacles[i] })).sort((a, b) => a.y - b.y); // дальние — раньше
+    for (const h of holes) {
+      if (h.k <= 0) continue;
+      drawDeckHole(c, h, h.k, t, "back");
       let pts;
-      if (i === 0 && this.heldT > 0) { // хватка: щупальце тянется к герою и обвивает его
-        const hx = this.HERO_X + 12;
-        pts = [[ax, 136], [ax - 10, 90], [hx + 30, 96], [hx + 6, GROUND_ARENA - 18]];
-      } else if (i === 0 && en.state === "windup" && MOVES[en.move].tent) { // замах: щупальце взвивается над палубой
+      const hero = this.HERO_X;
+      if (h.i === 0 && this.heldT > 0) { // хватка: из пролома к герою, обвивает его
+        pts = bezierPts([h.x, h.y], [h.x - 4, 104], [hero + 40, 96], [hero + 12, GROUND_ARENA - 18]);
+      } else if (h.i === 0 && en.state === "windup" && MOVES[en.move].tent) { // замах: взвивается над палубой
         const q = Math.max(0, Math.min(1, 1 - en.timer / (en.windupNow || 1)));
-        pts = [[ax, 136], [ax - 6, 70 - 30 * q], [ax - 30 - 20 * q, 20 - 10 * q], [ax - 50 - 10 * q, 30 + sway]];
-      } else if (i === 0 && en.state === "attack" && MOVES[en.move].tent) { // удар: щупальце хлещет по палубе к герою
-        pts = [[ax, 136], [ax - 10, 60], [this.HERO_X + 70, 90], [this.HERO_X + 22, GROUND_ARENA - 4]];
-      } else { // вцепились в поручень: перегибаются через борт
-        const top = 136 - (40 + 12 * (i % 2)) * k;
-        pts = [[ax, 140], [ax + sway, top], [ax - 14 + sway, top - 8], [ax - 18 + sway * 0.5, 104 + 12 * (1 - k)]];
+        pts = bezierPts([h.x, h.y], [h.x + 8, h.y - 60], [h.x - 6 - 20 * q, 18 - 8 * q], [h.x - 34 - 10 * q, 34 + Math.sin(t * 9) * 3]);
+      } else if (h.i === 0 && en.state === "attack" && MOVES[en.move].tent) { // удар: хлещет по палубе
+        pts = bezierPts([h.x, h.y], [h.x - 2, 70], [hero + 64, 84], [hero + 22, GROUND_ARENA - 4]);
+      } else {
+        const len = h.len * Math.min(1, h.k * 1.15);
+        pts = tentacleSpine(h.x, h.y, len, t, h.i * 1.9, h.curl);
       }
-      drawTentacle(c, pts, i === 0 ? 7 : 6, en.enraged);
-    });
-    if (this.heldT > 0) { // кольца щупальца вокруг героя
-      for (let j = 0; j < 3; j++) {
-        const y = GROUND_ARENA - 10 - j * 7 + Math.sin(t * 8 + j) * 0.5;
-        c.fillStyle = "rgb(60,14,36)";
-        c.fillRect(this.HERO_X + 2, y - 1, 24, 5);
-        c.fillStyle = en.enraged ? "rgb(186,46,56)" : "rgb(118,36,66)";
-        c.fillRect(this.HERO_X + 3, y, 22, 3);
-        c.fillStyle = "rgb(240,190,200)";
-        for (let s = 0; s < 4; s++) c.fillRect(this.HERO_X + 5 + s * 6, y + 2, 1, 1);
+      drawTentacle(c, pts, h.r * 0.45, en.enraged, h.curl);
+      drawDeckHole(c, h, h.k, t, "front");
+      if (h.k < 1) for (let j = 0; j < 10; j++) { // щепки летят, пока щупальце проламывает доски
+        const q = h.k, a = j * 0.63 + h.i;
+        const px = h.x + Math.cos(a) * (6 + q * 40), py = h.y - Math.abs(Math.sin(a)) * q * 50 + q * q * 40;
+        c.fillStyle = j % 2 ? "rgb(214,170,112)" : "rgb(120,80,46)";
+        c.fillRect(Math.round(px), Math.round(py), 2, 1);
       }
+    }
+  }
+
+  /** Кольца щупальца вокруг героя — поверх героя. */
+  drawKrakenFront(c, en, t) {
+    if (!(this.heldT > 0)) return;
+    for (let j = 0; j < 2; j++) { // два витка: на поясе и на груди, герой виден между ними
+      const y = GROUND_ARENA - 9 - j * 10 + Math.round(Math.sin(t * 8 + j) * 0.6);
+      const x0 = this.HERO_X + 2, w = 22;
+      c.fillStyle = "rgb(16,2,12)";
+      c.fillRect(x0, y - 2, w, 6);
+      c.fillStyle = en.enraged ? "rgb(150,24,40)" : "rgb(104,30,64)";
+      c.fillRect(x0 + 1, y - 1, w - 2, 4);
+      c.fillStyle = en.enraged ? "rgb(220,80,80)" : "rgb(170,70,110)";
+      c.fillRect(x0 + 2, y - 1, w - 4, 1);
+      c.fillStyle = "rgb(226,150,170)";
+      for (let s = 0; s < 4; s++) c.fillRect(x0 + 3 + s * 5, y + 2, 2, 1);
     }
   }
 
@@ -3934,6 +4083,7 @@ class BattleScene extends Scene {
         husk: "Живучий, бьёт когтями",
         drowned: "Тянет на дно: отнимает силы",
         crab: "Клешня-кувалда: тяжёлый удар, не прервать",
+        naga: "Трезубец и бросок змеи. Песня сирены: силы почти не восполняются",
         kraken: "Хватка: бейте, чтобы вырваться. Чернила слепят, волна бьёт по всей палубе",
         fluff: "Кусает парами и высасывает силы: береги выносливость",
         vampire: "Когти, укус (пьёт кровь), стая мышей и удар из тумана",

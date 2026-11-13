@@ -213,31 +213,122 @@ def make_drowned_frames():
 
 
 # ---------------------------------------------------------------- Краб-громила
-SHELL = [(90, 20, 20), (170, 46, 34), (220, 90, 60), (250, 160, 120)]
+SHELL = [(78, 14, 16), (150, 38, 30), (204, 78, 50), (248, 150, 110)]
+SHELL_D = [(52, 10, 14), (104, 26, 24), (150, 52, 40), (196, 100, 80)]  # дальняя сторона — в тени
+BELLY = (240, 206, 170)
+BARNACLE = [(70, 70, 70), (150, 146, 136), (200, 196, 184), (236, 232, 222)]
+CRAB_W, CRAB_H = 82, 46
+
+
+def _leg(s, pal, hip, knee, tip, w=3):
+    """Членистая нога «домиком»: бедро вверх-наружу к колену, голень вниз к острому светлому кончику."""
+    line(s, pal[0], hip, knee, w + 1)
+    line(s, pal[1], hip, knee, w)
+    line(s, pal[2], (hip[0], hip[1] - 1), (knee[0], knee[1] - 1))
+    line(s, pal[0], knee, tip, w - 1)
+    line(s, pal[1], knee, tip, 1)
+    pygame.draw.circle(s, pal[2], (round(knee[0]), round(knee[1])), 2)
+    s.set_at((round(knee[0]), round(knee[1]) - 2), pal[3])
+    s.set_at((round(tip[0]), round(tip[1])), BELLY)
+    s.set_at((round(tip[0]), round(tip[1]) - 1), pal[3])
+
+
+def _chela(s, pal, cx, cy, size, opened, flip=False):
+    """Клешня: мощная ладонь с буграми и два пальца с белыми зубьями; кончики смотрят вверх-наружу."""
+    d = -1 if not flip else 1
+    part(s, pal, ell((cx - size, cy - size + 2, size * 2, size * 2 - 2)))
+    for kx, ky in ((-size // 2, -1), (0, size // 3), (size // 3, -size // 3)):
+        s.set_at((cx + kx, cy + ky), pal[3])
+        s.set_at((cx + kx + 1, cy + ky + 1), pal[0])
+    L = size + 3
+    lo = poly([(cx + d * (size - 3), cy - 1), (cx + d * (size + L - 4), cy - size - 1), (cx + d * (size + L - 2), cy - size + 2), (cx + d * (size - 1), cy + 3)])
+    hi = poly([(cx + d * (size - 5), cy - size + 3), (cx + d * (size + L - 8 - opened), cy - size - L // 2 - opened), (cx + d * (size + L - 5 - opened), cy - size - L // 2 + 2 - opened), (cx + d * (size - 2), cy - size + 6)])
+    part(s, pal, lo, rim=False)
+    part(s, pal, hi, rim=False)
+    for k in range(3):  # зубья по внутреннему краю
+        s.set_at((cx + d * (size + k * 2), cy - 3 - k * 2), BELLY)
+        s.set_at((cx + d * (size - 2 + k * 2 - opened // 2), cy - size + 2 - k * 2 - opened // 2), BELLY)
 
 
 def crab(pose="idle", frame=0):
-    """Краб-громила: широкий алый панцирь с шипами, глаза на стебельках, огромная клешня-кувалда."""
-    s = pygame.Surface((46, 30), pygame.SRCALPHA)
-    up = {"windup": -10, "attack": 4}.get(pose, 0)
-    for k in range(4):  # ноги
-        x = 14 + k * 6
-        line(s, SHELL[0], (x, 20), (x - 3, 28), 2)
-        line(s, SHELL[1], (x + 3, 20), (x + 6, 28), 2)
-    part(s, SHELL, many(ell((10, 10 + frame, 30, 15)), poly([(12, 16 + frame), (38, 16 + frame), (34, 22 + frame), (16, 22 + frame)])))
-    for x in (14, 20, 26, 32):  # шипы панциря
-        pygame.draw.polygon(s, SHELL[2], [(x, 11 + frame), (x + 2, 6 + frame), (x + 4, 11 + frame)])
-    for x in (16, 22):  # глаза на стебельках
-        line(s, SHELL[1], (x, 11 + frame), (x - 1, 5 + frame))
-        pygame.draw.circle(s, (20, 10, 10), (x - 1, 4 + frame), 2)
-        s.set_at((x - 2, 3 + frame), (255, 255, 255))
-    # огромная клешня (ближняя, к герою)
-    cx, cy = 6, 12 + up
-    line(s, SHELL[1], (14, 16 + frame), (cx + 6, cy + 6), 3)
-    part(s, SHELL, many(ell((cx - 4, cy - 4, 14, 12)), poly([(cx - 6, cy - 2), (cx + 2, cy - 8), (cx + 4, cy - 2)])))
-    pygame.draw.polygon(s, SHELL[3], [(cx - 5, cy + 4), (cx + 3, cy + 2), (cx - 2, cy + 8)])  # нижняя «челюсть»
-    if pose == "attack":
-        pygame.draw.polygon(s, (255, 255, 255), [(cx - 6, cy + 9), (cx, cy + 11), (cx - 3, cy + 13)])
+    """Краб-громила анфас: широкий бугристый панцирь с шипами и зубчатым краем, ракушки и водоросли,
+    по четыре членистые ноги «домиком» с каждой стороны, глаза на стебельках, ротовые пластины с пузырями,
+    малая клешня справа и огромная клешня-кувалда слева (к герою). windup — кувалда взлетает и раскрывается,
+    attack — опускается ударом."""
+    s = pygame.Surface((CRAB_W, CRAB_H), pygame.SRCALPHA)
+    b = frame
+    cx0, top = 44, 18 + b  # центр панциря
+    # ноги правой стороны (дальние, в тени) и левой (ближние): колено высоко, кончик далеко наружу
+    for k in (3, 2, 1, 0):
+        _leg(s, SHELL_D, (cx0 + 12, top + 4 + k * 2), (cx0 + 18 + k * 5, top - 10 + k * 4), (cx0 + 22 + k * 6, CRAB_H - 1), 2)
+    for k in (3, 2, 1, 0):
+        _leg(s, SHELL, (cx0 - 12, top + 4 + k * 2), (cx0 - 18 - k * 5, top - 10 + k * 4), (cx0 - 22 - k * 6, CRAB_H - 1), 2)
+    # малая клешня справа
+    line(s, SHELL_D[0], (cx0 + 14, top + 10), (cx0 + 20, top + 4), 4)
+    line(s, SHELL_D[1], (cx0 + 14, top + 10), (cx0 + 20, top + 4), 2)
+    _chela(s, SHELL_D, cx0 + 23, top + 1, 4, 0, flip=True)
+    # панцирь: широкий овал с выпуклым лбом
+    part(s, SHELL, many(ell((cx0 - 18, top - 4, 36, 18)), ell((cx0 - 14, top - 7, 28, 10))))
+    pygame.draw.ellipse(s, BELLY, (cx0 - 12, top + 10, 24, 5))  # светлое брюхо из-под панциря
+    for x in range(cx0 - 9, cx0 + 10, 3):
+        s.set_at((x, top + 12), (196, 150, 120))
+    # бороздки: «маска» и рёбра
+    pygame.draw.arc(s, SHELL[0], (cx0 - 10, top - 3, 20, 12), math.pi * 1.05, math.pi * 1.95)
+    for dx in (-12, -6, 6, 12):
+        line(s, SHELL[0], (cx0 + dx, top - 2), (cx0 + dx * 1.3, top + 6))
+    line(s, SHELL[0], (cx0, top - 6), (cx0, top + 2))
+    # зубчатый край по бокам
+    for side in (-1, 1):
+        for k in range(4):
+            x, y = cx0 + side * (16 + k % 2), top + k * 3 - 2
+            pygame.draw.polygon(s, SHELL[2], [(x, y), (x + side * 4, y + 1), (x, y + 2)])
+            s.set_at((x + side * 4, y + 1), SHELL[3])
+    # шипы по верху
+    for dx, h in ((-10, 3), (-4, 5), (4, 5), (10, 3)):
+        x = cx0 + dx
+        pygame.draw.polygon(s, SHELL[2], [(x - 2, top - 5), (x, top - 5 - h), (x + 2, top - 5)])
+        s.set_at((x, top - 5 - h), SHELL[3])
+    # крапины, ракушки и водоросль
+    rnd = random.Random(11)
+    for _ in range(22):
+        x, y = rnd.randrange(cx0 - 16, cx0 + 16), rnd.randrange(top - 5, top + 9)
+        if s.get_at((x, y)).a and s.get_at((x, y))[:3] in (SHELL[1], SHELL[2]):
+            s.set_at((x, y), SHELL[0] if rnd.random() < 0.6 else SHELL[3])
+    for bx, by, r in ((cx0 + 9, top - 3, 3), (cx0 + 14, top + 2, 2), (cx0 + 4, top - 5, 2)):
+        pygame.draw.circle(s, BARNACLE[1], (bx, by), r)
+        pygame.draw.circle(s, BARNACLE[3], (bx - 1, by - 1), max(1, r - 1))
+        s.set_at((bx, by), BARNACLE[0])
+    for k in range(10):
+        s.set_at((cx0 + 17 + (k % 3 == 1), top + 4 + k), (40, 120, 70) if k % 2 else (80, 170, 90))
+    # глаза на стебельках
+    for dx in (-5, 5):
+        x = cx0 + dx
+        line(s, SHELL[0], (x, top - 4), (x + dx // 5, top - 12), 3)
+        line(s, SHELL[2], (x, top - 4), (x + dx // 5, top - 12))
+        ex, ey = x + dx // 5, top - 13
+        pygame.draw.circle(s, (14, 6, 10), (ex, ey), 3)
+        s.set_at((ex - 1, ey - 1), (255, 255, 255))
+        s.set_at((ex, ey - 1), (170, 190, 220))
+    # «злая» бровь-гребень над глазами и ротовые пластины
+    line(s, SHELL[0], (cx0 - 8, top - 6), (cx0 - 2, top - 4))
+    line(s, SHELL[0], (cx0 + 8, top - 6), (cx0 + 2, top - 4))
+    pygame.draw.rect(s, SHELL[0], (cx0 - 4, top + 5, 8, 5))
+    for x in range(cx0 - 3, cx0 + 4, 2):
+        line(s, SHELL[3], (x, top + 6), (x, top + 8))
+    for bx, by in ((cx0 - 2, top + 1 - frame), (cx0 + 1, top - 2 - frame)):
+        pygame.draw.circle(s, (190, 235, 255), (bx, by), 1)
+    # клешня-кувалда слева: плечо, запястье и огромная ладонь
+    up = {"windup": -12, "attack": 8}.get(pose, 0)
+    hx, hy = 16, top - 3 + up
+    line(s, SHELL[0], (cx0 - 14, top + 8), (hx + 6, hy + 6), 6)
+    line(s, SHELL[1], (cx0 - 14, top + 8), (hx + 6, hy + 6), 4)
+    line(s, SHELL[2], (cx0 - 14, top + 6), (hx + 6, hy + 4))
+    pygame.draw.circle(s, SHELL[2], (hx + 6, hy + 6), 3)
+    s.set_at((hx + 5, hy + 4), SHELL[3])
+    _chela(s, SHELL, hx, hy, 9, 5 if pose == "windup" else 0)
+    if pose == "attack":  # удар: щепки и брызги
+        for x, y in ((2, CRAB_H - 2), (6, CRAB_H - 4), (12, CRAB_H - 2), (0, CRAB_H - 6)):
+            s.set_at((x, y), (255, 230, 190))
     return outlined(s, (20, 6, 6))
 
 
@@ -246,6 +337,174 @@ def make_crab_frames():
     w = crab("windup")
     return {"idle": [idle, idle2], "windup": [tinted(w, (255, 200, 120), 0.25), w], "attack": [crab("attack")],
             "hurt": [tinted(idle, (255, 255, 255), 0.8)], "dead": [pygame.transform.flip(tinted(idle, (60, 40, 40), 0.5), False, True)]}
+
+
+# ---------------------------------------------------------------- Нага: морская змея-воительница
+NG_W, NG_H = 56, 66
+TAIL = [(8, 44, 58), (18, 100, 108), (50, 160, 152), (160, 236, 214)]
+SCUTE = [(150, 110, 50), (214, 176, 96), (244, 214, 146), (255, 244, 200)]
+NSKIN = [(64, 110, 120), (114, 168, 168), (168, 210, 200), (222, 244, 234)]
+HAIR = [(36, 12, 56), (88, 30, 112), (150, 64, 170), (226, 140, 230)]
+NGOLD = [(120, 80, 20), (200, 150, 50), (240, 200, 90), (255, 240, 170)]
+
+
+def _spine(pts, r0, r1):
+    """Тело змеи как ряд кругов вдоль ломаной: толщина плавно от r0 к r1."""
+    def d(t):
+        n = len(pts) - 1
+        for i in range(n):
+            (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+            steps = max(1, int(math.hypot(x1 - x0, y1 - y0)))
+            for k in range(steps + 1):
+                u = (i + k / steps) / n
+                pygame.draw.circle(t, (255, 255, 255), (round(x0 + (x1 - x0) * k / steps), round(y0 + (y1 - y0) * k / steps)), max(1, round(r0 + (r1 - r0) * u)))
+    return d
+
+
+def naga(pose="idle", frame=0):
+    """Нага: бирюзовый змеиный хвост S-образным кольцом с золотыми брюшными щитками и плавником,
+    стройный торс цвета морской волны в золотом чешуйчатом нагруднике, длинные фиолетовые волосы волнами
+    до пояса, ухо-плавник, тиара с жемчужиной и золотой трезубец. Смотрит влево.
+    pose: idle, windup (трезубец отведён), attack (выпад), song (песня сирены)."""
+    s = pygame.Surface((NG_W, NG_H), pygame.SRCALPHA)
+    sw = frame
+    lean = {"windup": 3, "attack": -4, "song": 1}.get(pose, 0)
+    cx = 30 + lean  # ось торса
+    # хвост: от бёдер вниз-вправо, по палубе влево и кончик вверх
+    tail = [(cx, 36), (cx + 4, 44), (40, 52), (44, 58), (40, 62), (28, 63), (16, 62), (8, 59), (5, 54), (7, 49 - sw)]
+    fin = pygame.Surface((NG_W, NG_H), pygame.SRCALPHA)  # плавник вдоль спины хвоста
+    for (x0, y0), (x1, y1) in zip(tail[1:4], tail[2:5]):
+        pygame.draw.polygon(fin, (110, 220, 230, 150), [(x0 + 3, y0), (x1 + 3, y1), ((x0 + x1) // 2 + 8, (y0 + y1) // 2 - 2)])
+        line(fin, (200, 250, 255, 200), (x0 + 3, y0), ((x0 + x1) // 2 + 8, (y0 + y1) // 2 - 2))
+    s.blit(fin, (0, 0))
+    part(s, TAIL, _spine(tail, 7, 2), rimcol=(170, 240, 255))
+    # чешуя: ряды полукружий
+    m = pygame.mask.from_surface(s)
+    for y in range(38, NG_H):
+        for x in range(NG_W):
+            if m.get_at((x, y)) and ((x + (y // 2) * 2) % 4 == 0) and y % 2 == 0:
+                c = s.get_at((x, y))[:3]
+                if c == TAIL[1]:
+                    s.set_at((x, y), TAIL[0])
+                elif c == TAIL[2]:
+                    s.set_at((x, y), TAIL[1])
+    # золотые брюшные щитки по внутренней (нижней-левой) стороне
+    for (x0, y0), (x1, y1) in zip(tail[2:8], tail[3:9]):
+        n = max(2, int(math.hypot(x1 - x0, y1 - y0)))
+        for k in range(n):
+            x, y = x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n
+            dx, dy = (y1 - y0) / n, -(x1 - x0) / n  # нормаль
+            ln = math.hypot(dx, dy) or 1
+            px, py = round(x - dx / ln * 4), round(y - dy / ln * 4)
+            if 0 <= px < NG_W and 0 <= py < NG_H and s.get_at((px, py)).a:
+                s.set_at((px, py), SCUTE[3] if k % 3 == 0 else SCUTE[1 + k % 2])
+    tx, ty = tail[-1]  # кончик — веер
+    pygame.draw.polygon(s, (130, 236, 226), [(tx, ty), (tx - 3, ty - 7), (tx + 2, ty - 4)])
+    pygame.draw.polygon(s, (70, 180, 190), [(tx, ty), (tx + 4, ty - 6), (tx + 2, ty - 1)])
+    # волосы за спиной: волнами до пояса
+    hx, hy = cx - 2, 9  # центр головы
+    back_hair = [(hx - 4, hy - 6), (hx + 3, hy - 7), (hx + 8, hy - 3), (hx + 9, hy + 5), (hx + 12 + sw, hy + 12), (hx + 10, hy + 18), (hx + 13 + sw, hy + 25),
+                 (hx + 9, hy + 28), (hx + 6, hy + 20), (hx + 5, hy + 10), (hx + 1, hy + 2)]
+    part(s, HAIR, poly(back_hair), rimcol=(240, 170, 255))
+    for k in range(3):  # пряди
+        pts = [(hx + 4 + k * 2 + round(2 * math.sin(j * 0.9 + k + sw)), hy + 2 + j * 3) for j in range(8)]
+        pygame.draw.lines(s, HAIR[3] if k == 1 else HAIR[2], False, pts)
+    # дальняя рука (в тени)
+    if pose != "song":
+        line(s, NSKIN[0], (cx + 4, 19), (cx + 7, 28), 3)
+    # торс: песочные часы
+    torso = poly([(cx - 5, 18), (cx + 5, 18), (cx + 4, 24), (cx + 3, 30), (cx + 6, 37), (cx - 5, 37), (cx - 3, 30), (cx - 4, 24)])
+    part(s, NSKIN, torso, rimcol=(170, 240, 255))
+    for y in range(32, 38):  # переход кожи в чешую
+        for x in range(cx - 5, cx + 7):
+            if s.get_at((x, y)).a and (x + y) % 3 == 0:
+                s.set_at((x, y), TAIL[2] if y < 35 else TAIL[1])
+    pygame.draw.circle(s, NSKIN[0], (cx - 1, 29), 0)  # пупок
+    # нагрудник: золотые чешуйки и жемчужина
+    part(s, NGOLD, poly([(cx - 5, 20), (cx + 5, 20), (cx + 4, 25), (cx, 26), (cx - 4, 25)]), rim=False)
+    for x in range(cx - 4, cx + 5, 2):
+        s.set_at((x, 22), NGOLD[0])
+        s.set_at((x + 1, 24), NGOLD[0])
+    pygame.draw.circle(s, (236, 244, 255), (cx, 20), 1)
+    # пояс с подвесками
+    line(s, NGOLD[1], (cx - 4, 33), (cx + 5, 33))
+    for x in (cx - 2, cx + 1, cx + 4):
+        s.set_at((x, 34), NGOLD[3])
+        s.set_at((x, 35), (236, 244, 255))
+    # шея и голова в профиль
+    pygame.draw.rect(s, NSKIN[1], (cx - 2, 14, 4, 5))
+    part(s, NSKIN, many(ell((hx - 6, hy - 6, 12, 13)), poly([(hx - 6, hy), (hx - 8, hy + 1), (hx - 6, hy + 3)])), rimcol=(170, 240, 255))
+    pygame.draw.polygon(s, HAIR[1], [(hx - 6, hy - 3), (hx - 2, hy - 7), (hx + 5, hy - 6), (hx + 6, hy + 1), (hx + 2, hy - 3), (hx - 3, hy - 2)])  # чёлка и макушка
+    line(s, HAIR[3], (hx - 3, hy - 5), (hx + 2, hy - 6))
+    # ухо-плавник
+    pygame.draw.polygon(s, (90, 210, 220), [(hx + 2, hy), (hx + 9, hy - 5), (hx + 8, hy + 1), (hx + 5, hy + 4)])
+    line(s, (210, 255, 250), (hx + 3, hy), (hx + 8, hy - 4))
+    line(s, (40, 130, 150), (hx + 4, hy + 2), (hx + 8, hy))
+    # тиара: золотой обруч с зубцами и жемчужиной
+    line(s, NGOLD[1], (hx - 5, hy - 4), (hx + 3, hy - 6))
+    for k, (x, y) in enumerate(((hx - 4, hy - 5), (hx - 1, hy - 6), (hx + 2, hy - 7))):
+        line(s, NGOLD[2], (x, y), (x, y - (3 if k == 1 else 2)))
+    pygame.draw.circle(s, (236, 244, 255), (hx - 1, hy - 9), 1)
+    # лицо: глаз с ресницами и бирюзовой радужкой, нос, губы
+    line(s, (20, 10, 30), (hx - 5, hy - 1), (hx - 2, hy - 1))
+    s.set_at((hx - 4, hy), (40, 230, 220))
+    s.set_at((hx - 3, hy), (220, 255, 250))
+    s.set_at((hx - 6, hy - 2), (20, 10, 30))  # ресница
+    s.set_at((hx - 8, hy + 2), NSKIN[2])  # кончик носа
+    lip = (90, 20, 50) if pose == "song" else (210, 90, 140)
+    s.set_at((hx - 6, hy + 4), lip)
+    s.set_at((hx - 5, hy + 4), lip)
+    s.set_at((hx - 6, hy + 5), lip if pose == "song" else NSKIN[1])
+    # ближняя рука и трезубец
+    sh = (cx - 3, 19)
+    if pose == "attack":
+        hand, shaft = (cx - 13, 23), ((cx + 2, 23), (cx - 30, 23))
+    elif pose == "windup":
+        hand, shaft = (cx + 6, 13), ((cx + 14, 16), (cx - 14, 6))
+    elif pose == "song":
+        hand, shaft = (cx, 23), None
+    else:
+        hand, shaft = (cx - 9, 27), ((cx - 9, 50), (cx - 9, 6))
+    line(s, NSKIN[0], sh, hand, 3)
+    line(s, NSKIN[2], sh, hand)
+    mid = (round((sh[0] + hand[0]) / 2), round((sh[1] + hand[1]) / 2))
+    s.set_at(mid, NGOLD[2])  # браслет
+    if shaft:
+        (ax, ay), (bx, by) = shaft
+        bx, by = max(5, bx), by
+        line(s, NGOLD[0], (ax, ay + 1), (bx, by + 1))
+        line(s, NGOLD[2], (ax, ay), (bx, by))
+        dx, dy = bx - ax, by - ay
+        ln = math.hypot(dx, dy) or 1
+        ux, uy = dx / ln, dy / ln
+        px, py = -uy, ux
+        line(s, NGOLD[1], (bx + px * 3, by + py * 3), (bx - px * 3, by - py * 3))
+        for o in (-3, 0, 3):
+            base = (bx + px * o, by + py * o)
+            tip = (base[0] + ux * (5 if o == 0 else 3), base[1] + uy * (5 if o == 0 else 3))
+            line(s, NGOLD[2], base, tip)
+            s.set_at((round(tip[0]), round(tip[1])), NGOLD[3])
+        pygame.draw.circle(s, (120, 240, 255), (round(bx - ux * 2), round(by - uy * 2)), 1)
+    pygame.draw.circle(s, NSKIN[2], hand, 1)
+    if pose == "song":  # волны песни и ноты
+        for r in (6, 10, 14):
+            pygame.draw.arc(s, (170, 230, 255), (hx - 6 - r, hy + 3 - r, r * 2, r * 2), math.pi * 0.7, math.pi * 1.3)
+        for nx, ny in ((4, 10), (9, 3)):
+            pygame.draw.rect(s, (230, 200, 255), (nx, ny + 3, 2, 2))
+            line(s, (230, 200, 255), (nx + 1, ny + 3), (nx + 1, ny))
+            s.set_at((nx + 2, ny), (230, 200, 255))
+    for x, y in ((42, 47), (14, 58), (30, 60), (cx + 4, 22)):  # блёстки
+        if s.get_at((x, y)).a:
+            s.set_at((x, y), (240, 255, 255))
+    return outlined(s, (6, 10, 24))
+
+
+def make_naga_frames():
+    idle, idle2 = naga("idle", 0), naga("idle", 1)
+    w = naga("windup")
+    return {"idle": [idle, idle2], "windup": [tinted(w, (140, 240, 255), 0.25), w], "attack": [naga("attack")],
+            "song": [naga("song", 0), naga("song", 1)],
+            "hurt": [tinted(idle, (255, 255, 255), 0.8)], "dead": [crouched(crouched(tinted(idle, (30, 50, 70), 0.5)))]}
 
 
 # ---------------------------------------------------------------- Кракен: голова и мантия (щупальца — в игре)

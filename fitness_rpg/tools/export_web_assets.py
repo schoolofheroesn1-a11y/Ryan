@@ -57,7 +57,7 @@ def main():
             ("fluff", a.fluff), ("eyequeen", a.eyequeen),
             ("vampire", a.vampire), ("pumpkin", a.pumpkin),
             ("stalker", a.stalker), ("stalker2", a.stalker2),
-            ("drowned", a.drowned), ("crab", a.crab), ("kraken", a.kraken), ("pirate", a.pirate)]
+            ("drowned", a.drowned), ("crab", a.crab), ("naga", a.naga), ("kraken", a.kraken), ("pirate", a.pirate)]
     sets += [(f"hero_{sword}_{look}", frames) for (sword, look), frames in a.heroes.items()]
     for who, frames in sets:
         for anim_name, surfs in frames.items():

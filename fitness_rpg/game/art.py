@@ -2172,6 +2172,7 @@ class Art:
         self.sea_bg = sea.make_sea_background()
         self.drowned = sea.make_drowned_frames()
         self.crab = sea.make_crab_frames()
+        self.naga = sea.make_naga_frames()
         self.kraken = sea.make_kraken_frames()
         self.pirate = sea.make_pirate_frames()
 
