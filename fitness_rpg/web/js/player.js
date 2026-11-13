@@ -84,24 +84,28 @@ export class Player {
   }
 
   get level() { return this.strength + this.vigor + this.endurance - 2; }
+  /** Равные условия (Шпиль): характеристики забега вместо своих, без ауры, доспехов, талисманов и свойств меча. */
+  get fixed() { return this.mods && this.mods.base ? this.mods.base : null; }
+  stat(name) { const b = this.fixed; return b ? b[name] : this[name]; }
   /** Прирост ауры (доля): к урону, здоровью и запасу сил. */
-  get aura() { return auraBonus(this.plankSeconds); }
-  get maxHp() { return Math.round((80 + 12 * this.vigor) * (1 + this.aura) * (1 + (this.mods ? this.mods.hp : 0))); }
-  get maxStamina() { return Math.round((60 + 8 * this.endurance) * (1 + this.aura)); }
-  get staminaRegen() { return (10 + 2 * this.endurance) * (this.talisman === "windcharm" ? WIND_REGEN : 1) * (1 + (this.mods ? this.mods.regen : 0)); }
-  get weapon() { return SWORDS[this.sword]; }
-  get damage() { return Math.round((10 + 3 * this.strength + this.weapon.dmg) * (1 + this.aura) * (1 + (this.mods ? this.mods.dmg : 0))); }
+  get aura() { return this.fixed ? 0 : auraBonus(this.plankSeconds); }
+  get maxHp() { return Math.round((80 + 12 * this.stat("vigor")) * (1 + this.aura) * (1 + (this.mods ? this.mods.hp : 0))); }
+  get maxStamina() { return Math.round((60 + 8 * this.stat("endurance")) * (1 + this.aura)); }
+  get staminaRegen() { return (10 + 2 * this.stat("endurance")) * (this.talisman === "windcharm" && !this.fixed ? WIND_REGEN : 1) * (1 + (this.mods ? this.mods.regen : 0)); }
+  /** Характеристики меча (облик меча — всегда свой: this.sword). */
+  get weapon() { return SWORDS[this.fixed ? this.fixed.sword : this.sword]; }
+  get damage() { return Math.round((10 + 3 * this.stat("strength") + this.weapon.dmg) * (1 + this.aura) * (1 + (this.mods ? this.mods.dmg : 0))); }
   get attackCost() { return this.weapon.cost; }
   get critMult() { return this.weapon.crit + (this.mods ? this.mods.crit : 0); }
   get lifesteal() { return this.weapon.lifesteal; }
-  get damageTakenMult() { return ARMOR_TAKEN[this.armor] || 1; }
+  get damageTakenMult() { return this.fixed ? 1 : ARMOR_TAKEN[this.armor] || 1; }
   /** Что на герое: купленное, кроме доспехов, которые сейчас не надеты (облик и защита — по надетому). */
   get worn() {
     return this.owned.filter((k) => (!ARMORS.includes(k) || k === this.armor) && (!TALISMANS.includes(k) || k === this.talisman));
   }
-  get estusMax() { return ESTUS_MAX + (this.talisman === "amulet" || this.talisman === "pumpkin" ? 1 : 0); }
+  get estusMax() { return ESTUS_MAX + (!this.fixed && (this.talisman === "amulet" || this.talisman === "pumpkin") ? 1 : 0); }
   /** Доля урона удара, которая лечит героя (Клык Вампира). */
-  get vampire() { return this.talisman === "fang" ? VAMPIRE : 0; }
+  get vampire() { return this.talisman === "fang" && !this.fixed ? VAMPIRE : 0; }
 
   // --- Кузница ---
   canAfford(key) {

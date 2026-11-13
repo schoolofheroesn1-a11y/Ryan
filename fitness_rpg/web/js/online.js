@@ -155,7 +155,7 @@ export class Online {
   }
 
   me() { return this.call("me"); }
-  top(mode = this.mode) { return this.call("top", { mode }); }
+  top(mode = this.mode, board = "") { return this.call("top", board ? { mode, board } : { mode }); }
   arena() { return this.call("arena"); }
   challengeStart(opponent) { return this.call("challenge_start", { opponent }); }
   challengeEnd(fight, won) { return this.call("challenge_end", { fight, won }); }

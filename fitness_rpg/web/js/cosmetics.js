@@ -9,7 +9,9 @@ export const COSMETICS = [
   { id: "sword_kin", kind: "sword", skin: "kin", name: "Клинок Побратима", desc: "ДРУЗЬЯ: награда за друга", color: [90, 230, 200], invite: true },
   { id: "sword_phoenix", kind: "sword", skin: "phoenix", name: "Клинок Феникса", desc: "ЛЕГЕНДА: огонь и крылья феникса", color: [255, 140, 40], price: "3 $" },
   // только из Сундука Самайна (chest: купить нельзя)
-  { id: "sword_bat", kind: "sword", skin: "bat", name: "Клинок Нетопыря", desc: "САМАЙН: стая мышей в каждом ударе", color: [230, 50, 80], chest: true },
+  { id: "sword_bat", kind: "sword", skin: "bat", name: "Клинок Нетопыря", desc: "САМАЙН: стая мышей в каждом ударе", color: [230, 50, 80], chest: "samhain" },
+  // из Сундука Прилива: жилетка и треуголка поверх любой брони
+  { id: "armor_pirate", kind: "armor", outfit: "pirate", name: "Новый пират", desc: "ПРИЛИВ: жилетка и треуголка поверх брони", color: [160, 104, 56], chest: "sea" },
   { id: "armor_samurai", kind: "armor", outfit: "samurai", name: "Доспех самурая", desc: "золотые рога, знамя, вихрь сакуры", color: [226, 64, 52] },
   { id: "hit_storm", kind: "hit", name: "Гнев грозы", desc: "молния в каждый удар", color: [150, 230, 255] },
   { id: "hit_souls", kind: "hit", name: "Призраки павших", desc: "души вырываются из врага", color: [190, 170, 255] },

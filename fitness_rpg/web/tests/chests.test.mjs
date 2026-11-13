@@ -6,7 +6,7 @@ import { Player } from "../js/player.js";
 
 test("у каждой земли свой сундук и своё оружие; дальше — больше повторений", () => {
   assert.deepEqual([1, 16, 31, 46].map(chestFor), CHEST_ORDER.slice(0, 4));
-  const reps = CHEST_ORDER.map((k) => CHESTS[k].reps);
+  const reps = CHEST_ORDER.slice(0, 4).map((k) => CHESTS[k].reps);
   assert.deepEqual([...reps].sort((a, b) => a - b), reps);
   for (const k of CHEST_ORDER.slice(0, 4)) assert.equal(SWORDS[CHESTS[k].weapon].chest, k);
 });
@@ -73,4 +73,17 @@ test("сундук Самайна щедрее сундука Бездны", asy
     b += openChest(p, "abyss").find((x) => x.kind === "ash").n;
   }
   assert.ok(a > b);
+});
+
+test("Сундук Прилива: Меч Прилива и облик пирата не позже 8-го сундука", async () => {
+  const { Player } = await import("../js/player.js");
+  const p = new Player();
+  const skins = new Set();
+  const store = { owns: (id) => skins.has(id), grant: (id) => skins.add(id) };
+  addChest(p, "sea", 16);
+  const got = [];
+  for (let i = 0; i < 16; i++) for (const it of openChest(p, "sea", () => 0.99, store)) if (it.rarity === "legendary") got.push(i + 1);
+  assert.deepEqual(got, [8, 16]);
+  assert.ok(p.owned.includes("tide") && skins.has("armor_pirate"));
+  assert.equal(SWORDS.tide.chest, "sea");
 });

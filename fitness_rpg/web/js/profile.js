@@ -41,6 +41,8 @@ export class Profile {
     this.ach = { ...(data.ach || {}) }; // открытые достижения: id → день
     // Шпиль Самайна: лучший этаж, забеги и поверженные Королевы
     this.tower = { best: 0, runs: 0, queens: 0, ...(data.tower || {}) };
+    // Морской поход: походы и поверженные Кракены
+    this.sea = { runs: 0, krakens: 0, ...(data.sea || {}) };
     this.title = data.title && ACH[data.title] && this.ach[data.title] ? data.title : null; // выбранный титул (id достижения)
   }
 
@@ -56,6 +58,7 @@ export class Profile {
   record(player) {
     const b = this.best;
     const next = {
+      ...b, // рекорд Шпиля (tower) хранится здесь же
       bosses: Math.max(b.bosses, player.bossesDefeated || 0),
       level: Math.max(b.level, player.level),
       wave: Math.max(b.wave, player.wave),
@@ -72,7 +75,7 @@ export class Profile {
   }
 
   save() {
-    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style, streak: this.streak.toJSON(), ach: this.ach, title: this.title, tower: this.tower });
+    saveJSON(KEY, { id: this.id, name: this.name, best: this.bests.cam, bestBtn: this.bests.btn, style: this.style, streak: this.streak.toJSON(), ach: this.ach, title: this.title, tower: this.tower, sea: this.sea });
   }
 
   static load() {

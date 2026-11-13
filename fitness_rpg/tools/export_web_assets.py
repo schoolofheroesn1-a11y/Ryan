@@ -56,7 +56,8 @@ def main():
             ("seraph", a.seraph), ("seraph2", a.seraph2), ("imp", a.imp), ("hound", a.hound), ("husk", a.husk),
             ("fluff", a.fluff), ("eyequeen", a.eyequeen),
             ("vampire", a.vampire), ("pumpkin", a.pumpkin),
-            ("stalker", a.stalker), ("stalker2", a.stalker2)]
+            ("stalker", a.stalker), ("stalker2", a.stalker2),
+            ("drowned", a.drowned), ("crab", a.crab), ("kraken", a.kraken), ("pirate", a.pirate)]
     sets += [(f"hero_{sword}_{look}", frames) for (sword, look), frames in a.heroes.items()]
     for who, frames in sets:
         for anim_name, surfs in frames.items():
@@ -82,6 +83,7 @@ def main():
     sprites["graveyard_bg"] = a.graveyard_bg
     sprites["abyss_bg"] = a.abyss_bg
     sprites["spire_bg"] = a.spire_bg
+    sprites["sea_bg"] = a.sea_bg
     sprites["skeleton_dark_0"] = art.tinted(a.skeleton["idle"][0], (20, 10, 24), 0.55)
     write_atlas(sprites)
 

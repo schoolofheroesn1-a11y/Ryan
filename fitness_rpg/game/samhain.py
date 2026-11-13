@@ -208,8 +208,8 @@ def make_eyequeen_frames():
 
 # ---------------------------------------------------------------- фон
 def make_spire_background(w=320, h=180, seed=1031):
-    """Зал Шпиля Самайна: каменная кладка, стрельчатые окна в лиловую ночь с тыквенной луной,
-    свечи, тыквы-фонари вдоль пола, паутина в углах и уходящая вверх винтовая лестница."""
+    """Зал Шпиля: каменная кладка, стрельчатые окна в ночь с бледной луной, свечи, железные жаровни
+    вдоль пола и уходящая вверх винтовая лестница (без хеллоуинского оформления)."""
     rnd = random.Random(seed)
     surf = pygame.Surface((w, h))
     floor_y = 132
@@ -227,16 +227,16 @@ def make_spire_background(w=320, h=180, seed=1031):
     def window(x, top, wd, ht, moon=False):
         sky = pygame.Surface((wd, ht))
         for yy in range(ht):
-            pygame.draw.line(sky, _lerp((24, 10, 46), (96, 40, 92), yy / ht), (0, yy), (wd, yy))
+            pygame.draw.line(sky, _lerp((10, 14, 40), (52, 50, 98), yy / ht), (0, yy), (wd, yy))
         for _ in range(wd * ht // 40):
             sky.set_at((rnd.randrange(wd), rnd.randrange(ht)), (200, 180, 230))
-        if moon:  # тыквенная луна
-            pygame.draw.circle(sky, (150, 70, 20), (wd // 2 + 3, ht // 3), 10)
-            pygame.draw.circle(sky, (255, 160, 60), (wd // 2 + 3, ht // 3), 9)
-            pygame.draw.circle(sky, (255, 200, 110), (wd // 2 + 1, ht // 3 - 2), 5)
-            for k in (-4, 0, 4):
-                _line(sky, (220, 120, 40), (wd // 2 + 3 + k, ht // 3 - 8), (wd // 2 + 3 + k, ht // 3 + 8))
-            _poly(sky, (16, 8, 24), [(wd // 2 - 12, ht // 3 + 12), (wd // 2 - 6, ht // 3 + 6), (wd // 2 - 2, ht // 3 + 10)])  # летучая мышь
+        if moon:  # бледная луна с кратерами
+            mx, my = wd // 2 + 3, ht // 3
+            pygame.draw.circle(sky, (120, 128, 160), (mx, my), 10)
+            pygame.draw.circle(sky, (214, 220, 236), (mx, my), 9)
+            pygame.draw.circle(sky, (240, 244, 252), (mx - 2, my - 2), 5)
+            for cx, cy, r in ((3, 2, 2), (-3, 4, 1), (4, -4, 1)):
+                pygame.draw.circle(sky, (170, 176, 200), (mx + cx, my + cy), r)
         mask = pygame.Surface((wd, ht), pygame.SRCALPHA)
         pygame.draw.rect(mask, (255, 255, 255, 255), (0, wd // 2, wd, ht))
         pygame.draw.ellipse(mask, (255, 255, 255, 255), (0, 0, wd, wd))
@@ -272,39 +272,26 @@ def make_spire_background(w=320, h=180, seed=1031):
         _line(surf, (24, 16, 26), (0, y), (w, y))
     for x in range(-20, w + 40, 28):
         _line(surf, (24, 16, 26), (x, floor_y), (x - 14, h))
-    # тыквы-фонари вдоль пола
-    def pumpkin(x, y, r):
-        pygame.draw.ellipse(surf, (150, 66, 14), (x - r - 2, y - r, 2 * r + 4, 2 * r))
-        pygame.draw.ellipse(surf, (230, 110, 26), (x - r, y - r, 2 * r, 2 * r))
-        pygame.draw.ellipse(surf, (190, 86, 18), (x - r // 3, y - r, 2 * r // 3, 2 * r))
-        pygame.draw.rect(surf, (60, 90, 30), (x - 1, y - r - 3, 2, 3))
-        lit = (255, 220, 90)
-        _poly(surf, lit, [(x - r + 2, y - 2), (x - r // 2, y - 4), (x - r // 3, y - 1)])
-        _poly(surf, lit, [(x + r - 2, y - 2), (x + r // 2, y - 4), (x + r // 3, y - 1)])
-        _poly(surf, lit, [(x - r + 2, y + 2), (x + r - 2, y + 2), (x, y + r - 2)])
+    # железные жаровни вдоль пола: чаша на треноге и живой огонь
+    def brazier(x, y):
+        _line(surf, (40, 34, 44), (x - 4, y), (x - 2, y - 7))
+        _line(surf, (40, 34, 44), (x + 4, y), (x + 2, y - 7))
+        _line(surf, (40, 34, 44), (x, y), (x, y - 7))
+        pygame.draw.ellipse(surf, (70, 60, 70), (x - 6, y - 11, 12, 5))
+        pygame.draw.ellipse(surf, (110, 96, 104), (x - 6, y - 12, 12, 3))
+        for k, (dx, hh, col) in enumerate(((-2, 6, (200, 70, 30)), (2, 5, (230, 110, 40)), (0, 8, (255, 180, 70)), (0, 4, (255, 240, 180)))):
+            _poly(surf, col, [(x + dx - 2, y - 11), (x + dx + 2, y - 11), (x + dx, y - 11 - hh)])
         halo = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.circle(halo, (255, 140, 40, 26), (x, y), r * 3)
+        pygame.draw.circle(halo, (255, 150, 60, 22), (x, y - 12), 22)
         surf.blit(halo, (0, 0))
 
-    for x, r in ((14, 6), (28, 4), (118, 5), (214, 4), (302, 6)):
-        pumpkin(x, floor_y + 4 - r // 2, r)
+    for x in (16, 304):
+        brazier(x, floor_y + 4)
     # свечи на подоконниках и полу
     for x, y in ((40, 80), (54, 80), (262, 80), (278, 80), (100, 136), (240, 134)):
         pygame.draw.rect(surf, (230, 220, 200), (x, y - 5, 2, 5))
         surf.set_at((x, y - 6), (255, 200, 80))
         surf.set_at((x, y - 7), (255, 240, 170))
-    # паутина в верхних углах
-    for cx, sgn in ((0, 1), (w - 1, -1)):
-        for k in range(5):
-            a = k * (math.pi / 2) / 4
-            _line(surf, (120, 110, 130), (cx, 0), (cx + sgn * int(34 * math.cos(a)), int(34 * math.sin(a))))
-        for rr in (10, 18, 26):
-            pts = [(cx + sgn * int(rr * math.cos(k * (math.pi / 2) / 4)), int(rr * math.sin(k * (math.pi / 2) / 4))) for k in range(5)]
-            pygame.draw.lines(surf, (100, 90, 112), False, pts)
-    # висящий паучок
-    _line(surf, (100, 90, 112), (92, 0), (92, 22))
-    pygame.draw.circle(surf, (14, 10, 18), (92, 24), 2)
-    surf.set_at((91, 24), (255, 120, 40))
     return surf
 
 

@@ -19,6 +19,7 @@ export const SWORDS = {
   rogueking: { name: "Сабля Короля Разбойников", desc: "+21 урона, крит x2.5, ошеломляет", dmg: 21, cost: 16, crit: 2.5, lifesteal: 0, stun: 0.1, price: [0, 0], chest: "castle" },
   moonreap: { name: "Лунный Серп", desc: "+27 урона, лечит 8, ошеломляет", dmg: 27, cost: 22, crit: 2.0, lifesteal: 8, stun: 0.2, price: [0, 0], chest: "grave" },
   abyssheart: { name: "Сердце Бездны", desc: "+34 урона, жар 10/с, аура 1.5%/с", dmg: 34, cost: 28, crit: 2.25, lifesteal: 0, burn: 10, aura: 0.015, price: [0, 0], chest: "abyss" },
+  tide: { name: "Меч Прилива", desc: "+30 урона, крит x2.2 — волна +60%", dmg: 30, cost: 24, crit: 2.2, lifesteal: 0, wave: 0.6, price: [0, 0], chest: "sea" },
   barbell: { name: "Гриф от штанги", desc: "+18 урона, крит x2, удар 24 сил", dmg: 18, cost: 24, crit: 2.0, lifesteal: 0, price: [0, 0], paid: "10 $", productId: "weapon_barbell" },
 };
 
@@ -41,7 +42,7 @@ export const SHOP_TABS = [
   ["armor", "БРОНЯ", ["armor", "kingarmor", "wingarmor"]],
   ["talismans", "ТАЛИСМАНЫ", ["amulet", "windcharm", "fang"]],
   // легендарное оружие сундуков: не продаётся — здесь видно характеристики и откуда оно выпадает
-  ["legends", "ЛЕГЕНДЫ", ["bonewail", "rogueking", "moonreap", "abyssheart"]],
+  ["legends", "ЛЕГЕНДЫ", ["bonewail", "rogueking", "moonreap", "abyssheart", "tide"]],
 ];
 export const SHOP_ORDER = SHOP_TABS.flatMap(([, , keys]) => keys);
 

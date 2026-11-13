@@ -77,6 +77,13 @@ try {
             try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
         }
     }
+    try { // Шпиль: лучший этаж (равные условия) — свой рейтинг для каждого режима
+        $db->query('SELECT tower FROM mp_accounts LIMIT 0');
+    } catch (Exception $e) {
+        foreach (['tower INT NOT NULL DEFAULT 0', 'tower_btn INT NOT NULL DEFAULT 0'] as $col) {
+            try { $db->exec("ALTER TABLE mp_accounts ADD COLUMN $col"); } catch (Exception $e2) { /* уже есть */ }
+        }
+    }
     try { // медали дуэлей и итог комнаты: тоже добавляются к уже созданным таблицам
         $db->query('SELECT medals FROM mp_accounts LIMIT 0');
     } catch (Exception $e) {
@@ -130,10 +137,10 @@ function int_in($v, $min, $max, $def) {
     return max($min, min($max, (int)$v));
 }
 
-const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'seraph', 'barbell', 'bonewail', 'rogueking', 'moonreap', 'abyssheart'];
-const RELICS = ['armor', 'kingarmor', 'wingarmor', 'amulet', 'windcharm', 'fang'];
-const SKINS = ['void', 'sun', 'frost', 'phoenix', 'kin'];
-const OUTFITS = ['samurai'];
+const SWORDS = ['rusty', 'steel', 'great', 'giant', 'ash', 'radiator', 'seraph', 'barbell', 'bonewail', 'rogueking', 'moonreap', 'abyssheart', 'tide'];
+const RELICS = ['armor', 'kingarmor', 'wingarmor', 'amulet', 'windcharm', 'fang', 'pumpkin'];
+const SKINS = ['void', 'sun', 'frost', 'phoenix', 'kin', 'bat'];
+const OUTFITS = ['samurai', 'pirate'];
 
 /** Характеристики героя для боёв с ним (бот играет его снаряжением и силой). */
 function clean_hero($h) {
@@ -247,6 +254,7 @@ function public_account($a) {
         'id' => $a['id'], 'login' => $a['login'], 'name' => $a['name'],
         'best' => ['bosses' => (int)$a['bosses'], 'level' => (int)$a['level'], 'wave' => (int)$a['wave']],
         'best_btn' => ['bosses' => (int)$a['bosses_btn'], 'level' => (int)$a['level_btn'], 'wave' => (int)$a['wave_btn']],
+        'tower' => isset($a['tower']) ? (int)$a['tower'] : 0, 'tower_btn' => isset($a['tower_btn']) ? (int)$a['tower_btn'] : 0,
         'unlocks' => json_decode($a['unlocks'] ?: '[]', true) ?: [],
         'arena_pos' => (int)$a['arena_pos'],
         'medals' => isset($a['medals']) ? (int)$a['medals'] : 0,
@@ -287,6 +295,10 @@ function apply_sync($a, $in) {
     $hero = clean_hero(isset($in['hero']) ? $in['hero'] : null);
     $db->prepare("UPDATE mp_accounts SET $cb = ?, $cl = ?, $cw = ?, hero = COALESCE(?, hero) WHERE id = ?")
         ->execute([$best[0], $best[1], $best[2], $hero ? json_encode($hero) : null, $a['id']]);
+    // Шпиль: рекорд этажа только растёт
+    $ct = game_mode($in) === 'btn' ? 'tower_btn' : 'tower';
+    $tw = int_in(isset($b['tower']) ? $b['tower'] : 0, 0, 1000, 0);
+    if (isset($a[$ct]) && $tw > (int)$a[$ct]) $db->prepare("UPDATE mp_accounts SET $ct = ? WHERE id = ?")->execute([$tw, $a['id']]);
     // приглашённый победил первого босса: облик получают он и тот, кто его пригласил
     if (!empty($a['invited_by']) && (int)$a['ref_done'] === 0 && $best[0] >= REF_BOSSES) {
         $db->prepare('UPDATE mp_accounts SET ref_done = 1 WHERE id = ?')->execute([$a['id']]);
@@ -500,6 +512,27 @@ if ($action === 'save_put') {
 }
 
 // ---------------------------------------------------------------- рейтинг по боссам
+if ($action === 'top' && isset($in['board']) && $in['board'] === 'tower') { // рейтинг Шпиля: по лучшему этажу
+    $mode = game_mode($in);
+    $ct = $mode === 'btn' ? 'tower_btn' : 'tower';
+    $rows = $db->query("SELECT id, name, $ct AS tower, hero FROM mp_accounts WHERE is_bot = 0 AND $ct > 0
+        ORDER BY $ct DESC, created ASC LIMIT " . TOP)->fetchAll();
+    foreach ($rows as &$r) {
+        $r['tower'] = (int)$r['tower'];
+        $r['look'] = hero_look(json_decode($r['hero'] ?: 'null', true));
+        unset($r['hero']);
+    }
+    unset($r);
+    $rank = null;
+    $a = account_by_token(isset($in['token']) ? $in['token'] : '');
+    if ($a && (int)$a[$ct] > 0) {
+        $q = $db->prepare("SELECT COUNT(*) FROM mp_accounts WHERE is_bot = 0 AND $ct > ?");
+        $q->execute([(int)$a[$ct]]);
+        $rank = (int)$q->fetchColumn() + 1;
+    }
+    reply(['rows' => $rows, 'rank' => $rank, 'mode' => $mode, 'board' => 'tower']);
+}
+
 if ($action === 'top') {
     $mode = game_mode($in);
     [$cb, $cl, $cw] = best_cols($mode);

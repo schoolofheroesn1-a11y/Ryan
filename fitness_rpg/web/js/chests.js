@@ -1,6 +1,6 @@
 // Сундуки: иногда выпадают с врагов (с босса — всегда), открываются упражнением в инвентаре у костра.
 // У каждой земли свой сундук и своё уникальное оружие — выпадает редко, но после pity сундуков без него — точно.
-import { SWORDS, locationFor, rewards } from "./gear.js";
+import { RELICS, SWORDS, locationFor, rewards } from "./gear.js";
 
 /** Сундуки земель: чем дальше земля, тем больше повторений и богаче добыча. */
 export const CHESTS = {
@@ -12,8 +12,10 @@ export const CHESTS = {
   // свои уникальные награды (Тыквенный амулет, облик «Клинок Нетопыря») — 25% и наверняка к 6-му сундуку,
   // легендарное оружие земель и талисманы — чаще, чем в обычных сундуках
   samhain: { loc: 0, spire: true, name: "Сундук Самайна", ex: "squat", reps: 25, uniques: ["pumpkin", "sword_bat"], chance: 0.25, pity: 6 },
+  // Морской поход: с Кракена — всегда, с команды — иногда; Меч Прилива и облик «Новый пират»
+  sea: { loc: 0, sea: true, name: "Сундук Прилива", ex: "pushup", reps: 20, uniques: ["tide", "armor_pirate"], chance: 0.2, pity: 8 },
 };
-export const CHEST_ORDER = ["crypt", "castle", "grave", "abyss", "samhain"];
+export const CHEST_ORDER = ["crypt", "castle", "grave", "abyss", "samhain", "sea"];
 export const LAND_CHESTS = CHEST_ORDER.slice(0, 4);
 export const CHEST_DROP = 0.12; // шанс сундука с обычного врага
 const LOC_START = { 1: 1, 2: 16, 3: 31, 4: 46 };
@@ -54,7 +56,7 @@ export function addChest(p, kind, n = 1) {
 export function rollLoot(p, kind, rnd = Math.random, ownsSkin = () => false) {
   const C = CHESTS[kind], loc = C.loc, owned = p.owned || [];
   chestState(p);
-  if (C.spire) return rollSpireLoot(p, C, rnd, ownsSkin);
+  if (C.uniques) return rollUniqueLoot(p, kind, C, rnd, ownsSkin);
   const base = rewards(LOC_START[loc] + 7)[0];
   const loot = [
     { kind: "ash", n: Math.round(base * (1 + rnd())), rarity: "common" },
@@ -78,24 +80,27 @@ export function rollLoot(p, kind, rnd = Math.random, ownsSkin = () => false) {
   return loot;
 }
 
-/** Сундук Самайна: щедрый пепел и камни, свои уникальные награды, чаще легенды земель и талисманы. */
-function rollSpireLoot(p, C, rnd, ownsSkin) {
+/** Предмет или облик: облики (sword_*, armor_*) — в покупках лавки, остальное — в вещах героя. */
+export const isSkinKey = (key) => !SWORDS[key] && !RELICS[key];
+
+/** Сундуки Самайна и Прилива: щедрый пепел и камни, свои уникальные награды (гарантия), чаще легенды и талисманы. */
+function rollUniqueLoot(p, kind, C, rnd, ownsSkin) {
   const owned = p.owned || [];
   const loot = [
     { kind: "ash", n: Math.round(3000 * (1 + rnd())), rarity: "common" },
     { kind: "red", n: 14 + Math.floor(rnd() * 12), rarity: "common" },
   ];
   if (rnd() < 0.7) loot.push({ kind: "blue", n: 1 + (rnd() < 0.4 ? 1 : 0), rarity: "rare" });
-  const has = (key) => (key.startsWith("sword_") ? ownsSkin(key) : owned.includes(key));
+  const has = (key) => (isSkinKey(key) ? ownsSkin(key) : owned.includes(key));
   const missing = C.uniques.filter((k) => !has(k));
   if (missing.length) {
-    const pity = (p.chestPity.samhain || 0) + 1;
+    const pity = (p.chestPity[kind] || 0) + 1;
     if (rnd() < C.chance || pity >= C.pity) {
       const key = missing[Math.floor(rnd() * missing.length)];
-      loot.push({ kind: key.startsWith("sword_") ? "skin" : "item", key, rarity: "legendary" });
-      p.chestPity.samhain = 0;
+      loot.push({ kind: isSkinKey(key) ? "skin" : "item", key, rarity: "legendary" });
+      p.chestPity[kind] = 0;
     } else {
-      p.chestPity.samhain = pity;
+      p.chestPity[kind] = pity;
     }
   }
   const legends = LAND_CHESTS.map((k) => CHESTS[k].weapon).filter((k) => !owned.includes(k));
