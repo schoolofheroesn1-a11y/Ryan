@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { Button, Card, Empty, ErrorText, Field, Modal, confirmDelete } from '../../components/ui';
 import { fmtDate, fmtPct, markFromPercent, pctText, today } from '../../lib/format';
 import { SCALE_COLORS, type Meta } from '../../lib/meta';
+import { useExams } from '../exams';
 
 export const HEALTH: Record<string, { label: string; cls: string }> = {
   achieved: { label: 'Цель достигнута 🎉', cls: 'bg-emerald-100 text-emerald-800' },
@@ -14,13 +15,13 @@ export const HEALTH: Record<string, { label: string; cls: string }> = {
   done: { label: 'Выполнена', cls: 'bg-emerald-100 text-emerald-800' },
   dropped: { label: 'Отменена', cls: 'bg-slate-100 text-slate-500' },
 };
-const KIND_EMOJI: Record<string, string> = { subject: '📘', scale: '🌱', attendance: '📅', custom: '🎯' };
+const KIND_EMOJI: Record<string, string> = { subject: '📘', scale: '🌱', attendance: '📅', custom: '🎯', exam: '🎓' };
 
 function daysLeft(deadline: string | null) {
   if (!deadline) return null;
   return Math.ceil((new Date(deadline + 'T23:59:59').getTime() - Date.now()) / 864e5);
 }
-const fmtVal = (g: any, v: number | null) => (v == null ? '—' : g.kind === 'scale' ? `${v}` : fmtPct(v));
+const fmtVal = (g: any, v: number | null) => (v == null ? '—' : g.kind === 'scale' ? `${v}` : g.kind === 'exam' ? `${v} б.` : fmtPct(v));
 
 /** "Путь к цели": track with the start point, current value and the target flag. */
 export function GoalPath({ g }: { g: any }) {
@@ -38,12 +39,12 @@ export function GoalPath({ g }: { g: any }) {
       </div>
     );
   }
-  const max = g.kind === 'scale' ? 10 : 100;
+  const max = g.max || (g.kind === 'scale' ? 10 : 100);
   const pos = (v: number | null) => `${Math.max(0, Math.min(100, ((v ?? 0) / max) * 100))}%`;
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className={`font-mono text-4xl font-semibold ${g.kind === 'scale' ? 'text-brand-600' : pctText(g.current)}`}>{fmtVal(g, g.current)}</span>
+        <span className={`font-mono text-4xl font-semibold ${g.kind === 'scale' || g.kind === 'exam' ? 'text-brand-600' : pctText(g.current)}`}>{fmtVal(g, g.current)}</span>
         <span className="text-slate-600">→ цель <b className="font-mono">{fmtVal(g, g.target_value)}</b>
           {g.kind === 'subject' && g.target_value != null && <span className="text-muted"> (≈ «{markFromPercent(g.target_value)}»)</span>}
         </span>
@@ -66,7 +67,7 @@ export function GoalPath({ g }: { g: any }) {
       <div className="mt-1.5 flex justify-between font-mono text-[11px] text-muted">
         <span>0</span>
         {g.start_value != null && <span>старт {fmtVal(g, g.start_value)}</span>}
-        <span>{max}{g.kind === 'scale' ? '' : '%'}</span>
+        <span>{max}{g.kind === 'scale' ? '' : g.kind === 'exam' ? ' б.' : '%'}</span>
       </div>
     </div>
   );
@@ -230,12 +231,14 @@ function deadlinePresets() {
 
 export function GoalModal({ data, meta, onClose, onDone, preset }: {
   data: any; meta: Meta; onClose: () => void; onDone: () => void;
-  preset?: { title?: string; note?: string; source?: string };
+  preset?: { title?: string; note?: string; source?: string; examId?: number };
 }) {
-  const [kind, setKind] = useState<'subject' | 'scale' | 'attendance' | 'custom'>(preset ? 'custom' : 'subject');
+  const exams = useExams();
+  const [kind, setKind] = useState<'subject' | 'scale' | 'attendance' | 'custom' | 'exam'>(preset?.examId ? 'exam' : preset ? 'custom' : 'subject');
+  const [examId, setExamId] = useState(preset?.examId ? String(preset.examId) : '');
   const [subjects, setSubjects] = useState<any[]>([]);
   const [form, setForm] = useState({
-    subjectId: '', scaleKey: meta.scales[0].key, target: '85', title: preset?.title || '', note: preset?.note || '',
+    subjectId: '', scaleKey: meta.scales[0].key, target: preset?.examId ? '4' : '85', title: preset?.title || '', note: preset?.note || '',
     deadline: deadlinePresets()[1].value, steps: '',
   });
   const [loading, setLoading] = useState(false);
@@ -252,7 +255,7 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
 
   const setKindAndTarget = (k: typeof kind) => {
     setKind(k);
-    setForm((f) => ({ ...f, target: k === 'scale' ? '7' : k === 'attendance' ? '95' : f.target === '7' ? '85' : f.target }));
+    setForm((f) => ({ ...f, target: k === 'scale' ? '7' : k === 'attendance' ? '95' : k === 'exam' ? '4' : f.target === '7' || f.target === '4' ? '85' : f.target }));
   };
   const subjName = subjects.find((s) => String(s.id) === form.subjectId)?.name;
   const currentSubj = data.stats.subjects.find((s: any) => s.subject === subjName);
@@ -264,7 +267,7 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
     setError(null);
     try {
       await api.post(`/api/students/${data.student.id}/goals`, {
-        kind, subjectId: form.subjectId, scaleKey: form.scaleKey, target: form.target, title: form.title,
+        kind, subjectId: form.subjectId, scaleKey: form.scaleKey, examId: examId || exams[0]?.id, target: form.target, title: form.title,
         note: form.note, deadline: form.deadline, steps: form.steps.split('\n'), source: preset?.source,
       });
       onDone();
@@ -278,13 +281,16 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
     { id: 'subject', emoji: '📘', title: 'Предмет', text: 'Поднять успеваемость до нужного процента' },
     { id: 'scale', emoji: '🌱', title: 'Качество', text: 'Мотивация, самостоятельность и др. (1–10)' },
     { id: 'attendance', emoji: '📅', title: 'Посещаемость', text: 'Процент посещённых уроков' },
+    { id: 'exam', emoji: '🎓', title: 'ОГЭ / ЕГЭ', text: 'Отметка или балл по результатам пробников' },
     { id: 'custom', emoji: '🎯', title: 'Своя цель', text: 'Олимпиада, проект, привычка — по шагам' },
   ] as const;
+  const exam = exams.find((e) => String(e.id) === (examId || String(exams[0]?.id ?? '')));
+  const lastMock = data.exams?.find((x: any) => x.exam.id === exam?.id)?.latest;
 
   return (
     <Modal open onClose={onClose} title="Новая цель" wide>
       <form onSubmit={submit} className="space-y-5">
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {KINDS.map((k) => (
             <button type="button" key={k.id} onClick={() => setKindAndTarget(k.id)}
               className={`rounded-xl border p-3 text-left transition ${kind === k.id ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-200' : 'border-border hover:border-slate-300'}`}>
@@ -331,6 +337,33 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
             </Field>
           </div>
         )}
+        {kind === 'exam' && (exams.length === 0 ? (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">Сначала создайте экзамен во вкладке «ОГЭ / ЕГЭ» на странице класса.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Экзамен">
+              <select className="input" value={examId || String(exams[0].id)} onChange={(e) => setExamId(e.target.value)}>
+                {exams.map((e) => <option key={e.id} value={e.id}>{e.type === 'oge' ? 'ОГЭ' : 'ЕГЭ'} · {e.title}</option>)}
+              </select>
+            </Field>
+            {exam?.type === 'oge' ? (
+              <Field label={`Цель — отметка ${lastMock ? `(сейчас прогноз ${lastMock.prediction.label})` : ''}`}>
+                <div className="flex gap-1.5">
+                  {['3', '4', '5'].map((m) => (
+                    <button type="button" key={m} onClick={() => setForm({ ...form, target: m })}
+                      className={`h-10 flex-1 rounded-xl border font-mono font-semibold ${form.target === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-border text-slate-600'}`}>
+                      «{m}» <span className="text-xs font-normal text-muted">от {exam.thresholds[m]}</span>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            ) : (
+              <Field label={exam?.scale ? 'Цель — тестовый балл' : 'Цель — первичный балл'}>
+                <input className="input font-mono" type="number" min={1} max={exam?.scale ? 100 : exam?.maxPrimary} value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required />
+              </Field>
+            )}
+          </div>
+        ))}
         {kind === 'attendance' && (
           <Field label={`Цель по посещаемости, % ${data.stats.attendance.rate != null ? `(сейчас ${fmtPct(data.stats.attendance.rate)})` : ''}`}>
             <input className="input max-w-xs font-mono" type="number" min={1} max={100} value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required />

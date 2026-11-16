@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { all, get, run, tx, UPLOAD_DIR } from './db';
 import {
+  createStudentSession, requireStudent,
   accessibleClassIds, canAccessClass, canAccessStudent, createSession, destroySession,
   hashPassword, loadUser, requireAdmin, requireAuth, verifyPassword, type User,
 } from './auth';
@@ -18,6 +19,8 @@ import { MATERIAL_CATEGORIES, SCALES, cleanScores } from './scales';
 import { computeScaleStats } from './stats';
 import { normalizeGrade, MARK_THRESHOLDS } from './grading';
 import { enrichGoal, measure, studentGoals, type GoalKind } from './goals';
+import { meetingPrep, mentoringInfo, mentoringOverview } from './mentoring';
+import { classExam, cleanExamInput, getExam, listExams, predict, primaryForTarget, studentExams } from './exams';
 import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
 const app = express();
@@ -98,13 +101,24 @@ app.post('/api/setup', wrap((req, res) => {
 }));
 
 app.post('/api/login', wrap((req, res) => {
-  const email = str(req.body.email, 'Email');
+  const email = str(req.body.email, 'Логин');
   const password = str(req.body.password, 'Пароль');
+  const nowIso = new Date().toISOString();
   const u = get<any>('SELECT * FROM users WHERE email = ?', email);
-  if (!u || !verifyPassword(password, u.password_hash)) throw new HttpError(401, 'Неверный email или пароль');
-  run('DELETE FROM sessions WHERE expires_at < ?', new Date().toISOString());
-  createSession(res, u.id);
-  res.json({ ok: true });
+  if (u && verifyPassword(password, u.password_hash)) {
+    run('DELETE FROM sessions WHERE expires_at < ?', nowIso);
+    createSession(res, u.id);
+    return res.json({ ok: true, kind: 'staff' });
+  }
+  // Student cabinet login
+  const a = get<any>('SELECT * FROM student_accounts WHERE login = ?', email);
+  if (a && verifyPassword(password, a.password_hash)) {
+    run('DELETE FROM student_sessions WHERE expires_at < ?', nowIso);
+    run("UPDATE student_accounts SET last_login = datetime('now') WHERE id = ?", a.id);
+    createStudentSession(res, a.student_id);
+    return res.json({ ok: true, kind: 'student' });
+  }
+  throw new HttpError(401, 'Неверный логин или пароль');
 }));
 
 app.post('/api/logout', (req, res) => {
@@ -113,8 +127,98 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-  res.json({ user: req.user || null });
+  res.json({ user: req.user || null, student: req.student || null });
 });
+
+// ---------- Student cabinet (only the student's own data) ----------
+app.use('/api/student', requireStudent);
+app.get('/api/student/me', (req, res) => {
+  const sid = req.student!.studentId;
+  const stats = computeStudentStats(sid);
+  const m = mentoringInfo(sid);
+  res.json({
+    me: req.student,
+    scales: SCALES,
+    stats: { percent: stats.percent, average: stats.average, subjects: stats.subjects, attendance: stats.attendance.rate },
+    grades: all<any>(
+      `SELECT g.id, g.date, g.value, COALESCE(g.percent, g.value * 20) AS percent, g.score, g.max_score, g.kind, g.comment, s.name AS subject
+       FROM grades g JOIN subjects s ON s.id = g.subject_id WHERE g.student_id = ? ORDER BY g.date DESC, g.id DESC LIMIT 40`, sid),
+    goals: studentGoals(sid).filter((g) => g.status !== 'dropped'),
+    exams: studentExams(sid),
+    selfAssessments: all<any>('SELECT * FROM self_assessments WHERE student_id = ? ORDER BY date DESC, id DESC LIMIT 12', sid)
+      .map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') })),
+    reflections: all<any>(
+      `SELECT id, extracted_text AS text, COALESCE(material_date, substr(created_at, 1, 10)) AS date FROM files
+       WHERE student_id = ? AND by_student = 1 ORDER BY id DESC LIMIT 20`, sid),
+    mentor: m.mentor ? { name: m.mentor.name } : null,
+    agreements: m.meetings.slice(0, 3).map((x: any) => ({ date: x.date, agreements: x.agreements, next_date: x.next_date })).filter((x: any) => x.agreements),
+  });
+});
+app.post('/api/student/reflection', wrap((req, res) => {
+  const sid = req.student!.studentId;
+  const parts = [
+    ['Что получилось на этой неделе', str(req.body.worked, 'Что получилось', false)],
+    ['Что было трудно', str(req.body.hard, 'Что было трудно', false)],
+    ['Что сделаю иначе / цель на следующую неделю', str(req.body.next, 'План', false)],
+  ].filter(([, v]) => v);
+  if (!parts.length) throw new HttpError(400, 'Напиши хотя бы один ответ');
+  const text = parts.map(([q, a]) => `${q}: ${a}`).join('\n\n').slice(0, 20_000);
+  const d = new Date().toISOString().slice(0, 10);
+  const stored = crypto.randomBytes(16).toString('hex') + '.txt';
+  fs.writeFileSync(path.join(UPLOAD_DIR, stored), text, 'utf8');
+  const r = run(
+    `INSERT INTO files (student_id, original_name, stored_name, mime, size, description, kind, extracted_text, extract_status, category, material_date, by_student)
+     VALUES (?, ?, ?, 'text/plain; charset=utf-8', ?, 'Ученик (сам)', 'message', ?, 'ok', 'Рефлексия ученика', ?, 1)`,
+    sid, `Рефлексия ученика от ${d.split('-').reverse().join('.')}.txt`, stored, Buffer.byteLength(text), text, d,
+  );
+  enqueueMaterial(Number(r.lastInsertRowid));
+  res.json({ ok: true });
+}));
+app.post('/api/student/self-assessment', wrap((req, res) => {
+  const scores = cleanScores(req.body.scores);
+  if (!Object.keys(scores).length) throw new HttpError(400, 'Оцени себя хотя бы по одному качеству');
+  run('INSERT INTO self_assessments (student_id, date, scores, comment) VALUES (?, ?, ?, ?)',
+    req.student!.studentId, new Date().toISOString().slice(0, 10), JSON.stringify(scores), str(req.body.comment, 'Комментарий', false).slice(0, 1000));
+  res.json({ ok: true });
+}));
+app.post('/api/student/goals', wrap((req, res) => {
+  const sid = req.student!.studentId;
+  const title = str(req.body.title, 'Цель').slice(0, 200);
+  const steps: string[] = (Array.isArray(req.body.steps) ? req.body.steps : []).map((x: any) => String(x).trim()).filter(Boolean).slice(0, 15);
+  tx(() => {
+    const g = Number(run(`INSERT INTO goals (student_id, title, kind, deadline, source) VALUES (?, ?, 'custom', ?, 'student')`,
+      sid, title, req.body.deadline ? date(req.body.deadline) : null).lastInsertRowid);
+    steps.forEach((t, i) => run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', g, t.slice(0, 200), i));
+  });
+  res.json({ ok: true });
+}));
+/** A step of the student's own goal. */
+function ownStep(sid: number, stepId: number) {
+  const st = get<any>('SELECT gs.*, g.student_id FROM goal_steps gs JOIN goals g ON g.id = gs.goal_id WHERE gs.id = ?', stepId);
+  if (!st || st.student_id !== sid) throw new HttpError(404, 'Шаг не найден');
+  return st;
+}
+app.patch('/api/student/goal-steps/:id', wrap((req, res) => {
+  const st = ownStep(req.student!.studentId, id(req.params.id));
+  const done = req.body.done ? 1 : 0;
+  run(`UPDATE goal_steps SET done = ?, done_at = CASE WHEN ? = 1 THEN COALESCE(done_at, datetime('now')) ELSE NULL END WHERE id = ?`, done, done, st.id);
+  res.json({ ok: true });
+}));
+app.post('/api/student/goals/:id/steps', wrap((req, res) => {
+  const g = get<any>('SELECT * FROM goals WHERE id = ?', id(req.params.id));
+  if (!g || g.student_id !== req.student!.studentId) throw new HttpError(404, 'Цель не найдена');
+  const pos = get<any>('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM goal_steps WHERE goal_id = ?', g.id).p;
+  run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', g.id, str(req.body.text, 'Шаг').slice(0, 200), pos);
+  res.json({ ok: true });
+}));
+app.post('/api/student/password', wrap((req, res) => {
+  const a = get<any>('SELECT * FROM student_accounts WHERE student_id = ?', req.student!.studentId);
+  const next = str(req.body.next, 'Новый пароль');
+  if (!a || !verifyPassword(str(req.body.current, 'Текущий пароль'), a.password_hash)) throw new HttpError(400, 'Текущий пароль неверен');
+  if (next.length < 6) throw new HttpError(400, 'Пароль должен быть не короче 6 символов');
+  run('UPDATE student_accounts SET password_hash = ? WHERE id = ?', hashPassword(next), a.id);
+  res.json({ ok: true });
+}));
 
 app.use('/api', requireAuth);
 
@@ -405,7 +509,7 @@ app.get('/api/students/:id', wrap((req, res) => {
     notes: all('SELECT n.*, u.name AS teacher FROM notes n LEFT JOIN users u ON u.id = n.teacher_id WHERE n.student_id = ? ORDER BY n.created_at DESC', sid),
     files: all<any>(
       `SELECT f.id, f.student_id, f.original_name, f.mime, f.size, f.description, f.kind, f.extract_status, f.created_at,
-       f.category, COALESCE(f.material_date, substr(f.created_at, 1, 10)) AS material_date, f.ai_status, f.ai_summary,
+       f.category, COALESCE(f.material_date, substr(f.created_at, 1, 10)) AS material_date, f.ai_status, f.ai_summary, f.by_student,
        f.ai_scores, f.ai_tags, f.ai_error, LENGTH(f.extracted_text) AS text_length, u.name AS uploader
        FROM files f LEFT JOIN users u ON u.id = f.uploaded_by WHERE f.student_id = ?
        ORDER BY material_date DESC, f.id DESC`, sid,
@@ -416,6 +520,11 @@ app.get('/api/students/:id', wrap((req, res) => {
     ).map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') })),
     scaleStats: computeScaleStats(sid),
     goals: studentGoals(sid),
+    exams: studentExams(sid),
+    mentoring: mentoringInfo(sid),
+    selfAssessments: all<any>('SELECT * FROM self_assessments WHERE student_id = ? ORDER BY date DESC, id DESC', sid)
+      .map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') })),
+    account: get<any>('SELECT login, created_at, last_login FROM student_accounts WHERE student_id = ?', sid) ?? null,
     reports: all<any>('SELECT r.*, u.name AS author FROM ai_reports r LEFT JOIN users u ON u.id = r.created_by WHERE r.student_id = ? ORDER BY r.created_at DESC', sid)
       .map((r) => ({ ...r, content: JSON.parse(r.content) })),
   });
@@ -580,7 +689,7 @@ app.delete('/api/assessments/:id', wrap((req, res) => {
 }));
 
 // Goals
-const GOAL_KINDS: GoalKind[] = ['subject', 'scale', 'attendance', 'custom'];
+const GOAL_KINDS: GoalKind[] = ['subject', 'scale', 'attendance', 'custom', 'exam'];
 app.post('/api/students/:id/goals', wrap((req, res) => {
   const sid = id(req.params.id);
   assertStudent(req.user!, sid);
@@ -589,23 +698,35 @@ app.post('/api/students/:id/goals', wrap((req, res) => {
   const scaleKey = kind === 'scale' ? str(req.body.scaleKey, 'Качество') : null;
   if (scaleKey && !SCALES.some((s) => s.key === scaleKey)) throw new HttpError(400, 'Неизвестное качество');
   let target: number | null = null;
-  if (kind !== 'custom') {
+  let examId: number | null = null;
+  let examLabel = '';
+  if (kind === 'exam') {
+    examId = id(req.body.examId);
+    const exam = getExam(examId);
+    if (!exam) throw new HttpError(404, 'Экзамен не найден');
+    const want = Number(req.body.target);
+    target = primaryForTarget(exam, want);
+    if (target == null || !Number.isFinite(target) || target <= 0 || target > exam.maxPrimary) {
+      throw new HttpError(400, exam.type === 'oge' ? 'Цель — отметка 3, 4 или 5' : 'Цель не помещается в шкалу этого экзамена');
+    }
+    examLabel = `${exam.title} — ${exam.type === 'oge' ? `«${want}»` : exam.scale ? `${want} т.б.` : `${want} перв.`}`;
+  } else if (kind !== 'custom') {
     target = Number(req.body.target);
     const max = kind === 'scale' ? 10 : 100;
     if (!Number.isFinite(target) || target <= 0 || target > max) throw new HttpError(400, `Целевое значение должно быть от 1 до ${max}`);
   }
-  const start = kind === 'custom' ? null : measure(sid, kind, { subjectId, scaleKey }).value;
+  const start = kind === 'custom' ? null : measure(sid, kind, { subjectId, scaleKey, examId }).value;
   const subjectName = subjectId ? get<any>('SELECT name FROM subjects WHERE id = ?', subjectId)?.name : null;
   const scaleLabel = scaleKey ? SCALES.find((s) => s.key === scaleKey)!.label : null;
   const title = str(req.body.title, 'Название', false) || (
-    kind === 'subject' ? `${subjectName}: ${target}%` : kind === 'scale' ? `${scaleLabel}: ${target} из 10` : kind === 'attendance' ? `Посещаемость ${target}%` : '');
+    kind === 'exam' ? examLabel : kind === 'subject' ? `${subjectName}: ${target}%` : kind === 'scale' ? `${scaleLabel}: ${target} из 10` : kind === 'attendance' ? `Посещаемость ${target}%` : '');
   if (!title) throw new HttpError(400, 'Поле «Название» обязательно');
   const steps: string[] = (Array.isArray(req.body.steps) ? req.body.steps : []).map((x: any) => String(x).trim()).filter(Boolean).slice(0, 20);
   const gid = tx(() => {
     const r = run(
-      `INSERT INTO goals (student_id, title, kind, subject_id, scale_key, start_value, target_value, deadline, note, source, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      sid, title, kind, subjectId, scaleKey, start, target, req.body.deadline ? date(req.body.deadline) : null,
+      `INSERT INTO goals (student_id, title, kind, subject_id, scale_key, exam_id, start_value, target_value, deadline, note, source, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sid, title, kind, subjectId, scaleKey, examId, start, target, req.body.deadline ? date(req.body.deadline) : null,
       str(req.body.note, 'Комментарий', false), req.body.source === 'ai' ? 'ai' : 'teacher', req.user!.id,
     );
     const g = Number(r.lastInsertRowid);
@@ -659,6 +780,208 @@ app.delete('/api/goal-steps/:id', wrap((req, res) => {
   const st = ownedStep(req.user!, id(req.params.id));
   run('DELETE FROM goal_steps WHERE id = ?', st.id);
   res.json({ ok: true });
+}));
+
+// ---------- Student accounts (issued by staff) ----------
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p',
+  р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+const translit = (s: string) => s.toLowerCase().split('').map((c) => TRANSLIT[c] ?? (/[a-z0-9]/.test(c) ? c : '')).join('');
+const readablePassword = () => {
+  const abc = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.randomBytes(8), (b) => abc[b % abc.length]).join('');
+};
+app.post('/api/students/:id/account', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const st = get<any>('SELECT * FROM students WHERE id = ?', sid);
+  const existing = get<any>('SELECT * FROM student_accounts WHERE student_id = ?', sid);
+  const password = readablePassword();
+  let login = existing?.login;
+  if (!login) {
+    const [last, first] = st.full_name.split(/\s+/);
+    const base = (translit(last || '') + (first ? '.' + translit(first) : '')).replace(/^\.+|\.+$/g, '') || 'student';
+    login = base;
+    for (let i = 2; get('SELECT 1 FROM student_accounts WHERE login = ?', login) || get('SELECT 1 FROM users WHERE email = ?', login); i++) login = `${base}${i}`;
+    run('INSERT INTO student_accounts (student_id, login, password_hash) VALUES (?, ?, ?)', sid, login, hashPassword(password));
+  } else {
+    run('UPDATE student_accounts SET password_hash = ? WHERE id = ?', hashPassword(password), existing.id);
+    run('DELETE FROM student_sessions WHERE student_id = ?', sid);
+  }
+  res.json({ login, password });
+}));
+app.delete('/api/students/:id/account', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  run('DELETE FROM student_accounts WHERE student_id = ?', sid);
+  run('DELETE FROM student_sessions WHERE student_id = ?', sid);
+  res.json({ ok: true });
+}));
+
+// ---------- Mentoring ----------
+app.get('/api/staff', (_req, res) => res.json(all('SELECT id, name, role FROM users ORDER BY name')));
+app.get('/api/mentoring', (req, res) => res.json(mentoringOverview(req.user!.id, req.user!.role === 'admin')));
+app.put('/api/students/:id/mentor', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const mid = req.body.mentorId ? id(req.body.mentorId) : null;
+  if (mid && !get('SELECT 1 FROM users WHERE id = ?', mid)) throw new HttpError(404, 'Сотрудник не найден');
+  run('UPDATE students SET mentor_id = ? WHERE id = ?', mid, sid);
+  res.json({ ok: true });
+}));
+app.post('/api/students/:id/meetings', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const d = optDate(req.body.date);
+  const agreements = str(req.body.agreements, 'Договорённости', false);
+  const went = str(req.body.wentWell, 'Что получилось', false);
+  const hard = str(req.body.difficulties, 'Трудности', false);
+  if (!agreements && !went && !hard) throw new HttpError(400, 'Заполните хотя бы одно поле встречи');
+  const mentorId = get<any>('SELECT mentor_id FROM students WHERE id = ?', sid)?.mentor_id || req.user!.id;
+  const mid = tx(() => {
+    const r = run(
+      'INSERT INTO mentor_meetings (student_id, mentor_id, date, went_well, difficulties, agreements, next_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      sid, mentorId, d, went, hard, agreements, req.body.nextDate ? date(req.body.nextDate) : null,
+    );
+    // Agreements → goal steps (one per line): into an existing goal or a new "Договорённости" goal.
+    const lines = agreements.split('\n').map((x) => x.replace(/^[-–•\d.)\s]+/, '').trim()).filter(Boolean);
+    if (lines.length && req.body.toGoal) {
+      let gid: number;
+      if (req.body.toGoal === 'new') {
+        gid = Number(run(
+          `INSERT INTO goals (student_id, title, kind, deadline, source, created_by) VALUES (?, ?, 'custom', ?, 'mentor', ?)`,
+          sid, `Договорённости со встречи ${d.split('-').reverse().join('.')}`, req.body.nextDate ? date(req.body.nextDate) : null, req.user!.id,
+        ).lastInsertRowid);
+      } else {
+        gid = id(req.body.toGoal);
+        if (!get('SELECT 1 FROM goals WHERE id = ? AND student_id = ?', gid, sid)) throw new HttpError(400, 'Цель не найдена');
+      }
+      const pos = get<any>('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM goal_steps WHERE goal_id = ?', gid).p;
+      lines.forEach((t, i) => run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', gid, t, pos + i));
+    }
+    return Number(r.lastInsertRowid);
+  });
+  res.json({ id: mid });
+}));
+app.delete('/api/meetings/:id', wrap((req, res) => {
+  const m = ownedRow(req.user!, 'mentor_meetings', id(req.params.id));
+  run('DELETE FROM mentor_meetings WHERE id = ?', m.id);
+  res.json({ ok: true });
+}));
+app.post('/api/students/:id/meeting-prep', wrap(async (req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  res.json(await meetingPrep(sid));
+}));
+
+// ---------- OGE / EGE ----------
+app.get('/api/exams', (_req, res) => res.json(listExams()));
+app.post('/api/exams', wrap((req, res) => {
+  let cfg;
+  try { cfg = cleanExamInput(req.body); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  const r = run('INSERT INTO exams (title, type, subject_id, tasks, thresholds, scale, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    str(req.body.title, 'Название'), cfg.type, req.body.subjectId ? id(req.body.subjectId) : null,
+    JSON.stringify(cfg.tasks), JSON.stringify(cfg.thresholds), cfg.scale ? JSON.stringify(cfg.scale) : null, req.user!.id);
+  res.json({ id: Number(r.lastInsertRowid) });
+}));
+app.patch('/api/exams/:id', wrap((req, res) => {
+  const exam = getExam(id(req.params.id));
+  if (!exam) throw new HttpError(404, 'Экзамен не найден');
+  if (req.body.archived !== undefined && Object.keys(req.body).length === 1) {
+    run('UPDATE exams SET archived = ? WHERE id = ?', req.body.archived ? 1 : 0, exam.id);
+    return res.json({ ok: true });
+  }
+  let cfg;
+  try { cfg = cleanExamInput(req.body); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  const used = get<any>('SELECT COUNT(*) c FROM mock_results WHERE exam_id = ? AND scores IS NOT NULL', exam.id).c;
+  if (used && cfg.tasks.length !== exam.tasks.length) throw new HttpError(400, 'По экзамену уже есть пробники по заданиям — число заданий менять нельзя (создайте новый экзамен)');
+  run('UPDATE exams SET title = ?, type = ?, subject_id = ?, tasks = ?, thresholds = ?, scale = ? WHERE id = ?',
+    str(req.body.title, 'Название'), cfg.type, req.body.subjectId ? id(req.body.subjectId) : null,
+    JSON.stringify(cfg.tasks), JSON.stringify(cfg.thresholds), cfg.scale ? JSON.stringify(cfg.scale) : null, exam.id);
+  res.json({ ok: true });
+}));
+app.delete('/api/exams/:id', wrap((req, res) => {
+  const ex = get<any>('SELECT * FROM exams WHERE id = ?', id(req.params.id));
+  if (!ex) throw new HttpError(404, 'Экзамен не найден');
+  if (req.user!.role !== 'admin' && ex.created_by !== req.user!.id) throw new HttpError(403, 'Удалить экзамен может администрация или автор');
+  run('DELETE FROM exams WHERE id = ?', ex.id);
+  res.json({ ok: true });
+}));
+
+/** Validates one mock result: either per-task scores or only a total. */
+function cleanMock(exam: NonNullable<ReturnType<typeof getExam>>, row: any) {
+  if (Array.isArray(row.scores) && row.scores.some((v: any) => v !== '' && v != null)) {
+    if (row.scores.length !== exam.tasks.length) throw new HttpError(400, 'Число баллов не совпадает с числом заданий');
+    const scores = row.scores.map((v: any, i: number) => {
+      const n = v === '' || v == null ? 0 : Number(String(v).replace(',', '.'));
+      if (!Number.isFinite(n) || n < 0 || n > exam.tasks[i].max) throw new HttpError(400, `Задание №${i + 1}: от 0 до ${exam.tasks[i].max}`);
+      return n;
+    });
+    return { scores, total: Math.round(scores.reduce((a: number, b: number) => a + b, 0) * 10) / 10 };
+  }
+  const total = Number(String(row.total ?? '').replace(',', '.'));
+  if (row.total === '' || row.total == null || !Number.isFinite(total) || total < 0 || total > exam.maxPrimary) {
+    throw new HttpError(400, `Итоговый балл от 0 до ${exam.maxPrimary}`);
+  }
+  return { scores: null, total };
+}
+
+app.post('/api/students/:id/mocks', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const exam = getExam(id(req.body.examId));
+  if (!exam) throw new HttpError(404, 'Экзамен не найден');
+  const m = cleanMock(exam, req.body);
+  const r = run('INSERT INTO mock_results (exam_id, student_id, date, title, scores, total, comment, teacher_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    exam.id, sid, optDate(req.body.date), str(req.body.title, 'Название', false), m.scores ? JSON.stringify(m.scores) : null, m.total,
+    str(req.body.comment, 'Комментарий', false), req.user!.id);
+  res.json({ id: Number(r.lastInsertRowid), prediction: predict(exam, m.total) });
+}));
+app.delete('/api/mocks/:id', wrap((req, res) => {
+  const m = ownedRow(req.user!, 'mock_results', id(req.params.id));
+  run('DELETE FROM mock_results WHERE id = ?', m.id);
+  res.json({ ok: true });
+}));
+app.post('/api/classes/:id/mocks/bulk', wrap((req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  const exam = getExam(id(req.body.examId));
+  if (!exam) throw new HttpError(404, 'Экзамен не найден');
+  const rows: any[] = Array.isArray(req.body.rows) ? req.body.rows : [];
+  const clean = rows
+    .filter((r) => (Array.isArray(r.scores) && r.scores.some((v: any) => v !== '' && v != null)) || (r.total !== '' && r.total != null))
+    .map((r) => {
+      const sid = id(r.studentId);
+      if (!get('SELECT 1 FROM students WHERE id = ? AND class_id = ?', sid, cid)) throw new HttpError(400, 'Ученик не из этого класса');
+      try {
+        return { sid, ...cleanMock(exam, r) };
+      } catch (e) {
+        const name = get<any>('SELECT full_name FROM students WHERE id = ?', sid)?.full_name;
+        throw new HttpError(400, `${name}: ${(e as Error).message}`);
+      }
+    });
+  const d = optDate(req.body.date);
+  const title = str(req.body.title, 'Название', false);
+  tx(() => clean.forEach((m) => run(
+    'INSERT INTO mock_results (exam_id, student_id, date, title, scores, total, teacher_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    exam.id, m.sid, d, title, m.scores ? JSON.stringify(m.scores) : null, m.total, req.user!.id)));
+  res.json({ added: clean.length });
+}));
+app.get('/api/classes/:id/exams', wrap((req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  const used = all<any>(
+    `SELECT DISTINCT m.exam_id FROM mock_results m JOIN students s ON s.id = m.student_id WHERE s.class_id = ?`, cid,
+  ).map((r) => r.exam_id);
+  res.json({ exams: listExams(), used });
+}));
+app.get('/api/classes/:id/exams/:examId', wrap((req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  const data = classExam(cid, id(req.params.examId));
+  if (!data) throw new HttpError(404, 'Экзамен не найден');
+  res.json(data);
 }));
 
 app.get('/api/files/:id/text', wrap((req, res) => {

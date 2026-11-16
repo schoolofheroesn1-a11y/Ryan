@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BarChart3, BookOpen, Flag, Layers, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpen, Flag, GraduationCap, HeartHandshake, KeyRound, Layers, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Badge, Button, ErrorText, Modal, Spinner, Tabs, confirmDelete } from '../components/ui';
 import { RISK, fmtDate, fmtPct, pctText } from '../lib/format';
@@ -11,9 +11,12 @@ import { BankTab } from './student/Bank';
 import { OverviewTab } from './student/Overview';
 import { PerformanceTab } from './student/Performance';
 import { GoalModal, GoalsTab } from './student/Goals';
+import { StudentExamsTab } from './exams';
+import { MentorTab } from './student/Mentor';
+import { StudentAccessModal } from './student/Access';
 
-type Tab = 'overview' | 'performance' | 'goals' | 'bank' | 'ai';
-type ModalKind = null | 'add' | 'assess' | 'achievement' | 'edit' | 'goal';
+type Tab = 'overview' | 'performance' | 'exams' | 'goals' | 'mentor' | 'bank' | 'ai';
+type ModalKind = null | 'add' | 'assess' | 'achievement' | 'edit' | 'goal' | 'access';
 
 export function StudentPage() {
   const { id } = useParams();
@@ -22,6 +25,7 @@ export function StudentPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [modal, setModal] = useState<ModalKind>(null);
+  const [goalExam, setGoalExam] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const load = useCallback(() => api.get(`/api/students/${id}`).then(setData).catch((e) => setError(e.message)), [id]);
@@ -73,6 +77,11 @@ export function StudentPage() {
                 {student.birth_date && <span>{fmtDate(student.birth_date)}</span>}
                 <Badge className={RISK[stats.risk].cls}>{RISK[stats.risk].label}</Badge>
                 {student.interests && <span>· {student.interests}</span>}
+                {data.mentoring.mentor && (
+                  <span className={`chip ${data.mentoring.overdue ? 'bg-amber-100 text-amber-800' : 'bg-brand-50 text-brand-700'}`}>
+                    <HeartHandshake className="h-3.5 w-3.5" />{data.mentoring.mentor.name}{data.mentoring.overdue ? ' · пора встретиться' : ''}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -80,6 +89,7 @@ export function StudentPage() {
             <Button icon={<Plus className="h-4 w-4" />} onClick={() => setModal('add')}>Добавить в банк</Button>
             <Button variant="secondary" icon={<Flag className="h-4 w-4 text-amber-600" />} onClick={() => setModal('goal')}>Цель</Button>
             <Button variant="secondary" icon={<Sparkles className="h-4 w-4 text-brand-600" />} onClick={() => setTab('ai')}>Советы ИИ</Button>
+            <Button variant="ghost" icon={<KeyRound className="h-4 w-4" />} onClick={() => setModal('access')} title="Доступ ученика в личный кабинет" />
             <Button variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => setModal('edit')} title="Изменить данные" />
             <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={remove} title="Удалить ученика" />
           </div>
@@ -108,7 +118,9 @@ export function StudentPage() {
         tabs={[
           { id: 'overview', label: 'Обзор', icon: <BarChart3 className="h-4 w-4" /> },
           { id: 'performance', label: 'Успеваемость', icon: <BookOpen className="h-4 w-4" /> },
+          { id: 'exams', label: 'ОГЭ / ЕГЭ', count: data.exams.length || undefined, icon: <GraduationCap className="h-4 w-4" /> },
           { id: 'goals', label: 'Цели', count: activeGoals.length, icon: <Flag className="h-4 w-4" /> },
+          { id: 'mentor', label: 'Наставник', count: data.mentoring.meetings.length || undefined, icon: <HeartHandshake className="h-4 w-4" /> },
           { id: 'bank', label: 'Банк ученика', count: bankCount, icon: <Layers className="h-4 w-4" /> },
           { id: 'ai', label: 'Советы ИИ', count: data.reports.length, icon: <Sparkles className="h-4 w-4" /> },
         ]}
@@ -119,7 +131,9 @@ export function StudentPage() {
           onOpenAi={() => setTab('ai')} onOpenGoals={() => setTab('goals')} onOpenPerformance={() => setTab('performance')} />
       )}
       {tab === 'performance' && <PerformanceTab data={data} reload={load} />}
+      {tab === 'exams' && <StudentExamsTab data={data} reload={load} onGoal={(e) => { setGoalExam(e.id); setModal('goal'); }} />}
       {tab === 'goals' && <GoalsTab data={data} meta={meta} reload={load} />}
+      {tab === 'mentor' && <MentorTab data={data} reload={load} />}
       {tab === 'bank' && <BankTab data={data} meta={meta} reload={load} onAdd={() => setModal('add')} />}
       {tab === 'ai' && <AiTab data={data} reload={load} />}
 
@@ -132,8 +146,12 @@ export function StudentPage() {
           <AssessmentForm studentId={student.id} meta={meta} onDone={done} />
         </Modal>
       )}
-      {modal === 'goal' && <GoalModal data={data} meta={meta} onClose={() => setModal(null)} onDone={() => { done(); setTab('goals'); }} />}
+      {modal === 'goal' && (
+        <GoalModal data={data} meta={meta} preset={goalExam ? { examId: goalExam } : undefined}
+          onClose={() => { setModal(null); setGoalExam(null); }} onDone={() => { done(); setGoalExam(null); setTab('goals'); }} />
+      )}
       {modal === 'achievement' && <AchievementModal studentId={student.id} onClose={() => setModal(null)} onDone={() => { done(); setTab('bank'); }} />}
+      {modal === 'access' && <StudentAccessModal data={data} onClose={() => setModal(null)} onDone={load} />}
       {modal === 'edit' && <EditStudentModal student={student} onClose={() => setModal(null)} onDone={() => { done(); window.dispatchEvent(new Event('classes:changed')); }} />}
     </div>
   );

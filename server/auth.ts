@@ -9,10 +9,19 @@ export interface User {
   role: 'admin' | 'teacher';
 }
 
+/** A student signed in to their own cabinet (separate from staff accounts). */
+export interface StudentUser {
+  studentId: number;
+  name: string;
+  className: string | null;
+  login: string;
+}
+
 declare global {
   namespace Express {
     interface Request {
       user?: User;
+      student?: StudentUser;
     }
   }
 }
@@ -46,9 +55,19 @@ export function createSession(res: Response, userId: number) {
   });
 }
 
+export function createStudentSession(res: Response, studentId: number) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
+  run('INSERT INTO student_sessions (token, student_id, expires_at) VALUES (?, ?, ?)', token, studentId, expires.toISOString());
+  res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true', expires });
+}
+
 export function destroySession(req: Request, res: Response) {
   const token = req.cookies?.[COOKIE];
-  if (token) run('DELETE FROM sessions WHERE token = ?', token);
+  if (token) {
+    run('DELETE FROM sessions WHERE token = ?', token);
+    run('DELETE FROM student_sessions WHERE token = ?', token);
+  }
   res.clearCookie(COOKIE);
 }
 
@@ -62,7 +81,22 @@ export function loadUser(req: Request, _res: Response, next: NextFunction) {
       new Date().toISOString(),
     );
     if (user) req.user = user;
+    else {
+      const st = get<any>(
+        `SELECT s.id AS studentId, s.full_name AS name, c.name AS className, a.login FROM student_sessions ss
+         JOIN students s ON s.id = ss.student_id JOIN student_accounts a ON a.student_id = s.id
+         LEFT JOIN classes c ON c.id = s.class_id WHERE ss.token = ? AND ss.expires_at > ?`,
+        token,
+        new Date().toISOString(),
+      );
+      if (st) req.student = st;
+    }
   }
+  next();
+}
+
+export function requireStudent(req: Request, res: Response, next: NextFunction) {
+  if (!req.student) return res.status(401).json({ error: 'Требуется вход в систему' });
   next();
 }
 
@@ -89,7 +123,8 @@ export function canAccessClass(user: User, classId: number | null): boolean {
 }
 
 export function canAccessStudent(user: User, studentId: number): boolean {
-  const s = get<{ class_id: number | null }>('SELECT class_id FROM students WHERE id = ?', studentId);
+  const s = get<{ class_id: number | null; mentor_id: number | null }>('SELECT class_id, mentor_id FROM students WHERE id = ?', studentId);
   if (!s) return false;
-  return canAccessClass(user, s.class_id);
+  // A mentor sees their mentees even if they don't teach that class.
+  return s.mentor_id === user.id || canAccessClass(user, s.class_id);
 }

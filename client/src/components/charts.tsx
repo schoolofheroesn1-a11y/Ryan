@@ -77,7 +77,7 @@ export function PercentBars({ items }: { items: { label: string; value: number |
 
 /** Spider chart of the 1–10 scales. */
 export function ScaleRadar({ data, height = 300 }: {
-  data: { label: string; current?: number | null; teacher?: number | null; ai?: number | null }[];
+  data: { label: string; current?: number | null; teacher?: number | null; ai?: number | null; self?: number | null }[];
   height?: number;
 }) {
   const SHORT: Record<string, string> = {
@@ -86,6 +86,7 @@ export function ScaleRadar({ data, height = 300 }: {
   const rows = data.map((d) => ({ ...d, label: SHORT[d.label] || d.label }));
   const hasTeacher = rows.some((d) => d.teacher != null);
   const hasAi = rows.some((d) => d.ai != null);
+  const hasSelf = rows.some((d) => d.self != null);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RadarChart data={rows} outerRadius="66%">
@@ -95,6 +96,7 @@ export function ScaleRadar({ data, height = 300 }: {
         <Radar name="Итог" dataKey="current" stroke="#3f7a5f" fill="#3f7a5f" fillOpacity={0.25} strokeWidth={2} />
         {hasTeacher && <Radar name="Учитель" dataKey="teacher" stroke="#b98128" fill="#b98128" fillOpacity={0.05} strokeDasharray="4 3" />}
         {hasAi && <Radar name="ИИ по материалам" dataKey="ai" stroke="#a4412e" fill="#a4412e" fillOpacity={0.05} strokeDasharray="2 3" />}
+        {hasSelf && <Radar name="Самооценка" dataKey="self" stroke="#7a5c99" fill="#7a5c99" fillOpacity={0.05} strokeWidth={2} />}
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => (v == null ? '—' : v)} />
       </RadarChart>
@@ -136,20 +138,46 @@ export function ScaleTrendChart({ monthly, scales, height = 280 }: { monthly: an
   );
 }
 
-/** Average result in percent (line) and attendance % (bars) per month. */
-export function PerformanceChart({ data, height = 260 }: { data: { month: string; percent: number | null; attendance: number | null }[]; height?: number }) {
-  const rows = data.map((d) => ({ ...d, label: monthLabel(d.month) }));
+/** Average result in percent per month. */
+export function PerformanceChart({ data, height = 260 }: { data: { month: string; percent: number | null }[]; height?: number }) {
+  const rows = data.filter((d) => d.percent != null).map((d) => ({ ...d, label: monthLabel(d.month) }));
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={rows} margin={{ left: -16, right: 4, top: 5 }}>
+      <LineChart data={rows} margin={{ left: -16, right: 10, top: 5 }}>
         <CartesianGrid stroke="#efe8de" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#877b6d' }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#a99a88' }} axisLine={false} tickLine={false} unit="%" />
         <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => (v == null ? '—' : `${v}%`)} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="attendance" name="Посещаемость" fill="#e4dacb" radius={[6, 6, 0, 0]} barSize={22} />
         <Line type="monotone" dataKey="percent" name="Успеваемость" stroke="#3f7a5f" strokeWidth={2.5} dot={{ r: 4, fill: '#3f7a5f' }} connectNulls />
-      </ComposedChart>
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+/**
+ * Subjects as a radar: only subjects that actually have grades become axes
+ * (subjects not taught at the school don't appear). Falls back to bars for fewer than 3 subjects.
+ */
+export function SubjectRadar({ items, height = 320, compare }: {
+  items: { label: string; value: number | null; compare?: number | null }[];
+  height?: number;
+  compare?: string; // legend name of the second series, e.g. "Класс"
+}) {
+  const rows = items.filter((i) => i.value != null);
+  if (rows.length < 3) return <PercentBars items={rows} />;
+  const short = (l: string) => (l.length > 14 ? l.replace('язык', 'яз.').replace('Обществознание', 'Общество') : l);
+  const data = rows.map((r) => ({ ...r, label: short(r.label) }));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <RadarChart data={data} outerRadius="68%">
+        <PolarGrid stroke="#e4dacb" />
+        <PolarAngleAxis dataKey="label" tick={{ fontSize: 11, fill: '#554b40' }} />
+        <PolarRadiusAxis domain={[0, 100]} tickCount={5} tick={{ fontSize: 9, fill: '#a99a88' }} axisLine={false} />
+        <Radar name="Успеваемость, %" dataKey="value" stroke="#3f7a5f" fill="#3f7a5f" fillOpacity={0.25} strokeWidth={2} dot={{ r: 3, fill: '#3f7a5f' }} />
+        {compare && <Radar name={compare} dataKey="compare" stroke="#b98128" fill="#b98128" fillOpacity={0.05} strokeDasharray="4 3" />}
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => (v == null ? '—' : `${v}%`)} />
+      </RadarChart>
     </ResponsiveContainer>
   );
 }

@@ -71,9 +71,9 @@ export function LoginPage() {
   };
 
   return (
-    <Shell title="Вход" subtitle="Для учителей и администрации школы">
+    <Shell title="Вход" subtitle="Для учителей, администрации и учеников">
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Email"><input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus /></Field>
+        <Field label="Email или логин ученика"><input className="input" type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus /></Field>
         <Field label="Пароль"><input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
         <ErrorText error={error} />
         <Button type="submit" loading={loading} className="w-full">Войти</Button>

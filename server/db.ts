@@ -176,6 +176,110 @@ CREATE TABLE IF NOT EXISTS goal_steps (
 );
 `);
 
+// Goals: allow the 'exam' kind (SQLite can't alter a CHECK constraint, so rebuild the table once).
+{
+  const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'goals'").get() as { sql: string }).sql;
+  if (!sql.includes("'exam'")) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`
+      BEGIN;
+      CREATE TABLE goals_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('subject','scale','attendance','custom','exam')),
+        subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+        scale_key TEXT,
+        exam_id INTEGER REFERENCES exams(id) ON DELETE SET NULL,
+        start_value REAL,
+        target_value REAL,
+        deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','done','dropped')),
+        note TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'teacher',
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
+      );
+      INSERT INTO goals_new (id, student_id, title, kind, subject_id, scale_key, start_value, target_value, deadline, status, note, source, created_by, created_at, completed_at)
+        SELECT id, student_id, title, kind, subject_id, scale_key, start_value, target_value, deadline, status, note, source, created_by, created_at, completed_at FROM goals;
+      DROP TABLE goals;
+      ALTER TABLE goals_new RENAME TO goals;
+      CREATE INDEX IF NOT EXISTS idx_goals_student ON goals(student_id, status);
+      COMMIT;
+    `);
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+db.exec(`
+-- OGE / EGE tracker
+CREATE TABLE IF NOT EXISTS exams (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('oge','ege')),
+  subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+  tasks TEXT NOT NULL,          -- JSON [{ n, max, topic }]
+  thresholds TEXT NOT NULL,     -- JSON: OGE {"3":min,"4":min,"5":min} (primary); EGE {"pass":minTest}
+  scale TEXT,                   -- JSON array: EGE primary -> test score (index = primary)
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS mock_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  scores TEXT,                  -- JSON array of points per task (null = only total known)
+  total REAL NOT NULL,
+  comment TEXT NOT NULL DEFAULT '',
+  teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mock_student ON mock_results(student_id, exam_id, date);
+
+-- Mentoring
+CREATE TABLE IF NOT EXISTS mentor_meetings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  mentor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  date TEXT NOT NULL,
+  went_well TEXT NOT NULL DEFAULT '',
+  difficulties TEXT NOT NULL DEFAULT '',
+  agreements TEXT NOT NULL DEFAULT '',
+  next_date TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_meet_student ON mentor_meetings(student_id, date);
+
+-- Student cabinet (separate from staff accounts)
+CREATE TABLE IF NOT EXISTS student_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
+  login TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_login TEXT
+);
+CREATE TABLE IF NOT EXISTS student_sessions (
+  token TEXT PRIMARY KEY,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS self_assessments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  scores TEXT NOT NULL,
+  comment TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+addColumn('files', 'by_student', 'by_student INTEGER NOT NULL DEFAULT 0');
+addColumn('students', 'mentor_id', 'mentor_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS assessments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

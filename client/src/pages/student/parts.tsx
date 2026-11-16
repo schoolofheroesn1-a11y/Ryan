@@ -236,7 +236,6 @@ export function AttendanceTab({ data, reload }: { data: any; reload: () => void 
   };
 
   const chart = Object.entries(ATTENDANCE).map(([k, v]) => ({ name: v.label, value: a[k] || 0, key: k }));
-  const colors: Record<string, string> = { present: '#10b981', late: '#f59e0b', absent: '#f43f5e', sick: '#0ea5e9', excused: '#8b5cf6' };
 
   return (
     <div className="space-y-6">
@@ -257,16 +256,14 @@ export function AttendanceTab({ data, reload }: { data: any; reload: () => void 
         </Card>
         <Card>
           <CardHeader title="Сводка" subtitle={a.rate != null ? `Посещаемость ${a.rate}% из ${a.total} дней` : 'Нет данных'} />
-          <div className="p-4">
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={chart}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
-                <YAxis hide />
-                <Tooltip />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>{chart.map((c) => <Cell key={c.key} fill={colors[c.key]} />)}</Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ul className="space-y-1.5 p-5 pt-2 text-sm">
+            {chart.map((c) => (
+              <li key={c.key} className="flex items-center justify-between">
+                <span className={`chip ${ATTENDANCE[c.key].cls}`}>{c.name}</span>
+                <b className="font-mono text-ink">{c.value}</b>
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
 

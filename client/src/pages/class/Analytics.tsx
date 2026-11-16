@@ -4,7 +4,7 @@ import { AlertTriangle, Lightbulb, Sparkles, Trash2, TrendingDown, TrendingUp, U
 import { api } from '../../lib/api';
 import { useApp } from '../../App';
 import { Button, Card, CardHeader, Empty, ErrorText, Field, confirmDelete } from '../../components/ui';
-import { ChartEmpty, PercentBars, PerformanceChart, SERIES_COLORS, ScaleRadar, ScaleTrendChart, SeriesChart } from '../../components/charts';
+import { ChartEmpty, PerformanceChart, SERIES_COLORS, ScaleRadar, ScaleTrendChart, SeriesChart, SubjectRadar } from '../../components/charts';
 import { fmtDate, fmtPct, pctText } from '../../lib/format';
 import { SCALE_COLORS, scoreColor, type Meta } from '../../lib/meta';
 
@@ -39,11 +39,20 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
 
       <div className="grid gap-5 lg:grid-cols-5">
         <Card className="lg:col-span-2">
-          <CardHeader title="Предметы класса" subtitle="Средний процент · ▲▼ — изменение за месяц" />
-          <div className="p-5 pt-3">
+          <CardHeader title="Предметы класса" subtitle="Средний процент · только предметы, по которым есть оценки" />
+          <div className="p-4 pt-0">
             {data.subjects.length
-              ? <PercentBars items={data.subjects.map((s: any) => ({ label: s.subject, value: s.percent, trend: s.trend, hint: s.struggling ? `${s.struggling} с «2»` : undefined }))} />
+              ? <SubjectRadar items={data.subjects.map((s: any) => ({ label: s.subject, value: s.percent }))} />
               : <ChartEmpty>Оценок пока нет</ChartEmpty>}
+            {data.subjects.some((s: any) => s.trend === 'up' || s.trend === 'down') && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {data.subjects.filter((s: any) => s.trend === 'up' || s.trend === 'down').map((s: any) => (
+                  <span key={s.subject} className={`chip ${s.trend === 'down' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                    {s.trend === 'up' ? '▲ растёт' : '▼ падает'}: {s.subject}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
         <Card className="lg:col-span-3">
@@ -91,9 +100,9 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
           </div>
         </Card>
         <Card>
-          <CardHeader title="Учёба и посещаемость класса" subtitle="Средний балл и посещаемость по месяцам" />
+          <CardHeader title="Успеваемость класса по месяцам" subtitle="Средний процент выполнения работ" />
           <div className="p-4 pt-2">
-            {data.monthly.some((m: any) => m.percent != null || m.attendance != null) ? <PerformanceChart data={data.monthly} height={300} /> : <ChartEmpty>Нет оценок и посещаемости</ChartEmpty>}
+            {data.monthly.some((m: any) => m.percent != null) ? <PerformanceChart data={data.monthly} height={300} /> : <ChartEmpty>Оценок пока нет</ChartEmpty>}
           </div>
         </Card>
       </div>

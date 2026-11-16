@@ -8,8 +8,9 @@
 import { all, get } from './db';
 import { computeScaleStats } from './stats';
 import { SCALES } from './scales';
+import { getExam, studentExams } from './exams';
 
-export type GoalKind = 'subject' | 'scale' | 'attendance' | 'custom';
+export type GoalKind = 'subject' | 'scale' | 'attendance' | 'custom' | 'exam';
 export type GoalHealth = 'achieved' | 'on_track' | 'behind' | 'overdue' | 'no_data' | 'done' | 'dropped';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -17,7 +18,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 const WINDOW = 5;
 
 /** Current value of the measured metric. `since` limits it to data after the goal was created when possible. */
-export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: number | null; scaleKey?: string | null }, since?: string) {
+export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: number | null; scaleKey?: string | null; examId?: number | null }, since?: string) {
   if (kind === 'subject' && ref.subjectId) {
     // Newest first: the last WINDOW works in this subject.
     const basis = all<{ p: number }>(
@@ -31,6 +32,10 @@ export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: nu
     const s = computeScaleStats(studentId).scales.find((x) => x.key === ref.scaleKey);
     return { value: s?.current ?? null, basis: [], fromStart: false };
   }
+  if (kind === 'exam' && ref.examId) {
+    const last = get<{ total: number }>('SELECT total FROM mock_results WHERE student_id = ? AND exam_id = ? ORDER BY date DESC, id DESC LIMIT 1', studentId, ref.examId);
+    return { value: last ? last.total : null, basis: [], fromStart: false };
+  }
   if (kind === 'attendance') {
     const rows = all<{ status: string; date: string }>('SELECT status, date FROM attendance WHERE student_id = ?', studentId);
     const after = since ? rows.filter((r) => r.date >= since) : [];
@@ -43,7 +48,7 @@ export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: nu
 }
 
 export function goalUnit(kind: GoalKind) {
-  return kind === 'scale' ? '' : '%';
+  return kind === 'scale' ? '' : kind === 'exam' ? ' б.' : '%';
 }
 
 export function enrichGoal(g: any) {
@@ -56,7 +61,7 @@ export function enrichGoal(g: any) {
   if (g.kind === 'custom') {
     progress = steps.length ? Math.round((steps.filter((s) => s.done).length / steps.length) * 100) : null;
   } else {
-    const m = measure(g.student_id, g.kind, { subjectId: g.subject_id, scaleKey: g.scale_key }, since);
+    const m = measure(g.student_id, g.kind, { subjectId: g.subject_id, scaleKey: g.scale_key, examId: g.exam_id }, since);
     current = m.value;
     if (current != null && g.target_value != null) {
       const start = g.start_value ?? current;
@@ -82,6 +87,11 @@ export function enrichGoal(g: any) {
     if (g.kind === 'scale' && current != null && g.target_value != null && current < g.target_value) {
       need = `поднять оценку качества на ${r1(g.target_value - current)} балла — отмечайте прогресс в «Общей оценке» и материалах банка`;
     }
+    if (g.kind === 'exam' && current != null && g.target_value != null && current < g.target_value) {
+      const se = studentExams(g.student_id).find((x) => x.exam.id === g.exam_id);
+      const weak = (se?.weak || []).slice(0, 3).map((t: any) => `№${t.n}${t.topic ? ` (${t.topic})` : ''} — теряется ${t.lost} б.`);
+      need = `добрать ${Math.round((g.target_value - current) * 10) / 10} перв. балла` + (weak.length ? `. Больше всего баллов теряется: ${weak.join('; ')}` : '');
+    }
     if (g.kind === 'attendance' && current != null && g.target_value != null && current < g.target_value) {
       need = 'посещать все уроки без пропусков и опозданий в ближайшие недели';
     }
@@ -102,8 +112,11 @@ export function enrichGoal(g: any) {
   } else health = 'on_track';
 
   const scale = g.scale_key ? SCALES.find((s) => s.key === g.scale_key) : null;
+  const exam = g.exam_id ? getExam(g.exam_id) : null;
   return {
     ...g,
+    max: g.kind === 'scale' ? 10 : g.kind === 'exam' ? exam?.maxPrimary ?? null : 100,
+    exam_title: exam?.title ?? null,
     subject: g.subject_id ? get<any>('SELECT name FROM subjects WHERE id = ?', g.subject_id)?.name ?? null : null,
     scale_label: scale?.label ?? null,
     unit: goalUnit(g.kind),

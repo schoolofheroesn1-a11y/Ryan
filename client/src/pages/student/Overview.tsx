@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Flag, Minus, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import { Button, Card, CardHeader } from '../../components/ui';
-import { ChartEmpty, PercentBars, PerformanceChart, ScaleRadar, ScaleTrendChart } from '../../components/charts';
+import { ChartEmpty, PerformanceChart, ScaleRadar, ScaleTrendChart, SubjectRadar } from '../../components/charts';
 import { fmtDate } from '../../lib/format';
 import { SCALE_COLORS, type Meta } from '../../lib/meta';
 import { GoalPath, HEALTH } from './Goals';
@@ -43,8 +43,13 @@ export function OverviewTab({ data, meta, onAssess, onAddBank, onOpenAi, onOpenG
   data: any; meta: Meta; onAssess: () => void; onAddBank: () => void; onOpenAi: () => void; onOpenGoals: () => void; onOpenPerformance: () => void;
 }) {
   const { stats, scaleStats, reports } = data;
-  const radar = scaleStats.scales.map((s: any) => ({ label: s.label, current: s.current, teacher: s.teacher, ai: s.ai }));
-  const hasScales = scaleStats.scales.some((s: any) => s.current != null);
+  const self = data.selfAssessments[0]?.scores || {};
+  const radar = scaleStats.scales.map((s: any) => ({ label: s.label, current: s.current, teacher: s.teacher, ai: s.ai, self: self[s.key] ?? null }));
+  const hasScales = scaleStats.scales.some((s: any) => s.current != null) || Object.keys(self).length > 0;
+  // Self-assessment vs teacher (or blended) view: a gap of 3+ points is worth a conversation.
+  const gaps = scaleStats.scales
+    .map((s: any) => ({ label: s.label, self: self[s.key], other: s.teacher ?? s.current }))
+    .filter((g: any) => g.self != null && g.other != null && Math.abs(g.self - g.other) >= 3);
   const perf = performanceByMonth(data.grades, data.attendance);
   const last = reports[0];
   const goals = data.goals.filter((g: any) => g.status === 'active').slice(0, 2);
@@ -53,11 +58,11 @@ export function OverviewTab({ data, meta, onAssess, onAddBank, onOpenAi, onOpenG
     <div className="stagger grid gap-5 lg:grid-cols-5">
       {/* Subjects */}
       <Card className="lg:col-span-3">
-        <CardHeader title="Успеваемость по предметам" subtitle="Средний процент выполнения работ"
+        <CardHeader title="Успеваемость по предметам" subtitle="Средний процент · только предметы с оценками"
           action={<Button variant="ghost" onClick={onOpenPerformance}>Подробнее →</Button>} />
         <div className="p-5 pt-3">
           {stats.subjects.length
-            ? <PercentBars items={stats.subjects.map((s: any) => ({ label: s.subject, value: s.percent, trend: s.trend, hint: `«${s.average}»` }))} />
+            ? <SubjectRadar items={stats.subjects.map((s: any) => ({ label: s.subject, value: s.percent }))} height={300} />
             : <ChartEmpty>Оценок пока нет — выставляйте их во вкладке «Успеваемость» или через журнал класса</ChartEmpty>}
         </div>
       </Card>
@@ -147,6 +152,11 @@ export function OverviewTab({ data, meta, onAssess, onAddBank, onOpenAi, onOpenG
           {stats.riskReasons.length ? stats.riskReasons.map((r: string) => (
             <div key={r} className="flex gap-2 rounded-xl bg-amber-50 px-3 py-2 text-amber-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{r}</div>
           )) : <div className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700">✓ Тревожных сигналов по оценкам и посещаемости нет</div>}
+          {gaps.map((g: any) => (
+            <div key={g.label} className="flex gap-2 rounded-xl bg-violet-50 px-3 py-2 text-violet-700">
+              🪞 {g.label}: ученик оценивает себя на {g.self}, а учитель/материалы — на {g.other}. Стоит обсудить на встрече.
+            </div>
+          ))}
           {scaleStats.scales.filter((s: any) => s.trend === 'down').map((s: any) => (
             <div key={s.key} className="flex gap-2 rounded-xl bg-rose-50 px-3 py-2 text-rose-700"><TrendingDown className="mt-0.5 h-4 w-4 shrink-0" />Снижается: {s.label.toLowerCase()}</div>
           ))}
@@ -165,9 +175,9 @@ export function OverviewTab({ data, meta, onAssess, onAddBank, onOpenAi, onOpenG
       </Card>
 
       <Card className="lg:col-span-2">
-        <CardHeader title="Учёба и посещаемость" subtitle="Средний процент работ и посещения по месяцам" />
+        <CardHeader title="Успеваемость по месяцам" subtitle="Средний процент выполнения работ" />
         <div className="p-4 pt-2">
-          {perf.length ? <PerformanceChart data={perf} /> : <ChartEmpty>Оценок и отметок посещаемости пока нет</ChartEmpty>}
+          {perf.some((p) => p.percent != null) ? <PerformanceChart data={perf} /> : <ChartEmpty>Оценок пока нет</ChartEmpty>}
         </div>
       </Card>
     </div>

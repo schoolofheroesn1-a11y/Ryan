@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, BarChart3, CalendarCheck, ClipboardList, Search, Trash2, TrendingDown, TrendingUp, UserPlus, Users } from 'lucide-react';
+import { AlertTriangle, BarChart3, GraduationCap, CalendarCheck, ClipboardList, Search, Trash2, TrendingDown, TrendingUp, UserPlus, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { Badge, Button, Card, Empty, ErrorText, Field, Modal, Spinner, Tabs } from '../components/ui';
 import { RISK, fmtPct, pctText } from '../lib/format';
 import { scoreColor, useMeta } from '../lib/meta';
 import { BulkAttendanceModal, BulkGradesModal } from './class/JournalModals';
 import { ClassAnalytics } from './class/Analytics';
+import { ClassExamsTab } from './exams';
 
-type Tab = 'students' | 'analytics';
+type Tab = 'students' | 'analytics' | 'exams';
 
 export function ClassPage() {
   const { id } = useParams();
@@ -31,7 +32,8 @@ export function ClassPage() {
     setAnalytics(null);
     setError(null);
     setSelected(new Set());
-    setTab(search.get('tab') === 'analytics' ? 'analytics' : 'students');
+    const t = search.get('tab');
+    setTab(t === 'analytics' || t === 'exams' ? t : 'students');
     load();
   }, [id, load]);
 
@@ -76,6 +78,7 @@ export function ClassPage() {
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[
         { id: 'students', label: 'Ученики', count: cls.students.length, icon: <Users className="h-4 w-4" /> },
         { id: 'analytics', label: 'Аналитика класса', icon: <BarChart3 className="h-4 w-4" /> },
+        { id: 'exams', label: 'ОГЭ / ЕГЭ', icon: <GraduationCap className="h-4 w-4" /> },
       ]} />
 
       {tab === 'students' && (
@@ -157,6 +160,7 @@ export function ClassPage() {
         </Card>
       )}
 
+      {tab === 'exams' && <ClassExamsTab cls={cls} />}
       {tab === 'analytics' && (analytics ? <ClassAnalytics classId={cls.id} data={analytics} meta={meta} reload={load} /> : <Spinner />)}
 
       {modal === 'students' && <AddStudentsModal classId={cls.id} onClose={() => setModal(null)} onDone={done} />}

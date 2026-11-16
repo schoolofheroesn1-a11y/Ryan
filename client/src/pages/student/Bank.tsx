@@ -163,6 +163,7 @@ function BankItem({ item, meta, onView, onDelete, reload }: { item: Item; meta: 
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-slate-800">{name}</span>
               <Badge className={style.cls}>{d.category || 'Материал'}</Badge>
+              {d.by_student ? <Badge className="bg-violet-50 text-violet-700">написал(а) сам(а) в кабинете</Badge> : null}
             </div>
             <div className="text-xs text-slate-400">
               {fmtDate(d.material_date)}{d.kind !== 'message' ? ` · ${fmtSize(d.size)}` : ''}{d.description ? ` · ${d.description}` : ''}{d.uploader ? ` · ${d.uploader}` : ''}

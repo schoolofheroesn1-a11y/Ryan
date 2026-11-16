@@ -2,6 +2,7 @@ import { all, get } from './db';
 import { computeStudentStats, computeScaleStats, type StudentStats } from './stats';
 import { SCALES } from './scales';
 import { studentGoals } from './goals';
+import { studentExams } from './exams';
 import { callClaude, claudeModel } from './ai-claude';
 import { nameRedactor } from './privacy';
 import { mediaAttachments } from './media';
@@ -93,7 +94,11 @@ function buildContext(studentId: number) {
   const scaleStats = computeScaleStats(studentId);
 
   const goals = studentGoals(studentId).filter((g) => g.status !== 'dropped');
-  return { student, stats, age, recentGrades, achievements, notes, files, absences, assessments, scaleStats, goals };
+  const exams = studentExams(studentId);
+  const selfAssessments = all<any>('SELECT date, scores FROM self_assessments WHERE student_id = ? ORDER BY date DESC LIMIT 3', studentId)
+    .map((a) => ({ date: a.date, scores: JSON.parse(a.scores || '{}') }));
+  const meetings = all<any>('SELECT date, went_well, difficulties, agreements FROM mentor_meetings WHERE student_id = ? ORDER BY date DESC LIMIT 4', studentId);
+  return { student, stats, age, recentGrades, achievements, notes, files, absences, assessments, scaleStats, goals, exams, selfAssessments, meetings };
 }
 
 function scaleNames(scores: Record<string, number>) {
@@ -136,6 +141,17 @@ function buildPrompt(ctx: ReturnType<typeof buildContext>, focus: string) {
       шкала: s.label, текущий_уровень: s.current, оценка_учителя: s.teacher, оценка_ИИ_за_90_дней: s.ai, тренд: s.trend,
     })),
     шкалы_по_месяцам: ctx.scaleStats.monthly,
+    самооценка_ученика_1_10: ctx.selfAssessments.map((a: any) => ({ дата: a.date, баллы: scaleNames(a.scores) })),
+    встречи_с_наставником: ctx.meetings.map((m: any) => ({
+      дата: m.date, получилось: nameRedactor(student.full_name)(m.went_well), трудности: nameRedactor(student.full_name)(m.difficulties),
+      договорённости: nameRedactor(student.full_name)(m.agreements),
+    })),
+    подготовка_к_экзаменам: ctx.exams.map((e: any) => ({
+      экзамен: e.exam.title, тип: e.exam.type === 'oge' ? 'ОГЭ' : 'ЕГЭ', максимум_первичных: e.exam.maxPrimary,
+      пробники: e.mocks.slice(-5).map((m: any) => ({ дата: m.date, первичный_балл: m.total, прогноз: m.prediction.label })),
+      изменение_к_прошлому: e.delta,
+      слабые_задания: e.weak.slice(0, 6).map((t: any) => ({ номер: t.n, тема: t.topic, выполнение_процент: t.share, теряется_баллов: t.lost })),
+    })),
     цели_ученика: ctx.goals.map((g: any) => ({
       цель: g.title, статус: g.status === 'done' ? 'выполнена' : g.health, сейчас: g.current, цель_значение: g.target_value,
       прогресс_процент: g.progress, срок: g.deadline, шаги: g.steps.map((x: any) => `${x.done ? '✓' : '○'} ${x.text}`),
@@ -175,6 +191,8 @@ function buildPrompt(ctx: ReturnType<typeof buildContext>, focus: string) {
 Ссылайся на конкретные материалы и тенденции в выводах; отмечай, что улучшилось и что ухудшилось.
 Успеваемость по предметам дана в процентах (85%+ ≈ «5», 65%+ ≈ «4», 45%+ ≈ «3»). Учитывай уже поставленные цели ученика:
 оцени их реалистичность и прогресс, а в "goals" предлагай новые цели или следующие шаги, не дублируя существующие.
+Сравни самооценку ученика с оценками учителя: большие расхождения — важный сигнал (заниженная или завышенная самооценка).
+Учитывай договорённости с наставником: что выполнено, что нет. Если есть результаты пробников ОГЭ/ЕГЭ, оцени прогноз и назови конкретные номера заданий, на которых проще всего добрать баллы.
 Пиши на русском языке, без канцелярита. Отвечай строго валидным JSON без пояснений вокруг.`;
 
   const user = `Данные ученика (обезличены):

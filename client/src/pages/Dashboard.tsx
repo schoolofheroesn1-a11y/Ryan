@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Award, School, Sparkles } from 'lucide-react';
+import { AlertTriangle, Award, HeartHandshake, School, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../App';
 import { Card, CardHeader, Empty, Spinner } from '../components/ui';
@@ -17,9 +17,11 @@ function greeting() {
 export function DashboardPage() {
   const { user } = useApp();
   const [data, setData] = useState<any>(null);
+  const [mentoring, setMentoring] = useState<any>(null);
 
   useEffect(() => {
     api.get('/api/dashboard').then(setData);
+    api.get('/api/mentoring').then(setMentoring).catch(() => {});
   }, []);
 
   if (!data) return <Spinner />;
@@ -121,6 +123,33 @@ export function DashboardPage() {
           </div>
         )}
       </section>
+
+      {mentoring && (mentoring.mine.length > 0 || mentoring.withoutMentor) ? (
+        <Card>
+          <CardHeader title={<span className="flex items-center gap-2"><HeartHandshake className="h-4 w-4 text-brand-600" />Мои подопечные</span>}
+            subtitle={`Встреча один на один — раз в ${mentoring.everyDays} дней${mentoring.withoutMentor ? ` · без наставника: ${mentoring.withoutMentor} уч.` : ''}${mentoring.overdueAll ? ` · просрочено по школе: ${mentoring.overdueAll}` : ''}`} />
+          {mentoring.mine.length === 0 ? (
+            <p className="px-5 pb-5 text-sm text-muted">Вы пока ни у кого не наставник. Назначить наставника можно во вкладке «Наставник» в карточке ученика.</p>
+          ) : (
+            <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3">
+              {mentoring.mine.map((s: any) => (
+                <Link key={s.id} to={`/students/${s.id}`}
+                  className={`rounded-xl border px-4 py-3 transition hover:-translate-y-0.5 ${s.overdue ? 'border-amber-200 bg-amber-50' : 'border-border/70 bg-white'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-semibold text-ink">{s.full_name}</div>
+                    <span className="text-xs text-muted">{s.class_name}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted">
+                    {s.lastDate ? `встреча ${fmtDate(s.lastDate)} · ${s.daysSince} дн. назад` : 'встреч ещё не было'}
+                    {s.goalsBehind ? ` · целей отстаёт: ${s.goalsBehind}` : ''}
+                  </div>
+                  {s.overdue && <div className="mt-1 text-xs font-semibold text-amber-800">Пора встретиться</div>}
+                </Link>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
