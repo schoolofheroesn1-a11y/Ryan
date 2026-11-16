@@ -1,6 +1,7 @@
 import { all, get } from './db';
 import { computeStudentStats, computeScaleStats, type StudentStats } from './stats';
 import { SCALES } from './scales';
+import { studentGoals } from './goals';
 import { callClaude, claudeModel } from './ai-claude';
 import { nameRedactor } from './privacy';
 import { mediaAttachments } from './media';
@@ -91,7 +92,8 @@ function buildContext(studentId: number) {
   ).map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') }));
   const scaleStats = computeScaleStats(studentId);
 
-  return { student, stats, age, recentGrades, achievements, notes, files, absences, assessments, scaleStats };
+  const goals = studentGoals(studentId).filter((g) => g.status !== 'dropped');
+  return { student, stats, age, recentGrades, achievements, notes, files, absences, assessments, scaleStats, goals };
 }
 
 function scaleNames(scores: Record<string, number>) {
@@ -111,9 +113,13 @@ function buildPrompt(ctx: ReturnType<typeof buildContext>, focus: string) {
     интересы: student.interests || 'не указаны',
     о_ученике: student.about || '',
     средний_балл: stats.average,
+    успеваемость_процент: stats.percent,
     предметы: stats.subjects.map((s) => ({
       предмет: s.subject,
-      средний: s.average,
+      успеваемость_процент: s.percent,
+      за_30_дней_процент: s.recentPercent,
+      ранее_процент: s.previousPercent,
+      средняя_отметка: s.average,
       оценок: s.count,
       за_последние_30_дней: s.recentAverage,
       ранее: s.previousAverage,
@@ -130,6 +136,10 @@ function buildPrompt(ctx: ReturnType<typeof buildContext>, focus: string) {
       шкала: s.label, текущий_уровень: s.current, оценка_учителя: s.teacher, оценка_ИИ_за_90_дней: s.ai, тренд: s.trend,
     })),
     шкалы_по_месяцам: ctx.scaleStats.monthly,
+    цели_ученика: ctx.goals.map((g: any) => ({
+      цель: g.title, статус: g.status === 'done' ? 'выполнена' : g.health, сейчас: g.current, цель_значение: g.target_value,
+      прогресс_процент: g.progress, срок: g.deadline, шаги: g.steps.map((x: any) => `${x.done ? '✓' : '○'} ${x.text}`),
+    })),
     банк_материалов_кратко: ctx.files.map((f: any) => ({
       дата: f.mdate,
       тип: f.category || (f.kind === 'message' ? 'Сообщение' : 'Документ'),
@@ -163,6 +173,8 @@ function buildPrompt(ctx: ReturnType<typeof buildContext>, focus: string) {
 Учитывай возраст. Внимательно используй весь «банк ученика»: рефлексию, характеристики, отчёты,
 переписку, работы, грамоты, а также общие оценки по шкалам (1–10) и их динамику по месяцам.
 Ссылайся на конкретные материалы и тенденции в выводах; отмечай, что улучшилось и что ухудшилось.
+Успеваемость по предметам дана в процентах (85%+ ≈ «5», 65%+ ≈ «4», 45%+ ≈ «3»). Учитывай уже поставленные цели ученика:
+оцени их реалистичность и прогресс, а в "goals" предлагай новые цели или следующие шаги, не дублируя существующие.
 Пиши на русском языке, без канцелярита. Отвечай строго валидным JSON без пояснений вокруг.`;
 
   const user = `Данные ученика (обезличены):

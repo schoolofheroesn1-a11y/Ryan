@@ -18,7 +18,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const link = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-      isActive ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-200' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+      isActive ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-600 hover:bg-slate-100 hover:text-ink'
     }`;
 
   const nav = (
@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="mt-auto space-y-1 border-t border-slate-100 pt-3">
         {user!.role === 'admin' && <NavLink to="/admin" className={link}><Settings className="h-4 w-4" />Управление</NavLink>}
         <NavLink to="/profile" className={link}><UserCircle className="h-4 w-4" />Профиль</NavLink>
-        <div className={`mx-1 mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${ai.enabled ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-500'}`}>
+        <div className={`mx-1 mt-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${ai.enabled ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-500'}`}>
           <Sparkles className="h-3.5 w-3.5" />
           {ai.enabled ? `ИИ: ${ai.model}` : 'ИИ: режим без ключа'}
         </div>
@@ -46,12 +46,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200/70 bg-white/80 backdrop-blur lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border bg-[#fbf8f3] lg:flex">
         <Link to="/" className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-200"><GraduationCap className="h-5 w-5" /></div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-soft"><GraduationCap className="h-5 w-5" /></div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold">Портфолио</div>
-            <div className="text-xs text-slate-500">учеников с ИИ</div>
+            <div className="font-serif text-[15px] font-semibold text-ink">Портфолио</div>
+            <div className="text-xs text-muted">учеников · цели · ИИ</div>
           </div>
         </Link>
         <div className="flex-1 overflow-y-auto">{nav}</div>
@@ -70,7 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/70 bg-white/70 px-4 py-3 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-6">
           <button className="rounded-md p-1.5 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(true)} aria-label="Открыть меню">
             <Menu className="h-5 w-5" />
           </button>
@@ -83,7 +83,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <LogOut className="h-4 w-4" />
           </button>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">{children}</main>
       </div>
     </div>
   );

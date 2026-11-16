@@ -42,3 +42,26 @@ export const RISK: Record<string, { label: string; cls: string }> = {
   medium: { label: 'Под наблюдением', cls: 'bg-amber-100 text-amber-700' },
   low: { label: 'Всё хорошо', cls: 'bg-emerald-100 text-emerald-700' },
 };
+
+// ---------- Percent-based grades ----------
+export const markFromPercent = (p: number) => (p >= 85 ? 5 : p >= 65 ? 4 : p >= 45 ? 3 : p >= 20 ? 2 : 1);
+
+/** Text colour for a percent value. */
+export function pctText(p: number | null | undefined) {
+  if (p == null) return 'text-slate-400';
+  if (p >= 85) return 'text-emerald-700';
+  if (p >= 65) return 'text-brand-700';
+  if (p >= 45) return 'text-amber-700';
+  return 'text-rose-700';
+}
+/** Bar/fill colour for a percent value. */
+export function pctFill(p: number | null | undefined) {
+  if (p == null) return 'bg-slate-300';
+  if (p >= 85) return 'bg-emerald-500';
+  if (p >= 65) return 'bg-brand-500';
+  if (p >= 45) return 'bg-amber-400';
+  return 'bg-rose-500';
+}
+export const pctHex = (p: number | null | undefined) =>
+  p == null ? '#cdbfab' : p >= 85 ? '#6b8d47' : p >= 65 ? '#4f8a6d' : p >= 45 ? '#d39e45' : '#bc5b42';
+export const fmtPct = (p: number | null | undefined) => (p == null ? '—' : `${Math.round(p)}%`);

@@ -4,8 +4,8 @@ import { AlertTriangle, Lightbulb, Sparkles, Trash2, TrendingDown, TrendingUp, U
 import { api } from '../../lib/api';
 import { useApp } from '../../App';
 import { Button, Card, CardHeader, Empty, ErrorText, Field, confirmDelete } from '../../components/ui';
-import { ChartEmpty, PerformanceChart, ScaleRadar, ScaleTrendChart } from '../../components/charts';
-import { fmtDate, gradeColor } from '../../lib/format';
+import { ChartEmpty, PercentBars, PerformanceChart, SERIES_COLORS, ScaleRadar, ScaleTrendChart, SeriesChart } from '../../components/charts';
+import { fmtDate, fmtPct, pctText } from '../../lib/format';
 import { SCALE_COLORS, scoreColor, type Meta } from '../../lib/meta';
 
 export function ClassAnalytics({ classId, data, meta, reload }: { classId: number; data: any; meta: Meta; reload: () => void }) {
@@ -24,18 +24,63 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
-          { label: 'Средний балл', value: mean(students.map((s) => s.average)) ?? '—', cls: gradeColor(mean(students.map((s) => s.average))) },
+          { label: 'Успеваемость', value: fmtPct(mean(students.map((s) => s.percent))), cls: pctText(mean(students.map((s) => s.percent))) },
           { label: 'Посещаемость', value: mean(students.map((s) => s.attendanceRate)) != null ? `${mean(students.map((s) => s.attendanceRate))}%` : '—', cls: '' },
           { label: 'Качества (1–10)', value: mean(students.map((s) => s.scaleAverage)) ?? '—', cls: '' },
           { label: 'Растут', value: growing.length, cls: 'text-emerald-600' },
           { label: 'Проседают', value: declining.length, cls: 'text-rose-600' },
         ].map((k) => (
           <Card key={k.label} className="px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">{k.label}</div>
-            <div className={`text-2xl font-bold tracking-tight ${k.cls}`}>{k.value}</div>
+            <div className="text-xs uppercase tracking-wide text-muted">{k.label}</div>
+            <div className={`font-mono text-2xl font-semibold ${k.cls}`}>{k.value}</div>
           </Card>
         ))}
       </div>
+
+      <div className="grid gap-5 lg:grid-cols-5">
+        <Card className="lg:col-span-2">
+          <CardHeader title="Предметы класса" subtitle="Средний процент · ▲▼ — изменение за месяц" />
+          <div className="p-5 pt-3">
+            {data.subjects.length
+              ? <PercentBars items={data.subjects.map((s: any) => ({ label: s.subject, value: s.percent, trend: s.trend, hint: s.struggling ? `${s.struggling} с «2»` : undefined }))} />
+              : <ChartEmpty>Оценок пока нет</ChartEmpty>}
+          </div>
+        </Card>
+        <Card className="lg:col-span-3">
+          <CardHeader title="Динамика предметов" subtitle="Средний процент класса по месяцам" />
+          <div className="p-4 pt-2">
+            {data.subjects.length ? (() => {
+              const months = [...new Set(data.subjects.flatMap((s: any) => s.monthly.map((m: any) => m.month)))].sort() as string[];
+              const rows = months.map((month) => {
+                const r: Record<string, any> = { month };
+                for (const s of data.subjects) r[s.subject] = s.monthly.find((m: any) => m.month === month)?.percent ?? null;
+                return r;
+              });
+              return <SeriesChart rows={rows} series={data.subjects.map((s: any, i: number) => ({ key: s.subject, label: s.subject, color: SERIES_COLORS[i % SERIES_COLORS.length] }))} />;
+            })() : <ChartEmpty>Появится после первых оценок</ChartEmpty>}
+          </div>
+        </Card>
+      </div>
+
+      {data.goalStats.total > 0 && (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div>
+              <div className="eyebrow">Целеполагание</div>
+              <div className="font-serif text-xl font-semibold text-ink">Цели учеников класса: {data.goalStats.total}</div>
+            </div>
+            {[
+              { k: 'achieved', l: 'достигнуто', c: 'text-emerald-700' },
+              { k: 'done', l: 'выполнено', c: 'text-emerald-700' },
+              { k: 'on_track', l: 'идут по плану', c: 'text-brand-700' },
+              { k: 'behind', l: 'отстают', c: 'text-amber-700' },
+              { k: 'overdue', l: 'просрочены', c: 'text-rose-700' },
+            ].filter((x) => data.goalStats[x.k]).map((x) => (
+              <div key={x.k}><span className={`font-mono text-2xl font-semibold ${x.c}`}>{data.goalStats[x.k]}</span> <span className="text-sm text-muted">{x.l}</span></div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
@@ -48,7 +93,7 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
         <Card>
           <CardHeader title="Учёба и посещаемость класса" subtitle="Средний балл и посещаемость по месяцам" />
           <div className="p-4 pt-2">
-            {data.monthly.some((m: any) => m.grade != null || m.attendance != null) ? <PerformanceChart data={data.monthly} height={300} /> : <ChartEmpty>Нет оценок и посещаемости</ChartEmpty>}
+            {data.monthly.some((m: any) => m.percent != null || m.attendance != null) ? <PerformanceChart data={data.monthly} height={300} /> : <ChartEmpty>Нет оценок и посещаемости</ChartEmpty>}
           </div>
         </Card>
       </div>
@@ -72,7 +117,7 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
             <thead>
               <tr className="text-xs text-slate-500">
                 <th className="py-2 pr-3 text-left font-semibold">Ученик</th>
-                <th className="px-1 py-2 font-semibold">Балл</th>
+                <th className="px-1 py-2 font-semibold">Успев.</th>
                 {meta.scales.map((s) => (
                   <th key={s.key} className="px-1 py-2 font-semibold" title={s.hint}>
                     <span className="mx-auto block h-1.5 w-6 rounded-full" style={{ background: SCALE_COLORS[s.key] }} />
@@ -85,7 +130,7 @@ export function ClassAnalytics({ classId, data, meta, reload }: { classId: numbe
               {students.map((s) => (
                 <tr key={s.id} className="border-t border-slate-100">
                   <td className="py-1.5 pr-3"><Link to={`/students/${s.id}`} className="font-medium text-slate-700 hover:text-indigo-600">{s.full_name}</Link></td>
-                  <td className={`px-1 py-1.5 text-center font-semibold ${gradeColor(s.average)}`}>{s.average ?? '—'}</td>
+                  <td className={`px-1 py-1.5 text-center font-mono font-semibold ${pctText(s.percent)}`}>{fmtPct(s.percent)}</td>
                   {meta.scales.map((sc) => (
                     <td key={sc.key} className="px-1 py-1.5 text-center">
                       <span className={`inline-block min-w-9 rounded-lg px-2 py-1 font-semibold ${scoreColor(s.scales[sc.key])}`}>
@@ -159,9 +204,9 @@ function ClassAi({ classId, reports, reload }: { classId: number; reports: any[]
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-white">
-          <div className="flex items-center gap-2 font-semibold"><Sparkles className="h-5 w-5" />Рекомендации классному руководителю</div>
-          <p className="mt-1 text-sm text-violet-100">
+        <div className="bg-ink p-5 text-[#fffdf9]">
+          <div className="flex items-center gap-2 font-serif text-lg font-semibold"><Sparkles className="h-5 w-5" />Рекомендации классному руководителю</div>
+          <p className="mt-1 text-sm text-slate-300">
             {ai.enabled ? 'ИИ изучит всех учеников класса: оценки, посещаемость, качества и материалы банка. Имена в ИИ не передаются.' : 'Ключ ИИ не настроен — будет выполнен базовый анализ.'}
           </p>
         </div>

@@ -3,8 +3,8 @@ import { Loader2, X } from 'lucide-react';
 
 type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 const btnCls: Record<BtnVariant, string> = {
-  primary: 'bg-gradient-to-b from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 shadow-sm shadow-indigo-200',
-  secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300',
+  primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-soft',
+  secondary: 'bg-white text-slate-700 border border-border hover:bg-slate-50 hover:border-slate-300',
   ghost: 'text-slate-600 hover:bg-slate-100',
   danger: 'bg-rose-600 text-white hover:bg-rose-700',
 };
@@ -25,15 +25,15 @@ export function Button({
 }
 
 export function Card({ className = '', children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`rounded-2xl border border-slate-200/70 bg-white shadow-[0_1px_3px_rgba(15,23,42,.04),0_8px_24px_-12px_rgba(15,23,42,.08)] ${className}`}>{children}</div>;
+  return <div className={`min-w-0 rounded-[14px] border border-border/80 bg-white shadow-soft ${className}`}>{children}</div>;
 }
 
 export function CardHeader({ title, subtitle, action }: { title: React.ReactNode; subtitle?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-2 pt-5">
       <div>
-        <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        <h3 className="text-[17px] text-ink">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
       </div>
       {action}
     </div>

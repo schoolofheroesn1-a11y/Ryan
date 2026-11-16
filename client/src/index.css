@@ -1,18 +1,127 @@
 @import "tailwindcss";
 
+/* Warm "paper" theme shared with the social-studies platform: serif headings, mono numbers, green accent. */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Commissioner", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Literata", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", SFMono-Regular, Consolas, monospace;
+
+  --color-ink: #231d17;
+  --color-surface: #f6f1ea;
+  --color-muted: #877b6d;
+  --color-border: #e4dacb;
+  --color-white: #fffdf9;
+
+  --color-brand-50: #eef5f1;
+  --color-brand-100: #e2eee7;
+  --color-brand-200: #c6ddcf;
+  --color-brand-300: #9fc4af;
+  --color-brand-400: #6fa388;
+  --color-brand-500: #4f8a6d;
+  --color-brand-600: #3f7a5f;
+  --color-brand-700: #33644e;
+  --color-brand-800: #2a5140;
+
+  /* Warm greys instead of cool slate */
+  --color-slate-50: #faf6f0;
+  --color-slate-100: #efe8de;
+  --color-slate-200: #e4dacb;
+  --color-slate-300: #cdbfab;
+  --color-slate-400: #a99a88;
+  --color-slate-500: #877b6d;
+  --color-slate-600: #6b5f52;
+  --color-slate-700: #554b40;
+  --color-slate-800: #3a322a;
+  --color-slate-900: #231d17;
+
+  /* "indigo" = the green brand accent */
+  --color-indigo-50: #eef5f1;
+  --color-indigo-100: #e2eee7;
+  --color-indigo-200: #c6ddcf;
+  --color-indigo-300: #9fc4af;
+  --color-indigo-400: #6fa388;
+  --color-indigo-500: #4f8a6d;
+  --color-indigo-600: #3f7a5f;
+  --color-indigo-700: #33644e;
+
+  /* "violet" = plum, for AI accents */
+  --color-violet-50: #f4eff6;
+  --color-violet-100: #e9dfee;
+  --color-violet-200: #d6c4df;
+  --color-violet-500: #7a5c99;
+  --color-violet-600: #664a84;
+  --color-violet-700: #553d6e;
+
+  --color-sky-50: #eef2f8;
+  --color-sky-100: #dde6f1;
+  --color-sky-500: #4b6fa5;
+  --color-sky-700: #3a5683;
+
+  --color-emerald-50: #eef3e6;
+  --color-emerald-100: #e4ecd6;
+  --color-emerald-200: #cfddb9;
+  --color-emerald-500: #6b8d47;
+  --color-emerald-600: #4e6b34;
+  --color-emerald-700: #42592c;
+  --color-emerald-800: #364824;
+
+  --color-amber-50: #fbf3e2;
+  --color-amber-100: #f7e8cb;
+  --color-amber-200: #efd5a3;
+  --color-amber-400: #d39e45;
+  --color-amber-500: #b98128;
+  --color-amber-600: #9c6a18;
+  --color-amber-700: #8f5e12;
+  --color-amber-800: #6f4a10;
+  --color-amber-900: #573a0e;
+
+  --color-rose-50: #fbede8;
+  --color-rose-100: #f6dfd8;
+  --color-rose-200: #edc3b6;
+  --color-rose-500: #bc5b42;
+  --color-rose-600: #a4412e;
+  --color-rose-700: #893626;
+
+  --color-pink-50: #fbeef0;
+  --color-pink-200: #efc6cd;
+  --color-pink-700: #9a4458;
+  --color-yellow-50: #fbf5df;
+  --color-yellow-600: #9c7a18;
+  --color-yellow-700: #7d6113;
+
+  --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.06), 0 8px 24px -14px rgba(60, 40, 20, 0.25);
 }
 
 body {
-  @apply text-slate-900 antialiased;
-  background: radial-gradient(1200px 600px at 100% -10%, #eef2ff 0%, transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, #f5f3ff 0%, transparent 55%), #f8fafc;
-  background-attachment: fixed;
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
 }
+h1, h2, h3, .font-serif {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 @layer components {
-.input { @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100; }
-.label { @apply mb-1.5 block text-xs font-semibold text-slate-600; }
-.chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium; }
+  .input { @apply w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100; }
+  .label { @apply mb-1.5 block text-xs font-semibold text-slate-600; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-wider text-brand-600; }
 }
-input[type="range"] { accent-color: #6366f1; }
+.panel-top { border-top-width: 4px; border-top-style: solid; }
+
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.page-in { animation: page-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger > * { animation: page-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 200ms; }
+@media (prefers-reduced-motion: reduce) {
+  .page-in, .stagger > * { animation: none; }
+}
+input[type="range"], input[type="checkbox"] { accent-color: #3f7a5f; }

@@ -5,12 +5,12 @@ export interface Scale { key: string; label: string; hint: string }
 export interface Meta { scales: Scale[]; categories: string[] }
 
 export const SCALE_COLORS: Record<string, string> = {
-  motivation: '#6366f1',
-  independence: '#0ea5e9',
-  responsibility: '#10b981',
-  communication: '#f59e0b',
-  wellbeing: '#ec4899',
-  curiosity: '#8b5cf6',
+  motivation: '#3f7a5f',
+  independence: '#4b6fa5',
+  responsibility: '#6b8d47',
+  communication: '#b98128',
+  wellbeing: '#c0667a',
+  curiosity: '#7a5c99',
 };
 
 export const CATEGORY_STYLE: Record<string, { emoji: string; cls: string }> = {

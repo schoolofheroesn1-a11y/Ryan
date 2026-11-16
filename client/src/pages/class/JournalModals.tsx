@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { Button, ErrorText, Field, Modal } from '../../components/ui';
-import { ATTENDANCE, GRADE_KINDS, today } from '../../lib/format';
+import { ATTENDANCE, GRADE_KINDS, markFromPercent, pctFill, pctText, today } from '../../lib/format';
+import { ModeSwitch } from '../student/Performance';
 
 export function BulkGradesModal({ cls, onClose, onDone }: { cls: any; onClose: () => void; onDone: () => void }) {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [subjectId, setSubjectId] = useState('');
   const [date, setDate] = useState(today());
   const [kind, setKind] = useState(GRADE_KINDS[0]);
-  const [grades, setGrades] = useState<Record<number, number>>({});
+  const [mode, setMode] = useState<'mark' | 'percent' | 'points'>('percent');
+  const [max, setMax] = useState('20');
+  const [marks, setMarks] = useState<Record<number, number>>({});
+  const [vals, setVals] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,19 +23,29 @@ export function BulkGradesModal({ cls, onClose, onDone }: { cls: any; onClose: (
     });
   }, []);
 
-  const count = Object.keys(grades).length;
+  const entries = mode === 'mark'
+    ? Object.entries(marks).map(([sid, v]) => ({ studentId: Number(sid), value: v }))
+    : Object.entries(vals).filter(([, v]) => v.trim() !== '').map(([sid, v]) => (
+      mode === 'percent' ? { studentId: Number(sid), percent: v } : { studentId: Number(sid), score: v, max }));
+  const pctOf = (v: string) => {
+    const n = Number(v.replace(',', '.'));
+    if (!Number.isFinite(n) || v.trim() === '') return null;
+    return mode === 'percent' ? n : Number(max) > 0 ? (n / Number(max)) * 100 : null;
+  };
+
   const submit = async () => {
     setLoading(true);
     setError(null);
     try {
-      await api.post(`/api/classes/${cls.id}/grades/bulk`, {
-        subjectId, date, kind,
-        grades: Object.entries(grades).map(([studentId, value]) => ({ studentId: Number(studentId), value })),
-      });
+      const r = await api.post(`/api/classes/${cls.id}/grades/bulk`, { subjectId, date, kind, max, grades: entries });
+      if (r.added < entries.length) {
+        setError(`Сохранено ${r.added} из ${entries.length}: проверьте значения (проценты 0–100, баллы не больше максимума).`);
+        setLoading(false);
+        return;
+      }
       onDone();
     } catch (e: any) {
       setError(e.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -52,33 +66,43 @@ export function BulkGradesModal({ cls, onClose, onDone }: { cls: any; onClose: (
           </Field>
           <Field label="Дата"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         </div>
-        <div className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-          {cls.students.map((s: any) => (
-            <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
-              <span className="text-sm">{s.full_name}</span>
-              <div className="flex gap-1">
-                {[5, 4, 3, 2].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setGrades((g) => {
-                      const n = { ...g };
-                      if (n[s.id] === v) delete n[s.id]; else n[s.id] = v;
-                      return n;
-                    })}
-                    className={`h-8 w-8 rounded-md text-sm font-semibold transition ${
-                      grades[s.id] === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >{v}</button>
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <ModeSwitch mode={mode} onChange={setMode} />
+          {mode === 'points' && (
+            <label className="flex items-center gap-2 text-sm text-slate-600">Максимум баллов
+              <input className="input w-24 font-mono" type="number" min={1} value={max} onChange={(e) => setMax(e.target.value)} />
+            </label>
+          )}
         </div>
-        <p className="text-xs text-slate-500">Нажмите на оценку, чтобы выбрать; повторное нажатие снимает выбор. Ученики без оценки пропускаются.</p>
+        <div className="max-h-[50vh] divide-y divide-border/60 overflow-y-auto rounded-xl border border-border">
+          {cls.students.map((s: any) => {
+            const p = mode === 'mark' ? null : pctOf(vals[s.id] || '');
+            return (
+              <div key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <span className="text-sm">{s.full_name}</span>
+                {mode === 'mark' ? (
+                  <div className="flex gap-1">
+                    {[5, 4, 3, 2].map((v) => (
+                      <button key={v} onClick={() => setMarks((g) => { const n = { ...g }; if (n[s.id] === v) delete n[s.id]; else n[s.id] = v; return n; })}
+                        className={`h-8 w-8 rounded-lg font-mono text-sm font-semibold transition ${marks[s.id] === v ? pctFill(v * 20) + ' text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{v}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {p != null && <span className={`w-16 text-right font-mono text-xs ${pctText(p)}`}>{Math.round(p)}% «{markFromPercent(p)}»</span>}
+                    <input className="input w-24 py-1.5 text-right font-mono" inputMode="decimal" value={vals[s.id] || ''}
+                      onChange={(e) => setVals({ ...vals, [s.id]: e.target.value })} placeholder={mode === 'percent' ? '%' : `из ${max}`} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted">Пустые строки пропускаются. 85%+ — «5», 65%+ — «4», 45%+ — «3».</p>
         <ErrorText error={error} />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Отмена</Button>
-          <Button onClick={submit} loading={loading} disabled={!count || !subjectId}>Сохранить ({count})</Button>
+          <Button onClick={submit} loading={loading} disabled={!entries.length || !subjectId}>Сохранить ({entries.length})</Button>
         </div>
       </div>
     </Modal>

@@ -142,6 +142,39 @@ addColumn('files', 'ai_summary', 'ai_summary TEXT');
 addColumn('files', 'ai_scores', 'ai_scores TEXT');
 addColumn('files', 'ai_tags', 'ai_tags TEXT');
 addColumn('files', 'ai_error', 'ai_error TEXT');
+addColumn('grades', 'percent', 'percent REAL');
+addColumn('grades', 'score', 'score REAL');
+addColumn('grades', 'max_score', 'max_score REAL');
+db.exec('UPDATE grades SET percent = value * 20 WHERE percent IS NULL');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('subject','scale','attendance','custom')),
+  subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+  scale_key TEXT,
+  start_value REAL,
+  target_value REAL,
+  deadline TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','done','dropped')),
+  note TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'teacher',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_goals_student ON goals(student_id, status);
+CREATE TABLE IF NOT EXISTS goal_steps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  done_at TEXT
+);
+`);
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS assessments (

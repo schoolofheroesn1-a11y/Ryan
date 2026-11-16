@@ -2,8 +2,12 @@ import { all, get } from './db';
 import { SCALES, type ScaleKey } from './scales';
 
 export interface SubjectStat {
+  subjectId: number;
   subject: string;
-  average: number;
+  percent: number; // average percent 0–100
+  recentPercent: number | null; // last 30 days
+  previousPercent: number | null;
+  average: number; // average mark 1–5
   count: number;
   recentAverage: number | null; // last 30 days
   previousAverage: number | null; // before last 30 days
@@ -13,6 +17,7 @@ export interface SubjectStat {
 
 export interface StudentStats {
   average: number | null;
+  percent: number | null; // overall average percent
   gradesCount: number;
   subjects: SubjectStat[];
   attendance: {
@@ -36,30 +41,37 @@ const round = (n: number) => Math.round(n * 100) / 100;
 const avg = (xs: number[]) => (xs.length ? round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
 
 export function computeStudentStats(studentId: number): StudentStats {
-  const grades = all<{ value: number; date: string; subject: string }>(
-    `SELECT g.value, g.date, s.name AS subject FROM grades g JOIN subjects s ON s.id = g.subject_id
-     WHERE g.student_id = ? ORDER BY g.date`,
+  const grades = all<{ value: number; percent: number; date: string; subject: string; subject_id: number }>(
+    `SELECT g.value, COALESCE(g.percent, g.value * 20) AS percent, g.date, s.name AS subject, s.id AS subject_id
+     FROM grades g JOIN subjects s ON s.id = g.subject_id WHERE g.student_id = ? ORDER BY g.date`,
     studentId,
   );
   const cutoff = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
 
-  const bySubject = new Map<string, { value: number; date: string }[]>();
+  const bySubject = new Map<string, typeof grades>();
   for (const g of grades) {
     if (!bySubject.has(g.subject)) bySubject.set(g.subject, []);
     bySubject.get(g.subject)!.push(g);
   }
+  const pct = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
 
   const subjects: SubjectStat[] = [...bySubject.entries()].map(([subject, list]) => {
     const values = list.map((g) => g.value);
+    const recentP = pct(list.filter((g) => g.date >= cutoff).map((g) => g.percent));
+    const prevP = pct(list.filter((g) => g.date < cutoff).map((g) => g.percent));
     const recent = avg(list.filter((g) => g.date >= cutoff).map((g) => g.value));
     const prev = avg(list.filter((g) => g.date < cutoff).map((g) => g.value));
     let trend: SubjectStat['trend'] = 'unknown';
-    if (recent !== null && prev !== null) {
-      const d = recent - prev;
-      trend = d > 0.25 ? 'up' : d < -0.25 ? 'down' : 'flat';
+    if (recentP !== null && prevP !== null) {
+      const d = recentP - prevP;
+      trend = d > 5 ? 'up' : d < -5 ? 'down' : 'flat';
     }
     return {
+      subjectId: list[0].subject_id,
       subject,
+      percent: pct(list.map((g) => g.percent))!,
+      recentPercent: recentP,
+      previousPercent: prevP,
       average: avg(values)!,
       count: values.length,
       recentAverage: recent,
@@ -68,7 +80,7 @@ export function computeStudentStats(studentId: number): StudentStats {
       lowCount: values.filter((v) => v <= 2).length,
     };
   });
-  subjects.sort((a, b) => b.average - a.average);
+  subjects.sort((a, b) => b.percent - a.percent);
 
   const att = all<{ status: string; c: number }>(
     'SELECT status, COUNT(*) AS c FROM attendance WHERE student_id = ? GROUP BY status',
@@ -96,11 +108,12 @@ export function computeStudentStats(studentId: number): StudentStats {
   const filesCount = get<{ c: number }>('SELECT COUNT(*) AS c FROM files WHERE student_id = ?', studentId)!.c;
 
   const average = avg(grades.map((g) => g.value));
+  const percent = pct(grades.map((g) => g.percent));
   const riskReasons: string[] = [];
   let score = 0;
-  if (average !== null && average < 3) { score += 2; riskReasons.push(`низкий средний балл (${average})`); }
-  else if (average !== null && average < 3.5) { score += 1; riskReasons.push(`средний балл ниже 3.5 (${average})`); }
-  const weak = subjects.filter((s) => s.average < 3);
+  if (percent !== null && percent < 60) { score += 2; riskReasons.push(`низкая успеваемость (${percent}%)`); }
+  else if (percent !== null && percent < 70) { score += 1; riskReasons.push(`успеваемость ниже 70% (${percent}%)`); }
+  const weak = subjects.filter((s) => s.percent < 60);
   if (weak.length) { score += weak.length > 1 ? 2 : 1; riskReasons.push(`слабые предметы: ${weak.map((s) => s.subject).join(', ')}`); }
   const falling = subjects.filter((s) => s.trend === 'down');
   if (falling.length) { score += 1; riskReasons.push(`снижение оценок: ${falling.map((s) => s.subject).join(', ')}`); }
@@ -109,6 +122,7 @@ export function computeStudentStats(studentId: number): StudentStats {
 
   return {
     average,
+    percent,
     gradesCount: grades.length,
     subjects,
     attendance: a,

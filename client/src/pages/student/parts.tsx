@@ -11,6 +11,8 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorText, Field, Modal, Spinne
 import {
   ACH_CATEGORIES, ACH_LEVELS, ATTENDANCE, GRADE_KINDS, NOTE_CATEGORIES, RISK, fmtDate, fmtSize, gradeBg, gradeColor, today,
 } from '../../lib/format';
+import { useMeta } from '../../lib/meta';
+import { GoalModal } from './Goals';
 
 export function TrendIcon({ t }: { t: string }) {
   if (t === 'up') return <TrendingUp className="h-4 w-4 text-emerald-500" />;
@@ -34,6 +36,8 @@ export function AiTab({ data, reload }: { data: any; reload: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(data.reports[0]?.id ?? null);
   const report = data.reports.find((r: any) => r.id === selected) || data.reports[0];
+  const meta = useMeta();
+  const [goalPreset, setGoalPreset] = useState<any | null>(null);
 
   const analyze = async () => {
     setLoading(true);
@@ -94,8 +98,12 @@ export function AiTab({ data, reload }: { data: any; reload: () => void }) {
         </div>
       )}
 
-      {report ? <ReportView r={report} onDelete={() => removeReport(report.id)} /> : (
+      {report ? <ReportView r={report} onDelete={() => removeReport(report.id)} onAddGoal={(g) => setGoalPreset(g)} /> : (
         <Card><Empty icon={<Lightbulb className="h-10 w-10" />} title="Анализов пока нет" text="Нажмите «Проанализировать», чтобы получить персональные советы по развитию ученика." /></Card>
+      )}
+      {goalPreset && meta && (
+        <GoalModal data={data} meta={meta} onClose={() => setGoalPreset(null)} onDone={() => { setGoalPreset(null); reload(); }}
+          preset={{ title: goalPreset.goal, note: [goalPreset.metric, goalPreset.term].filter(Boolean).join(' · '), source: 'ai' }} />
       )}
     </div>
   );
@@ -113,7 +121,7 @@ export function ListCard({ title, icon, items, cls }: { title: string; icon: Rea
   );
 }
 
-export function ReportView({ r, onDelete }: { r: any; onDelete: () => void }) {
+export function ReportView({ r, onDelete, onAddGoal }: { r: any; onDelete: () => void; onAddGoal?: (g: any) => void }) {
   const c = r.content;
   return (
     <div className="space-y-6">
@@ -160,9 +168,16 @@ export function ReportView({ r, onDelete }: { r: any; onDelete: () => void }) {
             <CardHeader title={<span className="flex items-center gap-2 text-sky-700"><Target className="h-4 w-4" />Цели</span>} />
             <ul className="divide-y divide-slate-100 text-sm">
               {c.goals.map((g: any, i: number) => (
-                <li key={i} className="px-5 py-3">
-                  <div className="font-medium">{g.goal}</div>
-                  <div className="text-xs text-slate-500">{g.metric}{g.term ? ` · ${g.term}` : ''}</div>
+                <li key={i} className="flex items-start gap-3 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{g.goal}</div>
+                    <div className="text-xs text-slate-500">{g.metric}{g.term ? ` · ${g.term}` : ''}</div>
+                  </div>
+                  {onAddGoal && (
+                    <button onClick={() => onAddGoal(g)} className="chip shrink-0 border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100" title="Сделать целью ученика">
+                      <Plus className="h-3.5 w-3.5" />В цели
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -181,109 +196,6 @@ export function ReportView({ r, onDelete }: { r: any; onDelete: () => void }) {
           </div>
         </Card>
       )}
-    </div>
-  );
-}
-
-// ---------- Grades ----------
-export function GradesTab({ data, reload }: { data: any; reload: () => void }) {
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [form, setForm] = useState({ subjectId: '', value: 5, kind: GRADE_KINDS[0], date: today(), comment: '' });
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState('');
-
-  useEffect(() => {
-    api.get('/api/subjects').then((s) => {
-      setSubjects(s);
-      if (s[0]) setForm((f) => ({ ...f, subjectId: String(s[0].id) }));
-    });
-  }, []);
-
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      await api.post(`/api/students/${data.student.id}/grades`, form);
-      setForm((f) => ({ ...f, comment: '' }));
-      reload();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const del = async (gid: number) => {
-    if (!confirmDelete('оценку')) return;
-    await api.del(`/api/grades/${gid}`);
-    reload();
-  };
-
-  const list = filter ? data.grades.filter((g: any) => g.subject === filter) : data.grades;
-  const subjectsWithGrades = [...new Set<string>(data.grades.map((g: any) => g.subject))].sort();
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader title="Добавить оценку" />
-        <form onSubmit={add} className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-6">
-          <Field label="Предмет">
-            <select className="input" value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })}>
-              {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Оценка">
-            <div className="flex gap-1">
-              {[5, 4, 3, 2, 1].map((v) => (
-                <button type="button" key={v} onClick={() => setForm({ ...form, value: v })}
-                  className={`h-9 flex-1 rounded-md text-sm font-semibold ${form.value === v ? gradeBg(v) + ' text-white' : 'bg-slate-100 text-slate-600'}`}>{v}</button>
-              ))}
-            </div>
-          </Field>
-          <Field label="Тип работы">
-            <select className="input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-              {GRADE_KINDS.map((k) => <option key={k}>{k}</option>)}
-            </select>
-          </Field>
-          <Field label="Дата"><input type="date" className="input" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
-          <Field label="Комментарий"><input className="input" value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} /></Field>
-          <div className="flex items-end"><Button type="submit" loading={loading} icon={<Plus className="h-4 w-4" />} className="w-full">Добавить</Button></div>
-          <div className="sm:col-span-2 lg:col-span-6"><ErrorText error={error} /></div>
-        </form>
-      </Card>
-
-      <Card>
-        <CardHeader title="Все оценки" action={
-          <select className="input w-auto" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">Все предметы</option>
-            {subjectsWithGrades.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        } />
-        {list.length === 0 ? <Empty title="Оценок нет" /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr><th className="px-5 py-2">Дата</th><th className="px-3 py-2">Предмет</th><th className="px-3 py-2">Оценка</th><th className="px-3 py-2">Тип</th><th className="px-3 py-2">Комментарий</th><th className="px-3 py-2">Учитель</th><th /></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {list.map((g: any) => (
-                  <tr key={g.id} className="group hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-5 py-2 text-slate-500">{fmtDate(g.date)}</td>
-                    <td className="px-3 py-2">{g.subject}</td>
-                    <td className="px-3 py-2"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-md font-semibold text-white ${gradeBg(g.value)}`}>{g.value}</span></td>
-                    <td className="px-3 py-2 text-slate-500">{g.kind}</td>
-                    <td className="px-3 py-2 text-slate-500">{g.comment}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{g.teacher}</td>
-                    <td className="px-3 py-2 text-right"><DelBtn onClick={() => del(g.id)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

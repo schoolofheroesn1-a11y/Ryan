@@ -16,6 +16,8 @@ import { enqueueMaterial, resumePendingMaterials } from './material-ai';
 import { analyzeClass, classAnalytics } from './class-ai';
 import { MATERIAL_CATEGORIES, SCALES, cleanScores } from './scales';
 import { computeScaleStats } from './stats';
+import { normalizeGrade, MARK_THRESHOLDS } from './grading';
+import { enrichGoal, measure, studentGoals, type GoalKind } from './goals';
 import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
 const app = express();
@@ -202,6 +204,7 @@ function classSummaries(user: User) {
     const stats = get<any>(
       `SELECT COUNT(DISTINCT s.id) AS students,
         (SELECT ROUND(AVG(g.value), 2) FROM grades g JOIN students s2 ON s2.id = g.student_id WHERE s2.class_id = c.id) AS average,
+        (SELECT ROUND(AVG(COALESCE(g.percent, g.value * 20)), 1) FROM grades g JOIN students s4 ON s4.id = g.student_id WHERE s4.class_id = c.id) AS percent,
         (SELECT ROUND(100.0 * SUM(CASE WHEN a.status IN ('present','late') THEN 1 ELSE 0 END) / COUNT(*), 1)
            FROM attendance a JOIN students s3 ON s3.id = a.student_id WHERE s3.class_id = c.id) AS attendance
        FROM classes c LEFT JOIN students s ON s.class_id = c.id WHERE c.id = ?`,
@@ -239,6 +242,7 @@ app.get('/api/classes/:id', wrap((req, res) => {
       return {
         ...s,
         average: st.average,
+        percent: st.percent,
         attendanceRate: st.attendance.rate,
         achievements: st.achievementsCount,
         risk: st.risk,
@@ -263,15 +267,18 @@ app.post('/api/classes/:id/grades/bulk', wrap((req, res) => {
   const subjectId = id(req.body.subjectId);
   const d = date(req.body.date);
   const kind = str(req.body.kind, 'Тип работы', false) || 'Работа на уроке';
-  const items: { studentId: number; value: number }[] = Array.isArray(req.body.grades) ? req.body.grades : [];
+  // Each item: { studentId, value } (mark), { studentId, percent } or { studentId, score } with a common max.
+  const items: any[] = Array.isArray(req.body.grades) ? req.body.grades : [];
+  const max = req.body.max;
   let added = 0;
   tx(() => {
     for (const it of items) {
-      const v = Number(it.value);
-      if (!(v >= 1 && v <= 5)) continue;
+      const g = normalizeGrade({ value: it.value, percent: it.percent, score: it.score, max: it.max ?? max });
+      if (!g) continue;
       const sid = id(it.studentId);
       if (!get('SELECT 1 FROM students WHERE id = ? AND class_id = ?', sid, cid)) continue;
-      run('INSERT INTO grades (student_id, subject_id, value, kind, date, teacher_id) VALUES (?, ?, ?, ?, ?, ?)', sid, subjectId, Math.round(v), kind, d, req.user!.id);
+      run('INSERT INTO grades (student_id, subject_id, value, percent, score, max_score, kind, date, teacher_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        sid, subjectId, g.value, g.percent, g.score, g.max, kind, d, req.user!.id);
       added++;
     }
   });
@@ -317,7 +324,7 @@ app.get('/api/dashboard', (req, res) => {
     ...classIds,
   );
   const atRisk = students
-    .map((s) => ({ ...s, ...(({ risk, riskReasons, average }) => ({ risk, riskReasons, average }))(computeStudentStats(s.id)) }))
+    .map((s) => ({ ...s, ...(({ risk, riskReasons, average, percent }) => ({ risk, riskReasons, average, percent }))(computeStudentStats(s.id)) }))
     .filter((s) => s.risk === 'high')
     .slice(0, 12);
   const recentAchievements = all<any>(
@@ -325,15 +332,47 @@ app.get('/api/dashboard', (req, res) => {
      JOIN students s ON s.id = a.student_id WHERE s.class_id IN (${placeholders}) ORDER BY a.date DESC LIMIT 8`,
     ...classIds,
   );
+  const sids = students.map((s) => s.id);
+  const sph = sids.map(() => '?').join(',') || 'NULL';
+  const subjects = all<any>(
+    `SELECT s.name AS subject, ROUND(AVG(COALESCE(g.percent, g.value * 20)), 1) AS percent, COUNT(*) AS count
+     FROM grades g JOIN subjects s ON s.id = g.subject_id WHERE g.student_id IN (${sph}) GROUP BY s.id ORDER BY percent DESC`,
+    ...sids,
+  );
+  const overall = get<any>(`SELECT ROUND(AVG(COALESCE(percent, value * 20)), 1) AS p FROM grades WHERE student_id IN (${sph})`, ...sids)?.p ?? null;
+  const goals = all<any>(
+    `SELECT g.*, st.full_name, c.name AS class_name FROM goals g JOIN students st ON st.id = g.student_id
+     LEFT JOIN classes c ON c.id = st.class_id WHERE g.student_id IN (${sph}) AND g.status = 'active'`,
+    ...sids,
+  ).map((g) => ({ ...enrichGoal(g), full_name: g.full_name, class_name: g.class_name }));
+  const goalStats = { total: goals.length, achieved: 0, on_track: 0, behind: 0, overdue: 0, no_data: 0 } as Record<string, number>;
+  for (const g of goals) goalStats[g.health] = (goalStats[g.health] || 0) + 1;
+  const goalFocus = goals
+    .filter((g) => g.health !== 'achieved')
+    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'))
+    .slice(0, 6);
+  const recentMaterials = all<any>(
+    `SELECT f.id, f.original_name, f.category, f.ai_summary, f.ai_status, COALESCE(f.material_date, substr(f.created_at, 1, 10)) AS date,
+       st.id AS student_id, st.full_name FROM files f JOIN students st ON st.id = f.student_id
+     WHERE f.student_id IN (${sph}) ORDER BY f.id DESC LIMIT 5`,
+    ...sids,
+  );
+
   res.json({
     totals: {
       classes: classes.length,
       students: students.length,
       teachers: user.role === 'admin' ? get<any>("SELECT COUNT(*) AS c FROM users WHERE role = 'teacher'")!.c : null,
+      percent: overall,
+      materials: get<any>(`SELECT COUNT(*) AS c FROM files WHERE student_id IN (${sph})`, ...sids)!.c,
     },
     classes,
     atRisk,
     recentAchievements,
+    subjects,
+    goalStats,
+    goalFocus,
+    recentMaterials,
   });
 });
 
@@ -376,6 +415,7 @@ app.get('/api/students/:id', wrap((req, res) => {
        WHERE a.student_id = ? ORDER BY a.date DESC, a.id DESC`, sid,
     ).map((a) => ({ ...a, scores: JSON.parse(a.scores || '{}') })),
     scaleStats: computeScaleStats(sid),
+    goals: studentGoals(sid),
     reports: all<any>('SELECT r.*, u.name AS author FROM ai_reports r LEFT JOIN users u ON u.id = r.created_by WHERE r.student_id = ? ORDER BY r.created_at DESC', sid)
       .map((r) => ({ ...r, content: JSON.parse(r.content) })),
   });
@@ -417,11 +457,11 @@ app.delete('/api/students/:id', wrap((req, res) => {
 app.post('/api/students/:id/grades', wrap((req, res) => {
   const sid = id(req.params.id);
   assertStudent(req.user!, sid);
-  const v = Number(req.body.value);
-  if (!Number.isInteger(v) || v < 1 || v > 5) throw new HttpError(400, 'Оценка должна быть от 1 до 5');
+  const g = normalizeGrade(req.body);
+  if (!g) throw new HttpError(400, 'Укажите отметку 1–5, процент 0–100 или баллы (не больше максимума)');
   const r = run(
-    'INSERT INTO grades (student_id, subject_id, value, kind, date, comment, teacher_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    sid, id(req.body.subjectId), v, str(req.body.kind, 'Тип', false) || 'Работа на уроке', date(req.body.date),
+    'INSERT INTO grades (student_id, subject_id, value, percent, score, max_score, kind, date, comment, teacher_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sid, id(req.body.subjectId), g.value, g.percent, g.score, g.max, str(req.body.kind, 'Тип', false) || 'Работа на уроке', date(req.body.date),
     str(req.body.comment, 'Комментарий', false), req.user!.id,
   );
   res.json({ id: Number(r.lastInsertRowid) });
@@ -539,6 +579,88 @@ app.delete('/api/assessments/:id', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Goals
+const GOAL_KINDS: GoalKind[] = ['subject', 'scale', 'attendance', 'custom'];
+app.post('/api/students/:id/goals', wrap((req, res) => {
+  const sid = id(req.params.id);
+  assertStudent(req.user!, sid);
+  const kind = GOAL_KINDS.includes(req.body.kind) ? (req.body.kind as GoalKind) : 'custom';
+  const subjectId = kind === 'subject' ? id(req.body.subjectId) : null;
+  const scaleKey = kind === 'scale' ? str(req.body.scaleKey, 'Качество') : null;
+  if (scaleKey && !SCALES.some((s) => s.key === scaleKey)) throw new HttpError(400, 'Неизвестное качество');
+  let target: number | null = null;
+  if (kind !== 'custom') {
+    target = Number(req.body.target);
+    const max = kind === 'scale' ? 10 : 100;
+    if (!Number.isFinite(target) || target <= 0 || target > max) throw new HttpError(400, `Целевое значение должно быть от 1 до ${max}`);
+  }
+  const start = kind === 'custom' ? null : measure(sid, kind, { subjectId, scaleKey }).value;
+  const subjectName = subjectId ? get<any>('SELECT name FROM subjects WHERE id = ?', subjectId)?.name : null;
+  const scaleLabel = scaleKey ? SCALES.find((s) => s.key === scaleKey)!.label : null;
+  const title = str(req.body.title, 'Название', false) || (
+    kind === 'subject' ? `${subjectName}: ${target}%` : kind === 'scale' ? `${scaleLabel}: ${target} из 10` : kind === 'attendance' ? `Посещаемость ${target}%` : '');
+  if (!title) throw new HttpError(400, 'Поле «Название» обязательно');
+  const steps: string[] = (Array.isArray(req.body.steps) ? req.body.steps : []).map((x: any) => String(x).trim()).filter(Boolean).slice(0, 20);
+  const gid = tx(() => {
+    const r = run(
+      `INSERT INTO goals (student_id, title, kind, subject_id, scale_key, start_value, target_value, deadline, note, source, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sid, title, kind, subjectId, scaleKey, start, target, req.body.deadline ? date(req.body.deadline) : null,
+      str(req.body.note, 'Комментарий', false), req.body.source === 'ai' ? 'ai' : 'teacher', req.user!.id,
+    );
+    const g = Number(r.lastInsertRowid);
+    steps.forEach((t, i) => run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', g, t, i));
+    return g;
+  });
+  res.json({ id: gid });
+}));
+
+app.patch('/api/goals/:id', wrap((req, res) => {
+  const g = ownedRow(req.user!, 'goals', id(req.params.id));
+  const status = ['active', 'done', 'dropped'].includes(req.body.status) ? req.body.status : g.status;
+  const target = req.body.target !== undefined && g.kind !== 'custom' ? Number(req.body.target) : g.target_value;
+  if (g.kind !== 'custom' && (!Number.isFinite(target) || target <= 0)) throw new HttpError(400, 'Неверное целевое значение');
+  run(
+    `UPDATE goals SET title = ?, target_value = ?, deadline = ?, note = ?, status = ?,
+       completed_at = CASE WHEN ? = 'done' AND status != 'done' THEN datetime('now') WHEN ? != 'done' THEN NULL ELSE completed_at END
+     WHERE id = ?`,
+    req.body.title !== undefined ? str(req.body.title, 'Название') : g.title, target,
+    req.body.deadline !== undefined ? (req.body.deadline ? date(req.body.deadline) : null) : g.deadline,
+    req.body.note !== undefined ? str(req.body.note, 'Комментарий', false) : g.note, status, status, status, g.id,
+  );
+  res.json(enrichGoal(get('SELECT * FROM goals WHERE id = ?', g.id)));
+}));
+app.delete('/api/goals/:id', wrap((req, res) => {
+  const g = ownedRow(req.user!, 'goals', id(req.params.id));
+  run('DELETE FROM goals WHERE id = ?', g.id);
+  res.json({ ok: true });
+}));
+
+function ownedStep(user: User, stepId: number) {
+  const st = get<any>('SELECT gs.*, g.student_id FROM goal_steps gs JOIN goals g ON g.id = gs.goal_id WHERE gs.id = ?', stepId);
+  if (!st) throw new HttpError(404, 'Шаг не найден');
+  assertStudent(user, st.student_id);
+  return st;
+}
+app.post('/api/goals/:id/steps', wrap((req, res) => {
+  const g = ownedRow(req.user!, 'goals', id(req.params.id));
+  const pos = get<any>('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM goal_steps WHERE goal_id = ?', g.id).p;
+  const r = run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', g.id, str(req.body.text, 'Шаг'), pos);
+  res.json({ id: Number(r.lastInsertRowid) });
+}));
+app.patch('/api/goal-steps/:id', wrap((req, res) => {
+  const st = ownedStep(req.user!, id(req.params.id));
+  const done = req.body.done !== undefined ? (req.body.done ? 1 : 0) : st.done;
+  run(`UPDATE goal_steps SET text = ?, done = ?, done_at = CASE WHEN ? = 1 THEN COALESCE(done_at, datetime('now')) ELSE NULL END WHERE id = ?`,
+    req.body.text !== undefined ? str(req.body.text, 'Шаг') : st.text, done, done, st.id);
+  res.json({ ok: true });
+}));
+app.delete('/api/goal-steps/:id', wrap((req, res) => {
+  const st = ownedStep(req.user!, id(req.params.id));
+  run('DELETE FROM goal_steps WHERE id = ?', st.id);
+  res.json({ ok: true });
+}));
+
 app.get('/api/files/:id/text', wrap((req, res) => {
   const f = ownedRow(req.user!, 'files', id(req.params.id));
   res.json({ name: f.original_name, status: f.extract_status, text: f.extracted_text || '' });
@@ -647,7 +769,7 @@ app.delete('/api/class-reports/:id', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-app.get('/api/meta', (_req, res) => res.json({ scales: SCALES, categories: MATERIAL_CATEGORIES }));
+app.get('/api/meta', (_req, res) => res.json({ scales: SCALES, categories: MATERIAL_CATEGORIES, markThresholds: MARK_THRESHOLDS }));
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Не найдено' }));
 

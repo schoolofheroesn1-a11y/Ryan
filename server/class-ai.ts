@@ -5,6 +5,7 @@ import { callClaude } from './ai-claude';
 import { computeScaleStats, computeStudentStats } from './stats';
 import { nameRedactor } from './privacy';
 import { SCALES } from './scales';
+import { enrichGoal } from './goals';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const mean = (xs: number[]) => (xs.length ? r1(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
@@ -27,6 +28,7 @@ export function classAnalytics(classId: number) {
       id: s.id,
       full_name: s.full_name,
       average: st.average,
+      percent: st.percent,
       attendanceRate: st.attendance.rate,
       achievements: st.achievementsCount,
       materials: st.filesCount,
@@ -49,7 +51,8 @@ export function classAnalytics(classId: number) {
   const ids = students.map((s) => s.id);
   const ph = ids.map(() => '?').join(',') || 'NULL';
   const gradeMonths = all<any>(
-    `SELECT substr(date, 1, 7) AS month, ROUND(AVG(value), 2) AS grade FROM grades WHERE student_id IN (${ph}) GROUP BY month ORDER BY month`,
+    `SELECT substr(date, 1, 7) AS month, ROUND(AVG(value), 2) AS grade, ROUND(AVG(COALESCE(percent, value * 20)), 1) AS percent
+     FROM grades WHERE student_id IN (${ph}) GROUP BY month ORDER BY month`,
     ...ids,
   );
   const attMonths = all<any>(
@@ -77,6 +80,7 @@ export function classAnalytics(classId: number) {
     const row: Record<string, any> = {
       month,
       grade: gradeMonths.find((g) => g.month === month)?.grade ?? null,
+      percent: gradeMonths.find((g) => g.month === month)?.percent ?? null,
       attendance: attMonths.find((a) => a.month === month)?.attendance ?? null,
     };
     const acc = scaleMonths.get(month) || {};
@@ -86,7 +90,39 @@ export function classAnalytics(classId: number) {
     return row;
   });
 
-  return { students: rows, radar, monthly };
+  // Subjects: class average percent overall, for the last 30 days and before, plus monthly series.
+  const cutoff = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const subjectRows = all<any>(
+    `SELECT s.id, s.name AS subject, ROUND(AVG(COALESCE(g.percent, g.value * 20)), 1) AS percent, COUNT(*) AS count,
+       ROUND(AVG(CASE WHEN g.date >= ? THEN COALESCE(g.percent, g.value * 20) END), 1) AS recent,
+       ROUND(AVG(CASE WHEN g.date < ? THEN COALESCE(g.percent, g.value * 20) END), 1) AS previous,
+       COUNT(DISTINCT CASE WHEN g.value <= 2 THEN g.student_id END) AS struggling
+     FROM grades g JOIN subjects s ON s.id = g.subject_id WHERE g.student_id IN (${ph})
+     GROUP BY s.id ORDER BY percent DESC`,
+    cutoff, cutoff, ...ids,
+  );
+  const subjectMonths = all<any>(
+    `SELECT s.name AS subject, substr(g.date, 1, 7) AS month, ROUND(AVG(COALESCE(g.percent, g.value * 20)), 1) AS percent
+     FROM grades g JOIN subjects s ON s.id = g.subject_id WHERE g.student_id IN (${ph}) GROUP BY s.id, month ORDER BY month`,
+    ...ids,
+  );
+  const subjects = subjectRows.map((r) => ({
+    ...r,
+    trend: r.recent != null && r.previous != null ? (r.recent - r.previous > 5 ? 'up' : r.recent - r.previous < -5 ? 'down' : 'flat') : 'unknown',
+    monthly: subjectMonths.filter((m) => m.subject === r.subject).map((m) => ({ month: m.month, percent: m.percent })),
+  }));
+
+  const goals = all<any>(
+    `SELECT g.* FROM goals g WHERE g.student_id IN (${ph}) AND g.status != 'dropped'`, ...ids,
+  ).map(enrichGoal);
+  const goalStats: Record<string, number> = { total: goals.length };
+  for (const g of goals) goalStats[g.health] = (goalStats[g.health] || 0) + 1;
+  const rowsWithGoals = rows.map((r) => {
+    const mine = goals.filter((g) => g.student_id === r.id && g.status === 'active');
+    return { ...r, goals: mine.length, goalsBehind: mine.filter((g) => g.health === 'behind' || g.health === 'overdue').length };
+  });
+
+  return { students: rowsWithGoals, radar, monthly, subjects, goalStats };
 }
 
 export interface ClassReport {
@@ -115,6 +151,7 @@ export async function analyzeClass(classId: number, focus: string): Promise<{ re
     return {
       код: `У${i + 1}`,
       средний_балл: s.average,
+      успеваемость_процент: s.percent,
       посещаемость: s.attendanceRate,
       достижений: s.achievements,
       риски: s.riskReasons,
