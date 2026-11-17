@@ -11,7 +11,10 @@ export const ACH_LEVELS = ['Школьный', 'Муниципальный', 'Р
 export const NOTE_CATEGORIES = ['Учёба', 'Поведение', 'Интересы', 'Социальное', 'Здоровье', 'Другое'];
 export const GRADE_KINDS = ['Работа на уроке', 'Домашнее задание', 'Самостоятельная работа', 'Контрольная работа', 'Проект', 'Устный ответ', 'Тест'];
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Local calendar date (not UTC) as YYYY-MM-DD — after midnight in Moscow UTC would still say "yesterday". */
+export const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const today = () => localISO(new Date());
+export const daysFromToday = (n: number) => localISO(new Date(Date.now() + n * 864e5));
 
 export function fmtDate(s?: string | null) {
   if (!s) return '—';

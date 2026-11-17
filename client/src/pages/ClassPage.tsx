@@ -21,7 +21,7 @@ export function ClassPage() {
   const [tab, setTab] = useState<Tab>('students');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [modal, setModal] = useState<null | 'students' | 'grades' | 'attendance'>(null);
+  const [modal, setModal] = useState<null | 'students' | 'grades' | 'attendance' | 'demo'>(null);
 
   const load = useCallback(() => {
     api.get(`/api/classes/${id}`).then(setCls).catch((e) => setError(e.message));
@@ -71,6 +71,7 @@ export function ClassPage() {
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" icon={<ClipboardList className="h-4 w-4" />} onClick={() => setModal('grades')} disabled={!cls.students.length}>Выставить оценки</Button>
           <Button variant="secondary" icon={<CalendarCheck className="h-4 w-4" />} onClick={() => setModal('attendance')} disabled={!cls.students.length}>Посещаемость</Button>
+          <Button variant="secondary" onClick={() => setModal('demo')} title="Создать ученика с заполненными данными для проверки сайта">🧪 Тестовый ученик</Button>
           <Button icon={<UserPlus className="h-4 w-4" />} onClick={() => setModal('students')}>Добавить учеников</Button>
         </div>
       </div>
@@ -163,6 +164,7 @@ export function ClassPage() {
       {tab === 'exams' && <ClassExamsTab cls={cls} />}
       {tab === 'analytics' && (analytics ? <ClassAnalytics classId={cls.id} data={analytics} meta={meta} reload={load} /> : <Spinner />)}
 
+      {modal === 'demo' && <DemoStudentModal classId={cls.id} onClose={() => setModal(null)} onCreated={() => { load(); window.dispatchEvent(new Event('classes:changed')); }} />}
       {modal === 'students' && <AddStudentsModal classId={cls.id} onClose={() => setModal(null)} onDone={done} />}
       {modal === 'grades' && <BulkGradesModal cls={cls} onClose={() => setModal(null)} onDone={done} />}
       {modal === 'attendance' && <BulkAttendanceModal cls={cls} onClose={() => setModal(null)} onDone={done} />}
@@ -222,6 +224,63 @@ function AddStudentsModal({ classId, onClose, onDone }: { classId: number; onClo
           </Button>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/** Creates a fully populated test student (3 months of data, goals, mock exams, mentoring, cabinet login). */
+function DemoStudentModal({ classId, onClose, onCreated }: { classId: number; onClose: () => void; onCreated: () => void }) {
+  const [res, setRes] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const create = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setRes(await api.post(`/api/classes/${classId}/demo-student`));
+      onCreated();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title="🧪 Тестовый ученик">
+      {!res ? (
+        <div className="space-y-4 text-sm">
+          <p className="text-slate-600">
+            Сайт создаст ученицу «Тест Алиса (демо)» с данными за последние 3 месяца, чтобы проверить все разделы:
+          </p>
+          <ul className="list-inside list-disc space-y-1 text-slate-600">
+            <li>оценки в процентах по 6 предметам (есть рост, спад и сильный предмет), посещаемость;</li>
+            <li>рефлексия, характеристика, письмо родителя, наблюдение на выезде к Москве-реке, заметки;</li>
+            <li>достижения (олимпиада, проект, SUP), общие оценки и самооценка с расхождением;</li>
+            <li>3 пробника по демо-экзамену «ОГЭ математика (демо)», цели разных видов, 2 встречи с наставником (наставник — вы);</li>
+            <li>логин и пароль для входа в кабинет ученика.</li>
+          </ul>
+          <p className="text-xs text-muted">Тексты из банка ИИ разберёт в фоне за пару минут. Тестового ученика можно удалить, как любого другого.</p>
+          <ErrorText error={error} />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>Отмена</Button>
+            <Button onClick={create} loading={loading}>Создать</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 text-sm">
+          <p className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-800">Готово: создана ученица «{res.name}».</p>
+          <div className="rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 px-4 py-3">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-700">Вход в кабинет ученика</div>
+            <div className="font-mono">Логин: <b>{res.login}</b></div>
+            <div className="font-mono">Пароль: <b>{res.password}</b></div>
+            <p className="mt-1 text-xs text-muted">Откройте сайт в режиме инкогнито и войдите под этими данными.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>Закрыть</Button>
+            <Link to={`/students/${res.studentId}`} onClick={onClose}><Button>Открыть ученика →</Button></Link>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

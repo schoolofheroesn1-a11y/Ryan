@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, Flag, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Button, Card, Empty, ErrorText, Field, Modal, confirmDelete } from '../../components/ui';
-import { fmtDate, fmtPct, markFromPercent, pctText, today } from '../../lib/format';
+import { fmtDate, fmtPct, localISO, markFromPercent, pctText, today } from '../../lib/format';
 import { SCALE_COLORS, type Meta } from '../../lib/meta';
 import { useExams } from '../exams';
 
@@ -218,7 +218,7 @@ function GoalCard({ g, reload, compact }: { g: any; reload: () => void; compact?
 function deadlinePresets() {
   const now = new Date();
   const y = now.getFullYear();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => localISO(d);
   const ends = [new Date(y, 9, 26), new Date(y, 11, 27), new Date(y + 1, 2, 21), new Date(y + 1, 4, 26), new Date(y, 2, 21), new Date(y, 4, 26)]
     .filter((d) => d > now).sort((a, b) => a.getTime() - b.getTime());
   const yearEnd = now.getMonth() >= 5 ? new Date(y + 1, 4, 26) : new Date(y, 4, 26);
@@ -239,7 +239,7 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [form, setForm] = useState({
     subjectId: '', scaleKey: meta.scales[0].key, target: preset?.examId ? '4' : '85', title: preset?.title || '', note: preset?.note || '',
-    deadline: deadlinePresets()[1].value, steps: '',
+    deadline: deadlinePresets()[1].value, steps: '', startDate: today(),
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -268,7 +268,7 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
     try {
       await api.post(`/api/students/${data.student.id}/goals`, {
         kind, subjectId: form.subjectId, scaleKey: form.scaleKey, examId: examId || exams[0]?.id, target: form.target, title: form.title,
-        note: form.note, deadline: form.deadline, steps: form.steps.split('\n'), source: preset?.source,
+        note: form.note, deadline: form.deadline, startDate: form.startDate, steps: form.steps.split('\n'), source: preset?.source,
       });
       onDone();
     } catch (err: any) {
@@ -382,9 +382,13 @@ export function GoalModal({ data, meta, onClose, onDone, preset }: {
               <button type="button" key={p.label} onClick={() => setForm({ ...form, deadline: p.value })}
                 className={`chip border px-3 py-1.5 ${form.deadline === p.value ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-border bg-white text-slate-600'}`}>{p.label}</button>
             ))}
-            <input type="date" className="input w-auto" value={form.deadline} min={today()} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+            <input type="date" className="input w-auto" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           </div>
         </div>
+
+        <Field label="Дата постановки цели — можно указать прошлую, тогда старт и прогресс считаются от неё">
+          <input type="date" className="input max-w-xs" value={form.startDate} max={today()} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+        </Field>
 
         <Field label="Шаги к цели — по одному в строке (необязательно)">
           <textarea className="input h-24" value={form.steps} onChange={(e) => setForm({ ...form, steps: e.target.value })}

@@ -206,10 +206,14 @@ export function AssessmentForm({ studentId, meta, onDone }: { studentId: number;
 function NoteForm({ studentId, onDone }: { studentId: number; onDone: () => void }) {
   const [category, setCategory] = useState(NOTE_CATEGORIES[0]);
   const [text, setText] = useState('');
+  const [date, setDate] = useState(today());
   const { loading, error, submit } = useSubmit(onDone);
   return (
-    <form onSubmit={(e) => { e.preventDefault(); submit(() => api.post(`/api/students/${studentId}/notes`, { category, text })); }} className="space-y-4">
-      <Field label="Тема"><select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>{NOTE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+    <form onSubmit={(e) => { e.preventDefault(); submit(() => api.post(`/api/students/${studentId}/notes`, { category, text, date })); }} className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Тема"><select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>{NOTE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+        <Field label="Дата"><input type="date" className="input" value={date} max={today()} onChange={(e) => setDate(e.target.value)} /></Field>
+      </div>
       <Field label="Заметка"><textarea className="input h-32" value={text} onChange={(e) => setText(e.target.value)} required autoFocus placeholder="Например: сегодня помог однокласснику разобраться с задачей" /></Field>
       <ErrorText error={error} />
       <div className="flex justify-end"><Button type="submit" loading={loading}>Сохранить</Button></div>

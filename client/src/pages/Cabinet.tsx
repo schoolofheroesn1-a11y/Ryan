@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useApp } from '../App';
 import { Button, Card, CardHeader, ErrorText, Field, Modal, Spinner } from '../components/ui';
 import { ChartEmpty, SubjectRadar } from '../components/charts';
-import { fmtDate, fmtPct, pctText } from '../lib/format';
+import { daysFromToday, fmtDate, fmtPct, pctText } from '../lib/format';
 import { SCALE_COLORS } from '../lib/meta';
 import { GoalPath, HEALTH } from './student/Goals';
 import { PredictionBadge } from './exams';
@@ -151,7 +151,7 @@ function Reflection({ data, reload }: { data: any; reload: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const weekAgo = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+  const weekAgo = daysFromToday(-6);
   const thisWeek = data.reflections.find((r: any) => r.date >= weekAgo);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +283,7 @@ function Goals({ data, reload }: { data: any; reload: () => void }) {
 }
 
 function OwnGoalModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ title: '', deadline: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), steps: '' });
+  const [f, setF] = useState({ title: '', deadline: daysFromToday(30), steps: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: React.FormEvent) => {

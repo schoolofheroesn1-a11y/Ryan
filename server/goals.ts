@@ -18,12 +18,13 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 const WINDOW = 5;
 
 /** Current value of the measured metric. `since` limits it to data after the goal was created when possible. */
-export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: number | null; scaleKey?: string | null; examId?: number | null }, since?: string) {
+export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: number | null; scaleKey?: string | null; examId?: number | null }, since?: string, asOf?: string) {
+  const until = asOf || '9999-12-31';
   if (kind === 'subject' && ref.subjectId) {
     // Newest first: the last WINDOW works in this subject.
     const basis = all<{ p: number }>(
-      `SELECT COALESCE(percent, value * 20) AS p FROM grades WHERE student_id = ? AND subject_id = ? ORDER BY date DESC, id DESC LIMIT ${WINDOW}`,
-      studentId, ref.subjectId,
+      `SELECT COALESCE(percent, value * 20) AS p FROM grades WHERE student_id = ? AND subject_id = ? AND date <= ? ORDER BY date DESC, id DESC LIMIT ${WINDOW}`,
+      studentId, ref.subjectId, until,
     ).map((g) => g.p);
     if (!basis.length) return { value: null as number | null, basis: [] as number[], fromStart: false };
     return { value: r1(basis.reduce((a, b) => a + b, 0) / basis.length), basis, fromStart: false };
@@ -33,11 +34,11 @@ export function measure(studentId: number, kind: GoalKind, ref: { subjectId?: nu
     return { value: s?.current ?? null, basis: [], fromStart: false };
   }
   if (kind === 'exam' && ref.examId) {
-    const last = get<{ total: number }>('SELECT total FROM mock_results WHERE student_id = ? AND exam_id = ? ORDER BY date DESC, id DESC LIMIT 1', studentId, ref.examId);
+    const last = get<{ total: number }>('SELECT total FROM mock_results WHERE student_id = ? AND exam_id = ? AND date <= ? ORDER BY date DESC, id DESC LIMIT 1', studentId, ref.examId, until);
     return { value: last ? last.total : null, basis: [], fromStart: false };
   }
   if (kind === 'attendance') {
-    const rows = all<{ status: string; date: string }>('SELECT status, date FROM attendance WHERE student_id = ?', studentId);
+    const rows = all<{ status: string; date: string }>('SELECT status, date FROM attendance WHERE student_id = ? AND date <= ?', studentId, until);
     const after = since ? rows.filter((r) => r.date >= since) : [];
     const basis = after.length >= 5 ? after : rows;
     if (!basis.length) return { value: null, basis: [], fromStart: false };

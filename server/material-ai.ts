@@ -4,7 +4,7 @@
  */
 import { all, get, run } from './db';
 import { aiProvider, callModel, extractJson } from './ai';
-import { callClaude, claudeFastModel } from './ai-claude';
+import { callClaude, claudeFastModel, claudeModel } from './ai-claude';
 import { nameRedactor } from './privacy';
 import { mediaAttachments } from './media';
 import { SCALES, cleanScores } from './scales';
@@ -12,6 +12,11 @@ import { SCALES, cleanScores } from './scales';
 const MAX_TEXT = 30_000;
 const queue: number[] = [];
 let running = false;
+const attempts = new Map<number, number>();
+const MAX_ATTEMPTS = 4;
+
+/** Overload / rate limit / network trouble — worth retrying later. */
+const isTransient = (msg: string) => /\((429|500|502|503|504|529)\)|временно|temporarily|capacity|Нет соединения|Превышен лимит|не в формате JSON|Unexpected token|JSON/i.test(msg);
 
 export function enqueueMaterial(fileId: number) {
   run("UPDATE files SET ai_status = 'pending', ai_error = NULL WHERE id = ?", fileId);
@@ -40,8 +45,18 @@ async function drain() {
       const id = queue.shift()!;
       try {
         await analyzeMaterial(id);
+        attempts.delete(id);
       } catch (e) {
         const msg = (e as Error).message || String(e);
+        const n = (attempts.get(id) || 0) + 1;
+        attempts.set(id, n);
+        if (isTransient(msg) && n < MAX_ATTEMPTS) {
+          // The AI provider is busy: keep the material "pending" and try again a bit later.
+          console.warn(`Разбор материала #${id}: временный сбой, повтор через ${n} мин.`);
+          setTimeout(() => { if (!queue.includes(id)) queue.push(id); void drain(); }, n * 60_000);
+          continue;
+        }
+        attempts.delete(id);
         console.error(`Разбор материала #${id} не удался:`, msg);
         run("UPDATE files SET ai_status = 'error', ai_error = ? WHERE id = ?", msg.slice(0, 500), id);
       }
@@ -93,9 +108,16 @@ ${text ? `Текст материала:\n<материал>\n${text}\n</мат�
   }
 }`;
 
-  const raw = provider === 'claude'
-    ? await callClaude(system, user, media, { model: claudeFastModel(), effort: 'low', maxTokens: 4000, fallbacks: false })
-    : await callModel(system, user);
+  let raw: string;
+  if (provider === 'claude') {
+    try {
+      raw = await callClaude(system, user, media, { model: claudeFastModel(), effort: 'low', maxTokens: 4000, fallbacks: false });
+    } catch (e) {
+      // The fast model can be temporarily unavailable at the provider — use the main model instead.
+      if (!isTransient((e as Error).message || '') || claudeFastModel() === claudeModel()) throw e;
+      raw = await callClaude(system, user, media, { effort: 'low', maxTokens: 4000 });
+    }
+  } else raw = await callModel(system, user);
   const r = extractJson(raw);
   const tags = (Array.isArray(r.tags) ? r.tags : []).map(String).map((t: string) => t.trim()).filter(Boolean).slice(0, 6);
   run(

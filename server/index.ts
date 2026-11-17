@@ -20,6 +20,7 @@ import { computeScaleStats } from './stats';
 import { normalizeGrade, MARK_THRESHOLDS } from './grading';
 import { enrichGoal, measure, studentGoals, type GoalKind } from './goals';
 import { meetingPrep, mentoringInfo, mentoringOverview } from './mentoring';
+import { createDemoStudent } from './demo';
 import { classExam, cleanExamInput, getExam, listExams, predict, primaryForTarget, studentExams } from './exams';
 import { aiEnabled, aiModelName, aiProvider, analyzeStudent } from './ai';
 
@@ -354,6 +355,12 @@ app.get('/api/classes/:id', wrap((req, res) => {
       };
     }),
   });
+}));
+
+app.post('/api/classes/:id/demo-student', wrap((req, res) => {
+  const cid = id(req.params.id);
+  assertClass(req.user!, cid);
+  res.json(createDemoStudent(cid, req.user!.id));
 }));
 
 app.post('/api/classes/:id/students/bulk', wrap((req, res) => {
@@ -715,7 +722,9 @@ app.post('/api/students/:id/goals', wrap((req, res) => {
     const max = kind === 'scale' ? 10 : 100;
     if (!Number.isFinite(target) || target <= 0 || target > max) throw new HttpError(400, `Целевое значение должно быть от 1 до ${max}`);
   }
-  const start = kind === 'custom' ? null : measure(sid, kind, { subjectId, scaleKey, examId }).value;
+  // A goal can be set retroactively: its starting point is measured as of that date.
+  const startDate = req.body.startDate ? date(req.body.startDate) : null;
+  const start = kind === 'custom' ? null : measure(sid, kind, { subjectId, scaleKey, examId }, undefined, startDate ?? undefined).value;
   const subjectName = subjectId ? get<any>('SELECT name FROM subjects WHERE id = ?', subjectId)?.name : null;
   const scaleLabel = scaleKey ? SCALES.find((s) => s.key === scaleKey)!.label : null;
   const title = str(req.body.title, 'Название', false) || (
@@ -724,10 +733,11 @@ app.post('/api/students/:id/goals', wrap((req, res) => {
   const steps: string[] = (Array.isArray(req.body.steps) ? req.body.steps : []).map((x: any) => String(x).trim()).filter(Boolean).slice(0, 20);
   const gid = tx(() => {
     const r = run(
-      `INSERT INTO goals (student_id, title, kind, subject_id, scale_key, exam_id, start_value, target_value, deadline, note, source, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO goals (student_id, title, kind, subject_id, scale_key, exam_id, start_value, target_value, deadline, note, source, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`,
       sid, title, kind, subjectId, scaleKey, examId, start, target, req.body.deadline ? date(req.body.deadline) : null,
       str(req.body.note, 'Комментарий', false), req.body.source === 'ai' ? 'ai' : 'teacher', req.user!.id,
+      startDate ? `${startDate} 08:00:00` : null,
     );
     const g = Number(r.lastInsertRowid);
     steps.forEach((t, i) => run('INSERT INTO goal_steps (goal_id, text, position) VALUES (?, ?, ?)', g, t, i));
@@ -1036,8 +1046,10 @@ app.delete('/api/achievements/:id', wrap((req, res) => {
 app.post('/api/students/:id/notes', wrap((req, res) => {
   const sid = id(req.params.id);
   assertStudent(req.user!, sid);
-  const r = run('INSERT INTO notes (student_id, category, text, teacher_id) VALUES (?, ?, ?, ?)',
-    sid, str(req.body.category, 'Категория'), str(req.body.text, 'Текст'), req.user!.id);
+  // A past date is allowed: the note is shown and analysed as written on that day.
+  const created = req.body.date ? `${date(req.body.date)} 12:00:00` : new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const r = run('INSERT INTO notes (student_id, category, text, teacher_id, created_at) VALUES (?, ?, ?, ?, ?)',
+    sid, str(req.body.category, 'Категория'), str(req.body.text, 'Текст'), req.user!.id, created);
   res.json({ id: Number(r.lastInsertRowid) });
 }));
 app.delete('/api/notes/:id', wrap((req, res) => {

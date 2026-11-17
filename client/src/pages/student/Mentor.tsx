@@ -3,9 +3,9 @@ import { AlertTriangle, CalendarClock, MessageCircleHeart, Sparkles, Trash2 } fr
 import { api } from '../../lib/api';
 import { useApp } from '../../App';
 import { Button, Card, CardHeader, Empty, ErrorText, Field, confirmDelete } from '../../components/ui';
-import { fmtDate, today } from '../../lib/format';
+import { daysFromToday, fmtDate, today } from '../../lib/format';
 
-const plusDays = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+const plusDays = (n: number) => daysFromToday(n);
 
 export function MentorTab({ data, reload }: { data: any; reload: () => void }) {
   const { user } = useApp();
